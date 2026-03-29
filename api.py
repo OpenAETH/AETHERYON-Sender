@@ -64,20 +64,26 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 # detectar conexiones muertas.
 
 def _parse_db_url(url: str) -> dict:
-    """Descompone DATABASE_URL en sus partes."""
-    m = _re.match(
-        r'postgresql(?:\+\w+)?://([^:]+):([^@]+)@([^:/]+):?(\d+)?/([^\?]+)',
-        url
-    )
-    if not m:
-        raise ValueError(f"DATABASE_URL con formato inválido: {url!r}")
-    return {
-        'user':     m.group(1),
-        'password': m.group(2),
-        'host':     m.group(3),
-        'port':     int(m.group(4) or 5432),
-        'dbname':   m.group(5),
-    }
+    """
+    Descompone DATABASE_URL en sus partes de forma robusta.
+    Usa rfind('@') para soportar passwords con '@' (encoded o no),
+    y passwords con caracteres especiales URL-encoded (%40, %23, etc).
+    Compatible con pooler Supabase: user = postgres.PROJECT_ID
+    """
+    from urllib.parse import unquote
+    raw = _re.sub(r'^postgresql(?:\+\w+)?://', '', url).split('?')[0]
+    at  = raw.rfind('@')                        # último @ separa userinfo de hostinfo
+    userinfo, hostinfo = raw[:at], raw[at+1:]
+    colon = userinfo.find(':')                   # primer : separa user de password
+    user, password = userinfo[:colon], unquote(userinfo[colon+1:])
+    slash = hostinfo.find('/')
+    hostport, dbname = hostinfo[:slash], hostinfo[slash+1:]
+    if ':' in hostport:
+        host, port = hostport.rsplit(':', 1)
+        port = int(port)
+    else:
+        host, port = hostport, 5432
+    return {'user': user, 'password': password, 'host': host, 'port': port, 'dbname': dbname}
 
 def _make_ipv4_connection():
     """
@@ -88,7 +94,7 @@ def _make_ipv4_connection():
         raise RuntimeError("DATABASE_URL no está configurada en las variables de entorno")
     p = _parse_db_url(DATABASE_URL)
     ipv4 = _socket.getaddrinfo(p['host'], p['port'], _socket.AF_INET)[0][4][0]
-    logger.info(f"DB connect → {p['host']}:{p['port']} via IPv4 {ipv4}")
+    logger.info(f"DB connect → user={p['user']} host={p['host']}:{p['port']} via IPv4 {ipv4}")
     return psycopg2.connect(
         host     = p['host'],    # hostname real → SNI correcto para TLS
         hostaddr = ipv4,         # IP IPv4 → libpq conecta directo, sin DNS
