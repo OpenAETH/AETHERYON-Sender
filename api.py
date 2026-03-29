@@ -2,12 +2,15 @@
 Asistente Ejecutivo — Deploy Render
 Auth: JWT session  |  IMAP sync (delete-aware)  |  Envio multiple
 Envio: Resend API (resend.com)
+Database: SQLAlchemy + IPv4 forced connection for Supabase
 """
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker, scoped_session
 import os, imaplib, email as email_lib
 import re as _re
 import socket as _socket
@@ -57,11 +60,10 @@ DATABASE_URL = os.environ.get(
 
 
 # ─────────────────────────────────────────────
-# DATABASE — PostgreSQL / Supabase
+# DATABASE — SQLAlchemy con IPv4 forzado para Supabase
 # ─────────────────────────────────────────────
 def _parse_db_url(url: str) -> dict:
     """Descompone DATABASE_URL en sus partes."""
-    # Soporta URLs con y sin puerto
     m = _re.match(
         r'postgresql://([^:]+):([^@]+)@([^:/]+):?(\d+)?/(.+)',
         url
@@ -76,169 +78,101 @@ def _parse_db_url(url: str) -> dict:
         'dbname':   m.group(5).split('?')[0],
     }
 
-def _make_connection():
+def _make_ipv4_connection():
     """
-    Crea una conexión psycopg2 con manejo robusto de IPv4/IPv6.
+    Crea una conexión psycopg2 forzando IPv4.
+    - 'host' lleva el hostname real → psycopg2/libpq lo usa como SNI en TLS
+      (Supabase necesita el SNI para identificar el tenant)
+    - 'hostaddr' lleva la IP IPv4 resuelta → libpq conecta a esa IP directamente,
+      sin hacer DNS lookup (que podría devolver IPv6)
+    Combinando ambos: conexión por IPv4 + SNI correcto = autenticación exitosa.
     """
+    p = _parse_db_url(DATABASE_URL)
+    
+    try:
+        # Resolver forzando AF_INET para obtener la IPv4
+        addrinfo = _socket.getaddrinfo(
+            p['host'], 
+            p['port'], 
+            _socket.AF_INET,
+            _socket.SOCK_STREAM
+        )
+        
+        if not addrinfo:
+            raise RuntimeError(f"No se pudo resolver {p['host']} a IPv4")
+        
+        ipv4 = addrinfo[0][4][0]
+        
+        logger.info(f"Resolviendo {p['host']} a IPv4: {ipv4}")
+        
+        # Conectar usando hostname para SNI y hostaddr para la IP real
+        conn = psycopg2.connect(
+            host=p['host'],       # hostname real → usado como SNI en TLS
+            hostaddr=ipv4,        # IP IPv4 → libpq conecta directo, sin DNS
+            port=p['port'],
+            user=p['user'],
+            password=p['password'],
+            dbname=p['dbname'],
+            sslmode='require',
+            connect_timeout=10,
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        )
+        logger.info("Conexión a base de datos establecida exitosamente vía IPv4")
+        return conn
+        
+    except Exception as e:
+        logger.error(f"Error conectando a la base de datos: {e}")
+        raise
+
+def create_db_engine():
+    """Crea un engine de SQLAlchemy con conexión forzada a IPv4"""
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL no está configurada en las variables de entorno")
     
-    p = _parse_db_url(DATABASE_URL)
-    
-    # Intentar conexión con hostname directo primero (más simple)
-    try:
-        logger.info(f"Intentando conectar a {p['host']}:{p['port']} como {p['user']}...")
-        conn = psycopg2.connect(
-            host     = p['host'],
-            port     = p['port'],
-            user     = p['user'],
-            password = p['password'],
-            dbname   = p['dbname'],
-            sslmode  = 'require',
-            connect_timeout = 10,
-            cursor_factory = psycopg2.extras.RealDictCursor,
-        )
-        logger.info("Conexión a base de datos establecida exitosamente")
-        return conn
-    except Exception as e:
-        logger.warning(f"Error conectando con hostname directo: {e}")
-        
-        # Si falla, intentar resolver IPv4 manualmente
-        try:
-            # Obtener direcciones IPv4
-            addrinfo = _socket.getaddrinfo(p['host'], p['port'], _socket.AF_INET, _socket.SOCK_STREAM)
-            if addrinfo:
-                ipv4 = addrinfo[0][4][0]
-                logger.info(f"Resolviendo {p['host']} a IPv4: {ipv4}")
-                
-                conn = psycopg2.connect(
-                    host     = p['host'],    # Mantener hostname para SNI
-                    hostaddr = ipv4,         # Usar IPv4 para conexión
-                    port     = p['port'],
-                    user     = p['user'],
-                    password = p['password'],
-                    dbname   = p['dbname'],
-                    sslmode  = 'require',
-                    connect_timeout = 10,
-                    cursor_factory = psycopg2.extras.RealDictCursor,
-                )
-                logger.info("Conexión a base de datos establecida vía IPv4")
-                return conn
-        except Exception as e2:
-            logger.error(f"Error resolviendo IPv4: {e2}")
-            raise
-    
-    raise RuntimeError(f"No se pudo conectar a la base de datos: {p['host']}")
+    engine = create_engine(
+        "postgresql+psycopg2://",
+        creator=_make_ipv4_connection,
+        pool_size=5,
+        max_overflow=10,
+        pool_pre_ping=True,
+        pool_recycle=300,
+    )
+    return engine
 
-def get_db():
-    """Retorna una conexión psycopg2 con RealDictCursor (acceso por nombre de columna)."""
-    return _make_connection()
+# Crear engine y session factory globales
+engine = None
+SessionLocal = None
 
 def init_db():
-    """Crea las tablas si no existen."""
-    conn = None
+    """Inicializa la conexión a la base de datos (no crea tablas, asume que ya existen)"""
+    global engine, SessionLocal
     try:
-        conn = get_db()
-        cur = conn.cursor()
+        engine = create_db_engine()
+        SessionLocal = scoped_session(sessionmaker(bind=engine))
         
-        # Tabla contacts
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS contacts (
-            id         SERIAL PRIMARY KEY,
-            name       TEXT NOT NULL,
-            email      TEXT NOT NULL UNIQUE,
-            company    TEXT,
-            role       TEXT,
-            phone      TEXT,
-            context    TEXT,
-            tags       TEXT,
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            updated_at TIMESTAMPTZ DEFAULT NOW()
-        )
-        """)
+        # Verificar conexión ejecutando una consulta simple
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT 1 as test"))
+            result.fetchone()
+            logger.info("Conexión a base de datos verificada exitosamente")
         
-        # Tabla email_logs
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS email_logs (
-            id            SERIAL PRIMARY KEY,
-            direction     TEXT NOT NULL,
-            contact_email TEXT,
-            contact_name  TEXT,
-            subject       TEXT,
-            body          TEXT,
-            body_html     TEXT,
-            intent        TEXT,
-            status        TEXT DEFAULT 'sent',
-            sent_at       TIMESTAMPTZ,
-            received_at   TIMESTAMPTZ,
-            replied_at    TIMESTAMPTZ,
-            message_id    TEXT,
-            thread_id     TEXT,
-            campaign_id   TEXT,
-            ai_suggestion TEXT,
-            created_at    TIMESTAMPTZ DEFAULT NOW()
-        )
-        """)
-        
-        # Tabla memory
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS memory (
-            id         SERIAL PRIMARY KEY,
-            type       TEXT NOT NULL,
-            entity     TEXT,
-            content    TEXT NOT NULL,
-            importance INTEGER DEFAULT 1,
-            created_at TIMESTAMPTZ DEFAULT NOW()
-        )
-        """)
-        
-        # Tabla inbox_cache
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS inbox_cache (
-            id            SERIAL PRIMARY KEY,
-            message_id    TEXT UNIQUE NOT NULL,
-            imap_uid      TEXT,
-            from_email    TEXT,
-            from_name     TEXT,
-            subject       TEXT,
-            body          TEXT,
-            date          TEXT,
-            read          INTEGER DEFAULT 0,
-            replied       INTEGER DEFAULT 0,
-            ai_suggestion TEXT,
-            fetched_at    TIMESTAMPTZ DEFAULT NOW()
-        )
-        """)
-        
-        # Tabla settings
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS settings (
-            key   TEXT PRIMARY KEY,
-            value TEXT
-        )
-        """)
-        
-        # Tabla sessions
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            token      TEXT PRIMARY KEY,
-            created_at BIGINT NOT NULL,
-            expires_at BIGINT NOT NULL
-        )
-        """)
-        
-        conn.commit()
         logger.info("Base de datos inicializada correctamente")
         
     except Exception as e:
-        if conn:
-            conn.rollback()
         logger.error(f"Error en init_db: {e}")
         raise
-    finally:
-        if conn:
-            cur.close()
-            conn.close()
+
+def get_db():
+    """Retorna una sesión de SQLAlchemy"""
+    if SessionLocal is None:
+        raise RuntimeError("Base de datos no inicializada")
+    return SessionLocal()
+
+def dict_from_row(row):
+    """Convierte una fila de SQLAlchemy a diccionario"""
+    if row is None:
+        return None
+    return dict(row._mapping)
 
 # ─────────────────────────────────────────────
 # AUTH — token simple HMAC
@@ -254,15 +188,17 @@ def verify_token(token: str) -> bool:
         expected = hmac.new(SECRET_KEY.encode(), raw.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig, expected):
             return False
-        conn = get_db()
-        cur  = conn.cursor()
-        cur.execute(
-            "SELECT expires_at FROM sessions WHERE token=%s AND expires_at>%s",
-            (token, int(time.time()))
-        )
-        row = cur.fetchone()
-        cur.close(); conn.close()
-        return row is not None
+        
+        db = get_db()
+        try:
+            result = db.execute(
+                text("SELECT expires_at FROM sessions WHERE token=:token AND expires_at>:now"),
+                {"token": token, "now": int(time.time())}
+            ).fetchone()
+            return result is not None
+        finally:
+            db.close()
+            
     except Exception as e:
         logger.error(f"Error en verify_token: {e}")
         return False
@@ -278,28 +214,30 @@ async def require_auth(request: Request):
 # ─────────────────────────────────────────────
 def get_setting(key: str, default: str = "") -> str:
     try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("SELECT value FROM settings WHERE key=%s", (key,))
-        row = cur.fetchone()
-        cur.close()
-        conn.close()
-        return row["value"] if row else default
+        db = get_db()
+        try:
+            result = db.execute(
+                text("SELECT value FROM settings WHERE key=:key"),
+                {"key": key}
+            ).fetchone()
+            return result["value"] if result else default
+        finally:
+            db.close()
     except Exception as e:
         logger.error(f"Error en get_setting: {e}")
         return default
 
 def set_setting(key: str, value: str):
     try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
-            (key, value)
-        )
-        conn.commit()
-        cur.close()
-        conn.close()
+        db = get_db()
+        try:
+            db.execute(
+                text("INSERT INTO settings (key,value) VALUES (:key,:value) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value"),
+                {"key": key, "value": value}
+            )
+            db.commit()
+        finally:
+            db.close()
     except Exception as e:
         logger.error(f"Error en set_setting: {e}")
         raise
@@ -364,7 +302,10 @@ def build_html_email(body_text: str, style_cfg: dict = None) -> str:
             '<tr><td style="border-top:2px solid ' + primary + ';padding-top:16px;'
             'font-size:13px;color:#666;font-family:Arial,sans-serif;line-height:1.5">'
             + sig_html +
-            '</td></tr></table></td></tr>'
+            '</td>'
+            '</tr>'
+            '</table>'
+            '</td>'
         )
 
     footer_name = sname or "Asistente Ejecutivo"
@@ -408,7 +349,8 @@ def build_html_email(body_text: str, style_cfg: dict = None) -> str:
         '</td>'
         '</tr>'
         '</table>'
-        '</td></tr>'
+        '</td>'
+        '</tr>'
         '</table>'
         '</body></html>'
     )
@@ -463,68 +405,76 @@ def fetch_inbox_sync(limit=60):
         _, uid_data = mail.uid("SEARCH", None, "ALL")
         server_uids = set(uid_data[0].decode().split()) if uid_data[0] else set()
 
-        conn = get_db()
-        cur  = conn.cursor()
+        db = get_db()
+        try:
+            # Obtener UIDs actuales en DB
+            result = db.execute(text("SELECT message_id, imap_uid FROM inbox_cache"))
+            db_rows = result.fetchall()
+            db_by_uid = {r["imap_uid"]: r["message_id"] for r in db_rows if r["imap_uid"]}
+            db_message_ids = {r["message_id"] for r in db_rows}
 
-        cur.execute("SELECT message_id, imap_uid FROM inbox_cache")
-        db_rows = cur.fetchall()
-        db_by_uid = {r["imap_uid"]: r["message_id"] for r in db_rows if r["imap_uid"]}
-        db_message_ids = {r["message_id"] for r in db_rows}
+            # Eliminar mensajes que ya no están en el servidor
+            deleted_uids = set(db_by_uid.keys()) - server_uids
+            deleted_count = 0
+            for uid in deleted_uids:
+                mid = db_by_uid[uid]
+                db.execute(text("DELETE FROM inbox_cache WHERE message_id=:mid"), {"mid": mid})
+                deleted_count += 1
+            if deleted_count:
+                db.commit()
+                logger.info(f"IMAP sync: {deleted_count} mensajes eliminados de DB")
 
-        deleted_uids = set(db_by_uid.keys()) - server_uids
-        deleted_count = 0
-        for uid in deleted_uids:
-            mid = db_by_uid[uid]
-            cur.execute("DELETE FROM inbox_cache WHERE message_id=%s", (mid,))
-            deleted_count += 1
-        if deleted_count:
-            conn.commit()
-            logger.info(f"IMAP sync: {deleted_count} mensajes eliminados de DB")
+            # Agregar nuevos mensajes
+            uids_to_fetch = list(server_uids)[-limit:]
+            added_count = 0
 
-        uids_to_fetch = list(server_uids)[-limit:]
-        added_count = 0
+            for uid in reversed(uids_to_fetch):
+                _, msg_data = mail.uid("FETCH", uid, "(RFC822)")
+                if not msg_data or not msg_data[0]: continue
+                raw = msg_data[0][1]
+                msg = email_lib.message_from_bytes(raw)
+                mid = msg.get("Message-ID", "").strip()
+                if not mid: mid = f"uid-{uid}"
 
-        for uid in reversed(uids_to_fetch):
-            _, msg_data = mail.uid("FETCH", uid, "(RFC822)")
-            if not msg_data or not msg_data[0]: continue
-            raw = msg_data[0][1]
-            msg = email_lib.message_from_bytes(raw)
-            mid   = msg.get("Message-ID","").strip()
-            if not mid: mid = f"uid-{uid}"
+                if mid in db_message_ids: continue
 
-            if mid in db_message_ids: continue
+                subj = decode_str(msg.get("Subject", ""))
+                from_ = decode_str(msg.get("From", ""))
+                date_ = msg.get("Date", "")
+                from_email, from_name = "", ""
+                if "<" in from_:
+                    pts = from_.split("<")
+                    from_name = pts[0].strip().strip('"')
+                    from_email = pts[1].replace(">", "").strip()
+                else:
+                    from_email = from_.strip()
+                    from_name = from_email.split("@")[0]
+                body = ""
+                if msg.is_multipart():
+                    for part in msg.walk():
+                        if part.get_content_type() == "text/plain":
+                            try: body = part.get_payload(decode=True).decode("utf-8", errors="replace"); break
+                            except: pass
+                else:
+                    try: body = msg.get_payload(decode=True).decode("utf-8", errors="replace")
+                    except: body = ""
+                try:
+                    db.execute(
+                        text("""INSERT INTO inbox_cache (message_id,imap_uid,from_email,from_name,subject,body,date) 
+                                VALUES (:mid,:uid,:from_email,:from_name,:subj,:body,:date) 
+                                ON CONFLICT (message_id) DO NOTHING"""),
+                        {"mid": mid, "uid": uid, "from_email": from_email, "from_name": from_name,
+                         "subj": subj, "body": body[:3000], "date": date_}
+                    )
+                    db.commit()
+                    added_count += 1
+                except Exception as e:
+                    db.rollback()
+                    logger.error(f"Error insertando msg {mid}: {e}")
 
-            subj  = decode_str(msg.get("Subject",""))
-            from_ = decode_str(msg.get("From",""))
-            date_ = msg.get("Date","")
-            from_email, from_name = "", ""
-            if "<" in from_:
-                pts = from_.split("<")
-                from_name  = pts[0].strip().strip('"')
-                from_email = pts[1].replace(">","").strip()
-            else:
-                from_email = from_.strip()
-                from_name  = from_email.split("@")[0]
-            body = ""
-            if msg.is_multipart():
-                for part in msg.walk():
-                    if part.get_content_type() == "text/plain":
-                        try: body = part.get_payload(decode=True).decode("utf-8", errors="replace"); break
-                        except: pass
-            else:
-                try: body = msg.get_payload(decode=True).decode("utf-8", errors="replace")
-                except: body = ""
-            try:
-                cur.execute(
-                    "INSERT INTO inbox_cache (message_id,imap_uid,from_email,from_name,subject,body,date) VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (message_id) DO NOTHING",
-                    (mid, uid, from_email, from_name, subj, body[:3000], date_))
-                conn.commit()
-                added_count += 1
-            except Exception as e:
-                conn.rollback()
-                logger.error(f"Error insertando msg {mid}: {e}")
-
-        cur.close(); conn.close()
+        finally:
+            db.close()
+        
         mail.logout()
         logger.info(f"IMAP sync: +{added_count} nuevos, -{deleted_count} eliminados")
         return {"added": added_count, "deleted": deleted_count, "total": len(server_uids)}
@@ -605,12 +555,16 @@ async def login(request: Request):
         raise HTTPException(401, "Credenciales incorrectas")
     token = make_token()
     now   = int(time.time())
-    conn  = get_db()
-    cur   = conn.cursor()
-    cur.execute("DELETE FROM sessions WHERE expires_at<%s", (now,))
-    cur.execute("INSERT INTO sessions (token,created_at,expires_at) VALUES (%s,%s,%s)",
-                (token, now, now + TOKEN_TTL))
-    conn.commit(); cur.close(); conn.close()
+    db = get_db()
+    try:
+        db.execute(text("DELETE FROM sessions WHERE expires_at<:now"), {"now": now})
+        db.execute(
+            text("INSERT INTO sessions (token,created_at,expires_at) VALUES (:token,:created_at,:expires_at)"),
+            {"token": token, "created_at": now, "expires_at": now + TOKEN_TTL}
+        )
+        db.commit()
+    finally:
+        db.close()
     logger.info(f"Login OK: user={user!r} | IS_HTTPS={IS_HTTPS}")
     resp = JSONResponse({"success": True, "token": token})
     resp.set_cookie(
@@ -626,10 +580,12 @@ async def login(request: Request):
 async def logout(request: Request):
     token = request.cookies.get("session","")
     if token:
-        conn = get_db()
-        cur  = conn.cursor()
-        cur.execute("DELETE FROM sessions WHERE token=%s", (token,))
-        conn.commit(); cur.close(); conn.close()
+        db = get_db()
+        try:
+            db.execute(text("DELETE FROM sessions WHERE token=:token"), {"token": token})
+            db.commit()
+        finally:
+            db.close()
     resp = JSONResponse({"success": True})
     resp.delete_cookie("session")
     return resp
@@ -671,12 +627,13 @@ def get_config(_: str = Depends(require_auth)):
 # ─────────────────────────────────────────────
 @app.get("/settings")
 def get_all_settings(_: str = Depends(require_auth)):
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute("SELECT key,value FROM settings")
-    rows = cur.fetchall()
-    cur.close(); conn.close()
-    return {r["key"]: r["value"] for r in rows}
+    db = get_db()
+    try:
+        result = db.execute(text("SELECT key,value FROM settings"))
+        rows = result.fetchall()
+        return {r["key"]: r["value"] for r in rows}
+    finally:
+        db.close()
 
 @app.post("/settings")
 async def save_settings(request: Request, _: str = Depends(require_auth)):
@@ -687,7 +644,11 @@ async def save_settings(request: Request, _: str = Depends(require_auth)):
 
 @app.get("/context")
 def get_context(_: str = Depends(require_auth)):
-    return {"entity": get_setting("ctx_entity"), "mission": get_setting("ctx_mission"), "extra": get_setting("ctx_extra")}
+    return {
+        "entity": get_setting("ctx_entity"), 
+        "mission": get_setting("ctx_mission"), 
+        "extra": get_setting("ctx_extra")
+    }
 
 @app.post("/context")
 async def save_context(request: Request, _: str = Depends(require_auth)):
@@ -719,55 +680,70 @@ async def preview_email(request: Request, _: str = Depends(require_auth)):
 # ─────────────────────────────────────────────
 @app.get("/contacts")
 def list_contacts(_: str = Depends(require_auth)):
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute("SELECT * FROM contacts ORDER BY name")
-    rows = cur.fetchall()
-    cur.close(); conn.close()
-    return [dict(r) for r in rows]
+    db = get_db()
+    try:
+        result = db.execute(text("SELECT * FROM contacts ORDER BY name"))
+        rows = result.fetchall()
+        return [dict(r._mapping) for r in rows]
+    finally:
+        db.close()
 
 @app.post("/contacts")
 async def create_contact(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
     if not data.get("name") or not data.get("email"):
         raise HTTPException(400, "name y email son obligatorios")
-    conn = get_db()
-    cur  = conn.cursor()
+    
+    db = get_db()
     try:
-        cur.execute(
-            "INSERT INTO contacts (name,email,company,role,phone,context,tags) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-            (data["name"],data["email"],data.get("company",""),data.get("role",""),
-             data.get("phone",""),data.get("context",""),data.get("tags",""))
+        result = db.execute(
+            text("""INSERT INTO contacts (name,email,company,role,phone,context,tags) 
+                    VALUES (:name,:email,:company,:role,:phone,:context,:tags) RETURNING id"""),
+            {"name": data["name"], "email": data["email"], "company": data.get("company",""),
+             "role": data.get("role",""), "phone": data.get("phone",""), 
+             "context": data.get("context",""), "tags": data.get("tags","")}
         )
-        cid = cur.fetchone()["id"]
-        cur.execute("INSERT INTO memory (type,entity,content) VALUES (%s,%s,%s)",
-            ("contact_added",data["email"],f"Contacto: {data['name']} - {data.get('company','')}"))
-        conn.commit()
-    except psycopg2.errors.UniqueViolation:
-        conn.rollback()
-        raise HTTPException(409, "Email ya existe")
+        cid = result.fetchone()["id"]
+        db.execute(
+            text("INSERT INTO memory (type,entity,content) VALUES (:type,:entity,:content)"),
+            {"type": "contact_added", "entity": data["email"], 
+             "content": f"Contacto: {data['name']} - {data.get('company','')}"}
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        if "duplicate key" in str(e).lower():
+            raise HTTPException(409, "Email ya existe")
+        raise
     finally:
-        cur.close(); conn.close()
+        db.close()
     return {"success": True, "id": cid}
 
 @app.put("/contacts/{cid}")
 async def update_contact(cid: int, request: Request, _: str = Depends(require_auth)):
     data = await request.json()
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute(
-        "UPDATE contacts SET name=%s,company=%s,role=%s,phone=%s,context=%s,tags=%s,updated_at=NOW() WHERE id=%s",
-        (data.get("name"),data.get("company",""),data.get("role",""),
-         data.get("phone",""),data.get("context",""),data.get("tags",""),cid))
-    conn.commit(); cur.close(); conn.close()
+    db = get_db()
+    try:
+        db.execute(
+            text("""UPDATE contacts SET name=:name,company=:company,role=:role,phone=:phone,
+                    context=:context,tags=:tags,updated_at=NOW() WHERE id=:cid"""),
+            {"name": data.get("name"), "company": data.get("company",""), "role": data.get("role",""),
+             "phone": data.get("phone",""), "context": data.get("context",""), 
+             "tags": data.get("tags",""), "cid": cid}
+        )
+        db.commit()
+    finally:
+        db.close()
     return {"success": True}
 
 @app.delete("/contacts/{cid}")
 def delete_contact(cid: int, _: str = Depends(require_auth)):
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute("DELETE FROM contacts WHERE id=%s", (cid,))
-    conn.commit(); cur.close(); conn.close()
+    db = get_db()
+    try:
+        db.execute(text("DELETE FROM contacts WHERE id=:cid"), {"cid": cid})
+        db.commit()
+    finally:
+        db.close()
     return {"success": True}
 
 # ─────────────────────────────────────────────
@@ -788,15 +764,21 @@ def _build_style():
         "signature_html": get_setting("signature_html",""),
     }
 
-def _log_sent(conn, cur, to, subject, body, body_html, intent, campaign_id):
-    cur.execute("SELECT name FROM contacts WHERE email=%s", (to,))
-    row = cur.fetchone()
+def _log_sent(db, to, subject, body, body_html, intent, campaign_id):
+    result = db.execute(text("SELECT name FROM contacts WHERE email=:email"), {"email": to})
+    row = result.fetchone()
     cname = row["name"] if row else to.split("@")[0]
-    cur.execute(
-        "INSERT INTO email_logs (direction,contact_email,contact_name,subject,body,body_html,intent,status,sent_at,campaign_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW(),%s)",
-        ("out",to,cname,subject,body,body_html,intent,"sent",campaign_id))
-    cur.execute("INSERT INTO memory (type,entity,content,importance) VALUES (%s,%s,%s,%s)",
-        ("email_sent",to,f"Email enviado a {cname}: {subject}",2))
+    db.execute(
+        text("""INSERT INTO email_logs (direction,contact_email,contact_name,subject,body,body_html,intent,status,sent_at,campaign_id) 
+                VALUES (:direction,:contact_email,:contact_name,:subject,:body,:body_html,:intent,:status,NOW(),:campaign_id)"""),
+        {"direction": "out", "contact_email": to, "contact_name": cname, "subject": subject,
+         "body": body, "body_html": body_html, "intent": intent, "status": "sent", "campaign_id": campaign_id}
+    )
+    db.execute(
+        text("INSERT INTO memory (type,entity,content,importance) VALUES (:type,:entity,:content,:importance)"),
+        {"type": "email_sent", "entity": to, 
+         "content": f"Email enviado a {cname}: {subject}", "importance": 2}
+    )
 
 @app.post("/send-email")
 async def send_email(request: Request, _: str = Depends(require_auth)):
@@ -823,27 +805,24 @@ async def send_email(request: Request, _: str = Depends(require_auth)):
     body_html = build_html_email(body, style_cfg)
 
     results = []
-    conn = get_db()
-    cur  = conn.cursor()
-    for to in recipients:
-        try:
-            resp = send_resend(to, subject, body, body_html, reply_to)
-            email_id = resp.id if hasattr(resp, "id") else "?"
-            _log_sent(conn, cur, to, subject, body, body_html, intent, campaign_id)
-            results.append({"to": to, "ok": True, "resend_id": email_id})
-            logger.info(f"Email enviado via Resend a {to} | resend_id={email_id}")
-        except resend.exceptions.ResendError as e:
-            logger.error(f"Resend API error → {to}: code={e.code} msg={e.message}")
-            results.append({"to": to, "ok": False, "error": f"Resend error {e.code}: {e.message}"})
-        except Exception as e:
-            logger.error(f"Error inesperado → {to}: {type(e).__name__}: {e}")
-            results.append({"to": to, "ok": False, "error": f"{type(e).__name__}: {e}"})
+    db = get_db()
     try:
-        conn.commit()
-    except Exception as e:
-        logger.error(f"Error log DB: {e}")
+        for to in recipients:
+            try:
+                resp = send_resend(to, subject, body, body_html, reply_to)
+                email_id = resp.id if hasattr(resp, "id") else "?"
+                _log_sent(db, to, subject, body, body_html, intent, campaign_id)
+                results.append({"to": to, "ok": True, "resend_id": email_id})
+                logger.info(f"Email enviado via Resend a {to} | resend_id={email_id}")
+            except resend.exceptions.ResendError as e:
+                logger.error(f"Resend API error → {to}: code={e.code} msg={e.message}")
+                results.append({"to": to, "ok": False, "error": f"Resend error {e.code}: {e.message}"})
+            except Exception as e:
+                logger.error(f"Error inesperado → {to}: {type(e).__name__}: {e}")
+                results.append({"to": to, "ok": False, "error": f"{type(e).__name__}: {e}"})
+        db.commit()
     finally:
-        cur.close(); conn.close()
+        db.close()
 
     sent_ok  = [r for r in results if r["ok"]]
     sent_err = [r for r in results if not r["ok"]]
@@ -879,32 +858,37 @@ def get_inbox(refresh: bool = False, _: str = Depends(require_auth)):
     result = None
     if refresh:
         result = fetch_inbox_sync(60)
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute("SELECT * FROM inbox_cache ORDER BY date DESC LIMIT 80")
-    rows = cur.fetchall()
-    cur.close(); conn.close()
-    resp = [dict(r) for r in rows]
-    if result: return {"messages": resp, "sync": result}
-    return {"messages": resp, "sync": None}
+    db = get_db()
+    try:
+        rows = db.execute(text("SELECT * FROM inbox_cache ORDER BY date DESC LIMIT 80")).fetchall()
+        resp = [dict(r._mapping) for r in rows]
+        if result: return {"messages": resp, "sync": result}
+        return {"messages": resp, "sync": None}
+    finally:
+        db.close()
 
 @app.post("/inbox/mark-replied")
 async def mark_replied(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute("UPDATE inbox_cache SET replied=1 WHERE message_id=%s", (data.get("message_id"),))
-    conn.commit(); cur.close(); conn.close()
+    db = get_db()
+    try:
+        db.execute(text("UPDATE inbox_cache SET replied=1 WHERE message_id=:message_id"), 
+                   {"message_id": data.get("message_id")})
+        db.commit()
+    finally:
+        db.close()
     return {"success": True}
 
 @app.post("/inbox/save-suggestion")
 async def save_suggestion(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute("UPDATE inbox_cache SET ai_suggestion=%s WHERE message_id=%s",
-        (data.get("suggestion",""), data.get("message_id")))
-    conn.commit(); cur.close(); conn.close()
+    db = get_db()
+    try:
+        db.execute(text("UPDATE inbox_cache SET ai_suggestion=:suggestion WHERE message_id=:message_id"),
+                   {"suggestion": data.get("suggestion",""), "message_id": data.get("message_id")})
+        db.commit()
+    finally:
+        db.close()
     return {"success": True}
 
 # ─────────────────────────────────────────────
@@ -912,43 +896,50 @@ async def save_suggestion(request: Request, _: str = Depends(require_auth)):
 # ─────────────────────────────────────────────
 @app.get("/logs")
 def get_logs(limit: int = 100, _: str = Depends(require_auth)):
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute("SELECT * FROM email_logs ORDER BY created_at DESC LIMIT %s", (limit,))
-    rows = cur.fetchall()
-    cur.close(); conn.close()
-    return [dict(r) for r in rows]
+    db = get_db()
+    try:
+        rows = db.execute(text("SELECT * FROM email_logs ORDER BY created_at DESC LIMIT :limit"), 
+                         {"limit": limit}).fetchall()
+        return [dict(r._mapping) for r in rows]
+    finally:
+        db.close()
 
 @app.get("/logs/{log_id}")
 def get_log(log_id: int, _: str = Depends(require_auth)):
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute("SELECT * FROM email_logs WHERE id=%s", (log_id,))
-    row = cur.fetchone()
-    cur.close(); conn.close()
-    if not row: raise HTTPException(404, "Log no encontrado")
-    return dict(row)
+    db = get_db()
+    try:
+        row = db.execute(text("SELECT * FROM email_logs WHERE id=:log_id"), {"log_id": log_id}).fetchone()
+        if not row: raise HTTPException(404, "Log no encontrado")
+        return dict(row._mapping)
+    finally:
+        db.close()
 
 # ─────────────────────────────────────────────
 # ROUTES — MEMORY
 # ─────────────────────────────────────────────
 @app.get("/memory")
 def get_memory(limit: int = 100, _: str = Depends(require_auth)):
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute("SELECT * FROM memory ORDER BY created_at DESC LIMIT %s", (limit,))
-    rows = cur.fetchall()
-    cur.close(); conn.close()
-    return [dict(r) for r in rows]
+    db = get_db()
+    try:
+        rows = db.execute(text("SELECT * FROM memory ORDER BY created_at DESC LIMIT :limit"), 
+                         {"limit": limit}).fetchall()
+        return [dict(r._mapping) for r in rows]
+    finally:
+        db.close()
 
 @app.post("/memory")
 async def add_memory(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute("INSERT INTO memory (type,entity,content,importance) VALUES (%s,%s,%s,%s)",
-        (data.get("type","manual"),data.get("entity",""),data.get("content",""),data.get("importance",1)))
-    conn.commit(); cur.close(); conn.close()
+    db = get_db()
+    try:
+        db.execute(
+            text("INSERT INTO memory (type,entity,content,importance) VALUES (:type,:entity,:content,:importance)"),
+            {"type": data.get("type","manual"), "entity": data.get("entity",""),
+             "content": data.get("content",""), "importance": data.get("importance",1)}
+        )
+        db.commit()
+    finally:
+        db.close()
     return {"success": True}
 
 # ─────────────────────────────────────────────
@@ -956,49 +947,56 @@ async def add_memory(request: Request, _: str = Depends(require_auth)):
 # ─────────────────────────────────────────────
 @app.get("/supervision")
 def get_supervision(_: str = Depends(require_auth)):
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute("""SELECT l.*, c.company FROM email_logs l
-        LEFT JOIN contacts c ON l.contact_email=c.email
-        WHERE l.direction='out' ORDER BY l.sent_at DESC LIMIT 100""")
-    sent = cur.fetchall()
-    cur.execute("SELECT from_email FROM inbox_cache WHERE replied=1")
-    replied_set = {r["from_email"] for r in cur.fetchall()}
-    result = []
-    for row in sent:
-        d = dict(row)
-        try:
-            sent_at_val = d.get("sent_at")
-            if sent_at_val:
-                if isinstance(sent_at_val, str):
-                    dt = datetime.fromisoformat(sent_at_val)
+    db = get_db()
+    try:
+        sent = db.execute(
+            text("""SELECT l.*, c.company FROM email_logs l
+                    LEFT JOIN contacts c ON l.contact_email=c.email
+                    WHERE l.direction='out' ORDER BY l.sent_at DESC LIMIT 100""")
+        ).fetchall()
+        
+        replied_set = set()
+        replied = db.execute(text("SELECT from_email FROM inbox_cache WHERE replied=1")).fetchall()
+        for r in replied:
+            replied_set.add(r["from_email"])
+        
+        result = []
+        for row in sent:
+            d = dict(row._mapping)
+            try:
+                sent_at_val = d.get("sent_at")
+                if sent_at_val:
+                    if isinstance(sent_at_val, str):
+                        dt = datetime.fromisoformat(sent_at_val)
+                    else:
+                        dt = sent_at_val.replace(tzinfo=None)
+                    hrs = round((datetime.utcnow() - dt).total_seconds() / 3600, 1)
                 else:
-                    dt = sent_at_val.replace(tzinfo=None)
-                hrs = round((datetime.utcnow() - dt).total_seconds() / 3600, 1)
-            else:
+                    hrs = None
+            except Exception:
                 hrs = None
-        except Exception:
-            hrs = None
-        d["hours_since_sent"] = hrs
-        d["has_reply"] = d["contact_email"] in replied_set
-        result.append(d)
-    cur.close(); conn.close()
-    return result
+            d["hours_since_sent"] = hrs
+            d["has_reply"] = d["contact_email"] in replied_set
+            result.append(d)
+        return result
+    finally:
+        db.close()
 
 # ─────────────────────────────────────────────
 # ROUTES — STATS
 # ─────────────────────────────────────────────
 @app.get("/stats")
 def get_stats(_: str = Depends(require_auth)):
-    conn = get_db()
-    cur  = conn.cursor()
-    cur.execute("SELECT COUNT(*) AS c FROM contacts");          contacts = cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) AS c FROM email_logs WHERE direction='out'"); sent = cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) AS c FROM inbox_cache");       inbox = cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) AS c FROM inbox_cache WHERE replied=1"); replied = cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) AS c FROM memory");            memory = cur.fetchone()["c"]
-    cur.close(); conn.close()
-    return {"contacts": contacts, "sent": sent, "inbox": inbox, "replied": replied, "memory": memory}
+    db = get_db()
+    try:
+        contacts = db.execute(text("SELECT COUNT(*) AS c FROM contacts")).fetchone()["c"]
+        sent = db.execute(text("SELECT COUNT(*) AS c FROM email_logs WHERE direction='out'")).fetchone()["c"]
+        inbox = db.execute(text("SELECT COUNT(*) AS c FROM inbox_cache")).fetchone()["c"]
+        replied = db.execute(text("SELECT COUNT(*) AS c FROM inbox_cache WHERE replied=1")).fetchone()["c"]
+        memory = db.execute(text("SELECT COUNT(*) AS c FROM memory")).fetchone()["c"]
+        return {"contacts": contacts, "sent": sent, "inbox": inbox, "replied": replied, "memory": memory}
+    finally:
+        db.close()
 
 # ─────────────────────────────────────────────
 # SERVIR FRONTEND (sin autenticación)
