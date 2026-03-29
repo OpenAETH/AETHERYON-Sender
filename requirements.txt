@@ -2,3 +2,5 @@ fastapi==0.115.12
 uvicorn==0.34.0
 python-multipart==0.0.20
 resend==2.26.0
+psycopg2-binary==2.9.10
+python-dotenv==1.0.1
