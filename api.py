@@ -129,16 +129,18 @@ def create_db_engine():
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL no está configurada en las variables de entorno")
     
+    # IMPORTANTE: Usa DATABASE_URL aquí en lugar de un string vacío.
+    # El parámetro 'creator' seguirá mandando sobre la conexión física.
     engine = create_engine(
-        "postgresql+psycopg2://",
+        DATABASE_URL, 
         creator=_make_ipv4_connection,
         pool_size=5,
         max_overflow=10,
         pool_pre_ping=True,
         pool_recycle=300,
-        isolation_level="AUTOCOMMIT",  # ← CRUCIAL: evita problemas con la verificación de versión
     )
     return engine
+
 
 # Crear engine y session factory globales
 engine = None
