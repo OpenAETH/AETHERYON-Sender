@@ -124,24 +124,14 @@ def _make_ipv4_connection():
         logger.error(f"Error conectando a la base de datos: {e}")
         raise
 
-def create_db_engine():
-    """Crea un engine de SQLAlchemy con conexión forzada a IPv4"""
-    if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL no está configurada en las variables de entorno")
-    
-    engine = create_engine(
-        "postgresql+psycopg2://",
-        creator=_make_ipv4_connection,
-        pool_size=5,
-        max_overflow=10,
-        pool_pre_ping=True,
-        pool_recycle=300,
-    )
-    return engine
-
-# Crear engine y session factory globales
-engine = None
-SessionLocal = None
+engine = create_engine(
+    "postgresql+psycopg2://",
+    creator=_make_ipv4_connection,
+    pool_size=5,
+    max_overflow=10,
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
 
 def init_db():
     """Inicializa la conexión a la base de datos (no crea tablas, asume que ya existen)"""
