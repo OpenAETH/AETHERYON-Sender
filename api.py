@@ -143,8 +143,8 @@ def create_db_engine():
 
 
 # Crear engine y session factory globales
-engine = None
-SessionLocal = None
+#engine = None
+#SessionLocal = None
 
 def init_db():
     """Inicializa la conexión a la base de datos (no crea tablas, asume que ya existen)"""
