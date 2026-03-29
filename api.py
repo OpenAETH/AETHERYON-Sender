@@ -115,7 +115,7 @@ def _make_ipv4_connection():
             dbname=p['dbname'],
             sslmode='require',
             connect_timeout=10,
-            cursor_factory=psycopg2.extras.RealDictCursor,
+            #cursor_factory=psycopg2.extras.RealDictCursor,
         )
         logger.info("Conexión a base de datos establecida exitosamente vía IPv4")
         return conn
