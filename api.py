@@ -88,7 +88,7 @@ def _make_ipv4_connection():
     ipv4 = _socket.getaddrinfo(p['host'], p['port'], _socket.AF_INET)[0][4][0]
     logger.debug(f"DB connect → {p['host']}:{p['port']} via IPv4 {ipv4}")
     return psycopg2.connect(
-        host     = p['host'],    # SNI correcto para TLS
+        host     = p['db.nruezthkvlvlochtnqjw.supabase.co'],    # SNI correcto para TLS
         hostaddr = ipv4,         # conexión directa por IPv4, sin DNS
         port     = p['port'],
         user     = p['user'],
