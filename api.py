@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import os, imaplib, email as email_lib
+import re as _re
+import socket as _socket
 import psycopg2
 import psycopg2.extras
 from email.header import decode_header
@@ -51,14 +53,54 @@ BASE         = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 # ─────────────────────────────────────────────
-# DATABASE — PostgreSQL / Supabase
+# DATABASE — PostgreSQL / Supabase (IPv4 forzado)
 # ─────────────────────────────────────────────
-def get_db():
-    """Retorna una conexión psycopg2 con cursor de tipo RealDictCursor
-    (equivalente a sqlite3.Row: acceso por nombre de columna)."""
+# Render resuelve hostnames de Supabase como IPv6, pero Supabase
+# solo acepta IPv4. Solución: resolver el host explícitamente como
+# AF_INET y pasar la IP en 'hostaddr', mientras 'host' mantiene el
+# hostname real para el SNI de TLS (necesario para auth del tenant).
+
+def _parse_db_url(url: str) -> dict:
+    """Descompone DATABASE_URL en sus partes."""
+    m = _re.match(
+        r'postgresql(?:\+\w+)?://([^:]+):([^@]+)@([^:/]+):?(\d+)?/([^\?]+)',
+        url
+    )
+    if not m:
+        raise ValueError(f"DATABASE_URL con formato inválido: {url!r}")
+    return {
+        'user':     m.group(1),
+        'password': m.group(2),
+        'host':     m.group(3),
+        'port':     int(m.group(4) or 5432),
+        'dbname':   m.group(5),
+    }
+
+def _make_ipv4_connection():
+    """
+    Crea una conexión psycopg2 forzando IPv4.
+    - 'host'     → hostname real, usado como SNI en TLS (Supabase lo necesita para identificar el tenant)
+    - 'hostaddr' → IP IPv4 resuelta, libpq conecta directo sin hacer DNS lookup (que devolvería IPv6)
+    """
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL no está configurada en las variables de entorno")
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    p = _parse_db_url(DATABASE_URL)
+    ipv4 = _socket.getaddrinfo(p['host'], p['port'], _socket.AF_INET)[0][4][0]
+    logger.debug(f"DB connect → {p['host']}:{p['port']} via IPv4 {ipv4}")
+    return psycopg2.connect(
+        host     = p['host'],    # SNI correcto para TLS
+        hostaddr = ipv4,         # conexión directa por IPv4, sin DNS
+        port     = p['port'],
+        user     = p['user'],
+        password = p['password'],
+        dbname   = p['dbname'],
+        sslmode  = 'require',
+        cursor_factory = psycopg2.extras.RealDictCursor,
+    )
+
+def get_db():
+    """Retorna una conexión psycopg2 con RealDictCursor (acceso por nombre de columna)."""
+    conn = _make_ipv4_connection()
     conn.autocommit = False
     return conn
 
