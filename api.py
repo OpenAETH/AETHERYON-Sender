@@ -27,11 +27,9 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────
 def cfg():
     return {
-        # Resend
         "resend_api_key": os.getenv("RESEND_API_KEY", ""),
         "sender_email":   os.getenv("SENDER_EMAIL", os.getenv("SMTP_USER", "")),
         "sender_name":    os.getenv("SENDER_NAME", ""),
-        # IMAP
         "imap_host":      os.getenv("IMAP_HOST", ""),
         "imap_port":      int(os.getenv("IMAP_PORT", "993")),
         "imap_user":      os.getenv("IMAP_USER", ""),
@@ -43,106 +41,138 @@ APP_PASSWORD = os.getenv("APP_PASSWORD", "admin")
 SECRET_KEY   = os.getenv("SECRET_KEY", "")
 if not SECRET_KEY:
     SECRET_KEY = secrets.token_hex(32)
-    logger.warning("SECRET_KEY no configurada en entorno — usando valor aleatorio efímero. "
-                   "Las sesiones no sobrevivirán reinicios. Configura SECRET_KEY en Render.")
+    logger.warning("SECRET_KEY no configurada en entorno — usando valor aleatorio efímero")
 TOKEN_TTL    = int(os.getenv("TOKEN_TTL_HOURS", "8")) * 3600
 
-# True cuando corre en Render (HTTPS) o cuando se fuerza con COOKIE_SECURE=true
 IS_HTTPS = os.getenv("RENDER", "") != "" or os.getenv("COOKIE_SECURE", "").lower() == "true"
-
-BASE         = os.path.dirname(os.path.abspath(__file__))
+BASE = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 # ─────────────────────────────────────────────
-# DATABASE — PostgreSQL / Supabase
+# DATABASE — PostgreSQL / Supabase con IPv4 forzado
 # ─────────────────────────────────────────────
-def _parse_db_url(url: str) -> dict:
-    """Descompone DATABASE_URL en sus partes correctamente."""
+def _get_ipv4_address(hostname):
+    """Resuelve un hostname a una dirección IPv4 exclusivamente"""
     try:
-        # Usar urlparse para mejor manejo
-        parsed = urlparse(url)
-        
-        # Extraer usuario y contraseña
-        user_pass = parsed.netloc.split('@')[0] if '@' in parsed.netloc else ''
-        user = ''
-        password = ''
-        if ':' in user_pass:
-            user, password = user_pass.split(':', 1)
-        elif user_pass:
-            user = user_pass
-        
-        # Extraer host y puerto
-        host_port = parsed.netloc.split('@')[-1] if '@' in parsed.netloc else parsed.netloc
-        if ':' in host_port:
-            host, port = host_port.split(':', 1)
-            port = int(port)
+        # Forzar resolución AF_INET (IPv4)
+        addrinfo = _socket.getaddrinfo(hostname, None, _socket.AF_INET, _socket.SOCK_STREAM)
+        if addrinfo:
+            ipv4 = addrinfo[0][4][0]
+            logger.info(f"Resolución IPv4 para {hostname}: {ipv4}")
+            return ipv4
         else:
-            host = host_port
-            port = 5432
-        
-        # Decodificar usuario y password (pueden venir URL-encoded)
-        user = unquote(user) if user else ''
-        password = unquote(password) if password else ''
-        
-        # Extraer nombre de la base de datos
-        dbname = parsed.path.lstrip('/')
-        
-        return {
-            'user': user,
-            'password': password,
-            'host': host,
-            'port': port,
-            'dbname': dbname,
-        }
+            return None
     except Exception as e:
-        logger.error(f"Error parsing DATABASE_URL: {e}")
-        raise ValueError(f"DATABASE_URL con formato inválido: {url!r}")
+        logger.error(f"Error resolviendo {hostname} a IPv4: {e}")
+        return None
 
 def _make_connection():
     """
-    Crea una conexión psycopg2 con manejo robusto.
+    Crea una conexión psycopg2 forzando IPv4.
     """
     if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL no está configurada en las variables de entorno")
+        raise RuntimeError("DATABASE_URL no está configurada")
     
-    p = _parse_db_url(DATABASE_URL)
+    # Parsear URL
+    parsed = urlparse(DATABASE_URL)
+    user = unquote(parsed.username) if parsed.username else ''
+    password = unquote(parsed.password) if parsed.password else ''
+    host = parsed.hostname
+    port = parsed.port or 5432
+    dbname = parsed.path.lstrip('/')
     
-    # Para Supabase, a veces necesitamos usar el usuario directo (sin el .project_ref)
-    # Intentamos primero con el usuario original, y si falla, probamos con el usuario base
-    users_to_try = [p['user']]
+    logger.info(f"Conectando a {host}:{port} con usuario {user}")
     
-    # Si el usuario tiene formato "usuario.proyecto", también probamos sin el proyecto
-    if '.' in p['user']:
-        base_user = p['user'].split('.')[0]
-        if base_user not in users_to_try:
-            users_to_try.append(base_user)
+    # Obtener dirección IPv4
+    ipv4 = _get_ipv4_address(host)
     
-    last_error = None
-    for user in users_to_try:
+    # Intentar conexiones
+    attempts = []
+    
+    # Opción 1: Usar IPv4 directo si está disponible
+    if ipv4:
         try:
-            logger.info(f"Intentando conectar a {p['host']}:{p['port']} como {user}...")
+            logger.info(f"Intentando conexión IPv4 directa a {ipv4}:{port}")
             conn = psycopg2.connect(
-                host     = p['host'],
-                port     = p['port'],
-                user     = user,
-                password = p['password'],
-                dbname   = p['dbname'],
-                sslmode  = 'require',
-                connect_timeout = 10,
+                host = ipv4,
+                port = port,
+                user = user,
+                password = password,
+                dbname = dbname,
+                sslmode = 'require',
+                connect_timeout = 15,
                 cursor_factory = psycopg2.extras.RealDictCursor,
             )
-            logger.info(f"Conexión a base de datos establecida exitosamente como {user}")
+            # Verificar conexión
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            cur.fetchone()
+            cur.close()
+            logger.info("✅ Conexión IPv4 establecida correctamente")
             return conn
         except Exception as e:
-            last_error = e
-            logger.warning(f"Error conectando como {user}: {e}")
-            continue
+            logger.warning(f"Conexión IPv4 falló: {e}")
+            attempts.append(f"IPv4 directo: {e}")
     
-    # Si llegamos aquí, todos los intentos fallaron
-    raise RuntimeError(f"No se pudo conectar a la base de datos. Último error: {last_error}")
+    # Opción 2: Usar hostname con hostaddr (mejor para TLS)
+    if ipv4:
+        try:
+            logger.info(f"Intentando conexión con host={host}, hostaddr={ipv4}")
+            conn = psycopg2.connect(
+                host = host,      # Para SNI en TLS
+                hostaddr = ipv4,  # Forzar conexión IPv4
+                port = port,
+                user = user,
+                password = password,
+                dbname = dbname,
+                sslmode = 'require',
+                connect_timeout = 15,
+                cursor_factory = psycopg2.extras.RealDictCursor,
+            )
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            cur.fetchone()
+            cur.close()
+            logger.info("✅ Conexión con host+hostaddr establecida")
+            return conn
+        except Exception as e:
+            logger.warning(f"Conexión host+hostaddr falló: {e}")
+            attempts.append(f"host+hostaddr: {e}")
+    
+    # Opción 3: Intentar con el pooler de Supabase si el host original falló
+    if 'supabase.co' in host:
+        pooler_host = f"aws-0-us-east-1.pooler.supabase.com"
+        pooler_ipv4 = _get_ipv4_address(pooler_host)
+        if pooler_ipv4:
+            try:
+                logger.info(f"Intentando con pooler {pooler_host} ({pooler_ipv4})")
+                conn = psycopg2.connect(
+                    host = pooler_host,
+                    hostaddr = pooler_ipv4,
+                    port = 6543,  # Puerto del pooler
+                    user = user,
+                    password = password,
+                    dbname = dbname,
+                    sslmode = 'require',
+                    connect_timeout = 15,
+                    cursor_factory = psycopg2.extras.RealDictCursor,
+                )
+                cur = conn.cursor()
+                cur.execute("SELECT 1")
+                cur.fetchone()
+                cur.close()
+                logger.info("✅ Conexión vía pooler establecida")
+                return conn
+            except Exception as e:
+                logger.warning(f"Pooler falló: {e}")
+                attempts.append(f"pooler: {e}")
+    
+    # Si todo falló
+    error_msg = f"No se pudo conectar a la base de datos. Intentos: {'; '.join(attempts)}"
+    logger.error(error_msg)
+    raise RuntimeError(error_msg)
 
 def get_db():
-    """Retorna una conexión psycopg2 con RealDictCursor."""
     return _make_connection()
 
 def init_db():
@@ -155,9 +185,9 @@ def init_db():
         # Verificar conexión
         cur.execute("SELECT 1")
         cur.fetchone()
-        logger.info("Conexión a base de datos verificada")
+        logger.info("✅ Conexión a base de datos verificada")
         
-        # Tabla contacts
+        # Tablas
         cur.execute("""
         CREATE TABLE IF NOT EXISTS contacts (
             id         SERIAL PRIMARY KEY,
@@ -173,7 +203,6 @@ def init_db():
         )
         """)
         
-        # Tabla email_logs
         cur.execute("""
         CREATE TABLE IF NOT EXISTS email_logs (
             id            SERIAL PRIMARY KEY,
@@ -196,7 +225,6 @@ def init_db():
         )
         """)
         
-        # Tabla memory
         cur.execute("""
         CREATE TABLE IF NOT EXISTS memory (
             id         SERIAL PRIMARY KEY,
@@ -208,7 +236,6 @@ def init_db():
         )
         """)
         
-        # Tabla inbox_cache
         cur.execute("""
         CREATE TABLE IF NOT EXISTS inbox_cache (
             id            SERIAL PRIMARY KEY,
@@ -226,7 +253,6 @@ def init_db():
         )
         """)
         
-        # Tabla settings
         cur.execute("""
         CREATE TABLE IF NOT EXISTS settings (
             key   TEXT PRIMARY KEY,
@@ -234,7 +260,6 @@ def init_db():
         )
         """)
         
-        # Tabla sessions
         cur.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             token      TEXT PRIMARY KEY,
@@ -244,7 +269,7 @@ def init_db():
         """)
         
         conn.commit()
-        logger.info("Base de datos inicializada correctamente")
+        logger.info("✅ Base de datos inicializada correctamente")
         
     except Exception as e:
         if conn:
@@ -257,8 +282,11 @@ def init_db():
             conn.close()
 
 # ─────────────────────────────────────────────
-# AUTH — token simple HMAC
+# AUTH — token simple HMAC (con fallback sin DB)
 # ─────────────────────────────────────────────
+# Para cuando la DB no está disponible, almacenamos sesiones en memoria
+_in_memory_sessions = {}
+
 def make_token() -> str:
     raw = secrets.token_hex(32)
     sig = hmac.new(SECRET_KEY.encode(), raw.encode(), hashlib.sha256).hexdigest()
@@ -270,17 +298,29 @@ def verify_token(token: str) -> bool:
         expected = hmac.new(SECRET_KEY.encode(), raw.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig, expected):
             return False
-        conn = get_db()
-        cur  = conn.cursor()
-        cur.execute(
-            "SELECT expires_at FROM sessions WHERE token=%s AND expires_at>%s",
-            (token, int(time.time()))
-        )
-        row = cur.fetchone()
-        cur.close(); conn.close()
-        return row is not None
-    except Exception as e:
-        logger.error(f"Error en verify_token: {e}")
+        
+        # Intentar verificar en DB primero
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT expires_at FROM sessions WHERE token=%s AND expires_at>%s",
+                (token, int(time.time()))
+            )
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if row:
+                return True
+        except Exception as e:
+            logger.warning(f"Verificación DB falló, usando memoria: {e}")
+            # Fallback a memoria
+            session = _in_memory_sessions.get(token)
+            if session and session['expires_at'] > int(time.time()):
+                return True
+        
+        return False
+    except Exception:
         return False
 
 async def require_auth(request: Request):
@@ -290,8 +330,10 @@ async def require_auth(request: Request):
     return token
 
 # ─────────────────────────────────────────────
-# SETTINGS
+# SETTINGS (con fallback)
 # ─────────────────────────────────────────────
+_in_memory_settings = {}
+
 def get_setting(key: str, default: str = "") -> str:
     try:
         conn = get_db()
@@ -302,8 +344,8 @@ def get_setting(key: str, default: str = "") -> str:
         conn.close()
         return row["value"] if row else default
     except Exception as e:
-        logger.error(f"Error en get_setting: {e}")
-        return default
+        logger.warning(f"Error en get_setting (usando memoria): {e}")
+        return _in_memory_settings.get(key, default)
 
 def set_setting(key: str, value: str):
     try:
@@ -317,11 +359,11 @@ def set_setting(key: str, value: str):
         cur.close()
         conn.close()
     except Exception as e:
-        logger.error(f"Error en set_setting: {e}")
-        raise
+        logger.warning(f"Error en set_setting (guardando en memoria): {e}")
+        _in_memory_settings[key] = value
 
 # ─────────────────────────────────────────────
-# MARKDOWN → HTML
+# MARKDOWN → HTML (sin cambios)
 # ─────────────────────────────────────────────
 def md_to_html(text: str) -> str:
     text = text.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
@@ -355,61 +397,41 @@ def md_to_html(text: str) -> str:
             wrapped.append(f'<p style="margin:0 0 14px;line-height:1.7">{p.replace(chr(10),"<br>")}</p>')
     return '\n'.join(wrapped)
 
-# ─────────────────────────────────────────────
-# HTML EMAIL BUILDER
-# ─────────────────────────────────────────────
 def build_html_email(body_text: str, style_cfg: dict = None) -> str:
-    s         = style_cfg or {}
-    primary   = s.get("primary_color",  "#7ec850")
-    bg        = s.get("bg_color",       "#ffffff")
-    text_col  = s.get("text_color",     "#1a1a1a")
-    font      = s.get("font_family",    "Georgia,'Times New Roman',serif")
-    fsize     = s.get("font_size",      "16px")
-    link_col  = s.get("link_color",     "#2563eb")
-    header_bg = s.get("header_bg",      "#0c0f0a")
-    header_fc = s.get("header_color",   "#7ec850")
-    sname     = s.get("sender_name",    cfg()["sender_name"])
-    sig_html  = s.get("signature_html", get_setting("signature_html", ""))
+    s = style_cfg or {}
+    primary = s.get("primary_color", "#7ec850")
+    bg = s.get("bg_color", "#ffffff")
+    text_col = s.get("text_color", "#1a1a1a")
+    font = s.get("font_family", "Georgia,'Times New Roman',serif")
+    fsize = s.get("font_size", "16px")
+    link_col = s.get("link_color", "#2563eb")
+    header_bg = s.get("header_bg", "#0c0f0a")
+    header_fc = s.get("header_color", "#7ec850")
+    sname = s.get("sender_name", cfg()["sender_name"])
+    sig_html = s.get("signature_html", get_setting("signature_html", ""))
     body_html = md_to_html(body_text).replace("LINKCOLOR", link_col)
 
     sig_block = ""
     if sig_html:
-        sig_block = (
-            '|<td style="padding:0 36px 24px 36px">'
-            '<table width="100%" cellpadding="0" cellspacing="0" border="0">'
-            '<tr><td style="border-top:2px solid ' + primary + ';padding-top:16px;'
-            'font-size:13px;color:#666;font-family:Arial,sans-serif;line-height:1.5">'
-            + sig_html +
-            '</td></tr></table></td>'
-        )
+        sig_block = f'<td style="padding:0 36px 24px 36px"><table width="100%"><tr><td style="border-top:2px solid {primary};padding-top:16px;font-size:13px;color:#666">{sig_html}</td></tr></table></td>'
 
     footer_name = sname or "Asistente Ejecutivo"
-
-    return (
-        '<!DOCTYPE html>'
-        '<html lang="es">'
-        '<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<title>Email</title></head>'
-        '<body style="margin:0;padding:0;background-color:#f0f0f0">'
-        '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f0f0f0;padding:32px 16px">'
-        '<tr><td align="center">'
-        '<table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%">'
-        '<tr><td style="background-color:' + header_bg + ';border-radius:10px 10px 0 0;padding:24px 36px">'
-        '<span style="font-family:Georgia,serif;font-size:21px;font-weight:700;color:' + header_fc + '">'
-        + (sname or "") + '</span></td></tr>'
-        '<tr><td style="background-color:' + bg + ';padding:36px 36px 28px 36px;'
-        'font-family:' + font + ';font-size:' + fsize + ';color:' + text_col + ';line-height:1.75">'
-        + body_html + '</td></tr>'
-        + sig_block +
-        '<tr><td style="background-color:#f8f8f8;border-radius:0 0 10px 10px;'
-        'border-top:1px solid #e4e4e4;padding:16px 36px">'
-        '<p style="margin:0;font-size:12px;color:#aaa">'
-        'Enviado desde <strong>' + footer_name + '</strong>.</p></td></tr>'
-        '</table></td></tr></table></body></html>'
-    )
+    
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Email</title></head>
+<body style="margin:0;padding:0;background:#f0f0f0">
+<table width="100%" style="background:#f0f0f0;padding:32px 16px"><tr><td align="center">
+<table width="600" style="max-width:600px;width:100%">
+<tr><td style="background:{header_bg};border-radius:10px 10px 0 0;padding:24px 36px">
+<span style="font-family:Georgia;font-size:21px;font-weight:700;color:{header_fc}">{sname or ""}</span></td></tr>
+<tr><td style="background:{bg};padding:36px 36px 28px 36px;font-family:{font};font-size:{fsize};color:{text_col};line-height:1.75">{body_html}</td></tr>
+{sig_block}
+<tr><td style="background:#f8f8f8;border-radius:0 0 10px 10px;border-top:1px solid #e4e4e4;padding:16px 36px">
+<p style="margin:0;font-size:12px;color:#aaa">Enviado desde <strong>{footer_name}</strong>.</p></td></tr>
+</table></td></tr></table></body></html>"""
 
 # ─────────────────────────────────────────────
-# RESEND SEND
+# RESEND SEND (sin cambios)
 # ─────────────────────────────────────────────
 def send_resend(to: str, subject: str, body_plain: str, body_html: str, reply_to_mid: str = None):
     c = cfg()
@@ -417,55 +439,41 @@ def send_resend(to: str, subject: str, body_plain: str, body_html: str, reply_to
         raise ValueError("RESEND_API_KEY no configurada")
     if not c["sender_email"]:
         raise ValueError("SENDER_EMAIL no configurada")
-
     resend.api_key = c["resend_api_key"]
     from_addr = f"{c['sender_name']} <{c['sender_email']}>" if c["sender_name"] else c["sender_email"]
-
-    params = {
-        "from": from_addr,
-        "to": [to],
-        "subject": subject,
-        "html": body_html,
-        "text": body_plain,
-    }
+    params = {"from": from_addr, "to": [to], "subject": subject, "html": body_html, "text": body_plain}
     if reply_to_mid:
         params["headers"] = {"In-Reply-To": reply_to_mid, "References": reply_to_mid}
-
     response = resend.Emails.send(params)
-    email_id = response.id if hasattr(response, "id") else str(response)
-    logger.info(f"Resend OK → {to} | id={email_id}")
     return response
 
 # ─────────────────────────────────────────────
-# IMAP SYNC
+# IMAP SYNC (sin cambios)
 # ─────────────────────────────────────────────
 def decode_str(s):
     if not s: return ""
-    parts = decode_header(s); result = []
+    parts = decode_header(s)
+    result = []
     for part, enc in parts:
         result.append(part.decode(enc or "utf-8", errors="replace") if isinstance(part, bytes) else str(part))
     return "".join(result)
 
 def fetch_inbox_sync(limit=60):
     c = cfg()
-    if not c["imap_host"] or not c["imap_user"]: 
+    if not c["imap_host"] or not c["imap_user"]:
         return {"added":0,"deleted":0,"error":"IMAP no configurado"}
     try:
         mail = imaplib.IMAP4_SSL(c["imap_host"], c["imap_port"])
         mail.login(c["imap_user"], c["imap_pass"])
         mail.select("INBOX")
-
         _, uid_data = mail.uid("SEARCH", None, "ALL")
         server_uids = set(uid_data[0].decode().split()) if uid_data[0] else set()
-
         conn = get_db()
-        cur  = conn.cursor()
-
+        cur = conn.cursor()
         cur.execute("SELECT message_id, imap_uid FROM inbox_cache")
         db_rows = cur.fetchall()
         db_by_uid = {r["imap_uid"]: r["message_id"] for r in db_rows if r["imap_uid"]}
         db_message_ids = {r["message_id"] for r in db_rows}
-
         deleted_uids = set(db_by_uid.keys()) - server_uids
         deleted_count = 0
         for uid in deleted_uids:
@@ -474,11 +482,8 @@ def fetch_inbox_sync(limit=60):
             deleted_count += 1
         if deleted_count:
             conn.commit()
-            logger.info(f"IMAP sync: {deleted_count} mensajes eliminados de DB")
-
         uids_to_fetch = list(server_uids)[-limit:]
         added_count = 0
-
         for uid in reversed(uids_to_fetch):
             _, msg_data = mail.uid("FETCH", uid, "(RFC822)")
             if not msg_data or not msg_data[0]: continue
@@ -486,9 +491,7 @@ def fetch_inbox_sync(limit=60):
             msg = email_lib.message_from_bytes(raw)
             mid = msg.get("Message-ID","").strip()
             if not mid: mid = f"uid-{uid}"
-
             if mid in db_message_ids: continue
-
             subj = decode_str(msg.get("Subject",""))
             from_ = decode_str(msg.get("From",""))
             date_ = msg.get("Date","")
@@ -504,27 +507,21 @@ def fetch_inbox_sync(limit=60):
             if msg.is_multipart():
                 for part in msg.walk():
                     if part.get_content_type() == "text/plain":
-                        try: 
-                            body = part.get_payload(decode=True).decode("utf-8", errors="replace")
-                            break
+                        try: body = part.get_payload(decode=True).decode("utf-8", errors="replace"); break
                         except: pass
             else:
-                try: 
-                    body = msg.get_payload(decode=True).decode("utf-8", errors="replace")
+                try: body = msg.get_payload(decode=True).decode("utf-8", errors="replace")
                 except: pass
             try:
-                cur.execute(
-                    "INSERT INTO inbox_cache (message_id,imap_uid,from_email,from_name,subject,body,date) VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (message_id) DO NOTHING",
-                    (mid, uid, from_email, from_name, subj, body[:3000], date_))
+                cur.execute("INSERT INTO inbox_cache (message_id,imap_uid,from_email,from_name,subject,body,date) VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (message_id) DO NOTHING", (mid, uid, from_email, from_name, subj, body[:3000], date_))
                 conn.commit()
                 added_count += 1
             except Exception as e:
                 conn.rollback()
                 logger.error(f"Error insertando msg {mid}: {e}")
-
-        cur.close(); conn.close()
+        cur.close()
+        conn.close()
         mail.logout()
-        logger.info(f"IMAP sync: +{added_count} nuevos, -{deleted_count} eliminados")
         return {"added": added_count, "deleted": deleted_count, "total": len(server_uids)}
     except Exception as e:
         logger.error(f"IMAP sync error: {e}")
@@ -537,62 +534,40 @@ def fetch_inbox_sync(limit=60):
 async def lifespan(app):
     try:
         init_db()
-        logger.info("Aplicación iniciada correctamente")
+        logger.info("✅ Aplicación iniciada correctamente con DB")
     except Exception as e:
-        logger.error(f"Error al iniciar la aplicación: {e}")
-        logger.info("La aplicación continuará ejecutándose, pero algunas funciones pueden no estar disponibles")
+        logger.error(f"⚠️ Error en DB: {e}")
+        logger.info("⚠️ La aplicación continuará en modo memoria")
     yield
     logger.info("Aplicación cerrada")
 
 app = FastAPI(title="Asistente Ejecutivo API", lifespan=lifespan)
-app.add_middleware(
-    CORSMiddleware, 
-    allow_origins=["*"], 
-    allow_methods=["*"], 
-    allow_headers=["*"],
-    allow_credentials=True
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"], allow_credentials=True)
 
 # ─────────────────────────────────────────────
 # FRONTEND
 # ─────────────────────────────────────────────
 def find_index_html():
-    posibles_ubicaciones = [
-        os.path.join(BASE, "static", "index.html"),
-        os.path.join(BASE, "index.html"),
-        "/opt/render/project/src/static/index.html",
-        "/opt/render/project/src/index.html",
-    ]
-    
-    for ubicacion in posibles_ubicaciones:
-        if os.path.exists(ubicacion):
-            logger.info(f"Frontend encontrado en: {ubicacion}")
-            return ubicacion
-    
-    logger.warning("No se encontró index.html")
+    posibles = [os.path.join(BASE, "static", "index.html"), os.path.join(BASE, "index.html"), "/opt/render/project/src/static/index.html", "/opt/render/project/src/index.html"]
+    for p in posibles:
+        if os.path.exists(p):
+            logger.info(f"Frontend encontrado: {p}")
+            return p
     return None
 
 INDEX_PATH = find_index_html()
-
 static_dir = os.path.join(BASE, "static")
 if not os.path.exists(static_dir):
     os.makedirs(static_dir)
-    logger.info(f"Creado directorio static: {static_dir}")
-
 index_root = os.path.join(BASE, "index.html")
 if os.path.exists(index_root) and not os.path.exists(os.path.join(static_dir, "index.html")):
     import shutil
     shutil.copy2(index_root, os.path.join(static_dir, "index.html"))
-    logger.info(f"Copiado {index_root} a {static_dir}/")
     INDEX_PATH = os.path.join(static_dir, "index.html")
-
 if os.path.exists(static_dir) and os.listdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
-    logger.info(f"Directorio static montado: {static_dir}")
 
-API_PATHS = ["auth", "contacts", "inbox", "send-email", "settings", "context", 
-             "preview-email", "logs", "memory", "supervision", "stats", 
-             "smtp-test", "config", "api"]
+API_PATHS = ["auth", "contacts", "inbox", "send-email", "settings", "context", "preview-email", "logs", "memory", "supervision", "stats", "smtp-test", "config", "api"]
 
 # ─────────────────────────────────────────────
 # ROUTES
@@ -601,39 +576,24 @@ API_PATHS = ["auth", "contacts", "inbox", "send-email", "settings", "context",
 async def login(request: Request):
     data = await request.json()
     user = data.get("username","").strip()
-    pw   = data.get("password","")
-    
-    logger.info(f"Intento de login: user={user}")
-    
+    pw = data.get("password","")
     if user != APP_USER or pw != APP_PASSWORD:
-        logger.warning(f"Login fallido para usuario: {user}")
         raise HTTPException(401, "Credenciales incorrectas")
-    
     token = make_token()
-    now   = int(time.time())
-    
+    now = int(time.time())
     try:
         conn = get_db()
         cur = conn.cursor()
         cur.execute("DELETE FROM sessions WHERE expires_at<%s", (now,))
-        cur.execute("INSERT INTO sessions (token,created_at,expires_at) VALUES (%s,%s,%s)",
-                    (token, now, now + TOKEN_TTL))
+        cur.execute("INSERT INTO sessions (token,created_at,expires_at) VALUES (%s,%s,%s)", (token, now, now + TOKEN_TTL))
         conn.commit()
         cur.close()
         conn.close()
-        logger.info(f"Login exitoso para usuario: {user}")
     except Exception as e:
-        logger.error(f"Error guardando sesión en DB: {e}")
-        # Si hay error de DB, igual permitimos login pero sin persistencia de sesión
-    
+        logger.warning(f"Error guardando sesión en DB, usando memoria: {e}")
+        _in_memory_sessions[token] = {'expires_at': now + TOKEN_TTL}
     resp = JSONResponse({"success": True, "token": token})
-    resp.set_cookie(
-        "session", token,
-        httponly=True,
-        samesite="lax",
-        max_age=TOKEN_TTL,
-        secure=IS_HTTPS,
-    )
+    resp.set_cookie("session", token, httponly=True, samesite="lax", max_age=TOKEN_TTL, secure=IS_HTTPS)
     return resp
 
 @app.post("/auth/logout")
@@ -648,7 +608,8 @@ async def logout(request: Request):
             cur.close()
             conn.close()
         except Exception as e:
-            logger.error(f"Error en logout: {e}")
+            logger.warning(f"Error en logout DB: {e}")
+        _in_memory_sessions.pop(token, None)
     resp = JSONResponse({"success": True})
     resp.delete_cookie("session")
     return resp
@@ -657,10 +618,8 @@ async def logout(request: Request):
 async def auth_check(token: str = Depends(require_auth)):
     return {"ok": True, "user": APP_USER}
 
-# Health check para Render
 @app.get("/health")
 async def health_check():
-    # Verificar conexión a DB
     db_ok = False
     try:
         conn = get_db()
@@ -672,47 +631,31 @@ async def health_check():
         db_ok = True
     except Exception as e:
         logger.error(f"Health check DB failed: {e}")
-    
-    return {
-        "status": "healthy" if db_ok else "degraded",
-        "database": "connected" if db_ok else "disconnected",
-        "timestamp": datetime.now().isoformat()
-    }
+    return {"status": "healthy" if db_ok else "degraded", "database": "connected" if db_ok else "disconnected"}
 
 @app.get("/api/status")
 def root(_: str = Depends(require_auth)):
     c = cfg()
-    return {
-        "status": "Asistente Ejecutivo API",
-        "smtp_user": c["sender_email"] or "NO CONFIG",
-        "imap_host": c["imap_host"] or "NO CONFIG",
-        "provider": "resend",
-        "resend_ready": bool(c["resend_api_key"] and c["sender_email"]),
-    }
+    return {"status": "Asistente Ejecutivo API", "smtp_user": c["sender_email"] or "NO CONFIG", "imap_host": c["imap_host"] or "NO CONFIG", "provider": "resend", "resend_ready": bool(c["resend_api_key"] and c["sender_email"])}
 
 @app.get("/config")
 def get_config(_: str = Depends(require_auth)):
     c = cfg()
-    return {
-        "provider": "resend",
-        "sender_email": c["sender_email"],
-        "sender_name": c["sender_name"],
-        "resend_key_set": bool(c["resend_api_key"]),
-        "imap_host": c["imap_host"],
-        "imap_port": c["imap_port"],
-        "imap_user": c["imap_user"],
-        "imap_pass_set": bool(c["imap_pass"]),
-    }
+    return {"provider": "resend", "sender_email": c["sender_email"], "sender_name": c["sender_name"], "resend_key_set": bool(c["resend_api_key"]), "imap_host": c["imap_host"], "imap_port": c["imap_port"], "imap_user": c["imap_user"], "imap_pass_set": bool(c["imap_pass"])}
 
 @app.get("/settings")
 def get_all_settings(_: str = Depends(require_auth)):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT key,value FROM settings")
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-    return {r["key"]: r["value"] for r in rows}
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT key,value FROM settings")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return {r["key"]: r["value"] for r in rows}
+    except Exception as e:
+        logger.warning(f"Error en settings, usando memoria: {e}")
+        return _in_memory_settings
 
 @app.post("/settings")
 async def save_settings(request: Request, _: str = Depends(require_auth)):
@@ -723,11 +666,7 @@ async def save_settings(request: Request, _: str = Depends(require_auth)):
 
 @app.get("/context")
 def get_context(_: str = Depends(require_auth)):
-    return {
-        "entity": get_setting("ctx_entity"),
-        "mission": get_setting("ctx_mission"),
-        "extra": get_setting("ctx_extra")
-    }
+    return {"entity": get_setting("ctx_entity"), "mission": get_setting("ctx_mission"), "extra": get_setting("ctx_extra")}
 
 @app.post("/context")
 async def save_context(request: Request, _: str = Depends(require_auth)):
@@ -740,17 +679,7 @@ async def save_context(request: Request, _: str = Depends(require_auth)):
 @app.post("/preview-email")
 async def preview_email(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
-    style = {
-        "primary_color": get_setting("style_primary_color","#7ec850"),
-        "bg_color": get_setting("style_bg_color","#ffffff"),
-        "text_color": get_setting("style_text_color","#1a1a1a"),
-        "font_family": get_setting("style_font_family","Georgia,'Times New Roman',serif"),
-        "font_size": get_setting("style_font_size","16px"),
-        "link_color": get_setting("style_link_color","#2563eb"),
-        "header_bg": get_setting("style_header_bg","#0c0f0a"),
-        "header_color": get_setting("style_header_color","#7ec850"),
-        "signature_html": get_setting("signature_html",""),
-    }
+    style = {"primary_color": get_setting("style_primary_color","#7ec850"), "bg_color": get_setting("style_bg_color","#ffffff"), "text_color": get_setting("style_text_color","#1a1a1a"), "font_family": get_setting("style_font_family","Georgia,'Times New Roman',serif"), "font_size": get_setting("style_font_size","16px"), "link_color": get_setting("style_link_color","#2563eb"), "header_bg": get_setting("style_header_bg","#0c0f0a"), "header_color": get_setting("style_header_color","#7ec850"), "signature_html": get_setting("signature_html","")}
     for k in style:
         style[k] = data.get(k, style[k])
     style["sender_name"] = data.get("sender_name", cfg()["sender_name"])
@@ -774,14 +703,9 @@ async def create_contact(request: Request, _: str = Depends(require_auth)):
     conn = get_db()
     cur = conn.cursor()
     try:
-        cur.execute(
-            "INSERT INTO contacts (name,email,company,role,phone,context,tags) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-            (data["name"],data["email"],data.get("company",""),data.get("role",""),
-             data.get("phone",""),data.get("context",""),data.get("tags",""))
-        )
+        cur.execute("INSERT INTO contacts (name,email,company,role,phone,context,tags) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id", (data["name"],data["email"],data.get("company",""),data.get("role",""),data.get("phone",""),data.get("context",""),data.get("tags","")))
         cid = cur.fetchone()["id"]
-        cur.execute("INSERT INTO memory (type,entity,content) VALUES (%s,%s,%s)",
-            ("contact_added",data["email"],f"Contacto: {data['name']} - {data.get('company','')}"))
+        cur.execute("INSERT INTO memory (type,entity,content) VALUES (%s,%s,%s)", ("contact_added",data["email"],f"Contacto: {data['name']} - {data.get('company','')}"))
         conn.commit()
     except psycopg2.errors.UniqueViolation:
         conn.rollback()
@@ -796,10 +720,7 @@ async def update_contact(cid: int, request: Request, _: str = Depends(require_au
     data = await request.json()
     conn = get_db()
     cur = conn.cursor()
-    cur.execute(
-        "UPDATE contacts SET name=%s,company=%s,role=%s,phone=%s,context=%s,tags=%s,updated_at=NOW() WHERE id=%s",
-        (data.get("name"),data.get("company",""),data.get("role",""),
-         data.get("phone",""),data.get("context",""),data.get("tags",""),cid))
+    cur.execute("UPDATE contacts SET name=%s,company=%s,role=%s,phone=%s,context=%s,tags=%s,updated_at=NOW() WHERE id=%s", (data.get("name"),data.get("company",""),data.get("role",""),data.get("phone",""),data.get("context",""),data.get("tags",""),cid))
     conn.commit()
     cur.close()
     conn.close()
@@ -817,28 +738,14 @@ def delete_contact(cid: int, _: str = Depends(require_auth)):
 
 def _build_style():
     c = cfg()
-    return {
-        "primary_color": get_setting("style_primary_color","#7ec850"),
-        "bg_color": get_setting("style_bg_color","#ffffff"),
-        "text_color": get_setting("style_text_color","#1a1a1a"),
-        "font_family": get_setting("style_font_family","Georgia,'Times New Roman',serif"),
-        "font_size": get_setting("style_font_size","16px"),
-        "link_color": get_setting("style_link_color","#2563eb"),
-        "header_bg": get_setting("style_header_bg","#0c0f0a"),
-        "header_color": get_setting("style_header_color","#7ec850"),
-        "sender_name": c["sender_name"],
-        "signature_html": get_setting("signature_html",""),
-    }
+    return {"primary_color": get_setting("style_primary_color","#7ec850"), "bg_color": get_setting("style_bg_color","#ffffff"), "text_color": get_setting("style_text_color","#1a1a1a"), "font_family": get_setting("style_font_family","Georgia,'Times New Roman',serif"), "font_size": get_setting("style_font_size","16px"), "link_color": get_setting("style_link_color","#2563eb"), "header_bg": get_setting("style_header_bg","#0c0f0a"), "header_color": get_setting("style_header_color","#7ec850"), "sender_name": c["sender_name"], "signature_html": get_setting("signature_html","")}
 
 def _log_sent(conn, cur, to, subject, body, body_html, intent, campaign_id):
     cur.execute("SELECT name FROM contacts WHERE email=%s", (to,))
     row = cur.fetchone()
     cname = row["name"] if row else to.split("@")[0]
-    cur.execute(
-        "INSERT INTO email_logs (direction,contact_email,contact_name,subject,body,body_html,intent,status,sent_at,campaign_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW(),%s)",
-        ("out",to,cname,subject,body,body_html,intent,"sent",campaign_id))
-    cur.execute("INSERT INTO memory (type,entity,content,importance) VALUES (%s,%s,%s,%s)",
-        ("email_sent",to,f"Email enviado a {cname}: {subject}",2))
+    cur.execute("INSERT INTO email_logs (direction,contact_email,contact_name,subject,body,body_html,intent,status,sent_at,campaign_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW(),%s)", ("out",to,cname,subject,body,body_html,intent,"sent",campaign_id))
+    cur.execute("INSERT INTO memory (type,entity,content,importance) VALUES (%s,%s,%s,%s)", ("email_sent",to,f"Email enviado a {cname}: {subject}",2))
 
 @app.post("/send-email")
 async def send_email(request: Request, _: str = Depends(require_auth)):
@@ -850,33 +757,22 @@ async def send_email(request: Request, _: str = Depends(require_auth)):
     intent = data.get("intent","general")
     campaign_id = data.get("campaign_id")
     reply_to = data.get("reply_to")
-
-    if not recipients:
-        raise HTTPException(400, "Al menos un destinatario es requerido")
-    if not subject:
-        raise HTTPException(400, "subject es obligatorio")
-    if not body:
-        raise HTTPException(400, "body es obligatorio")
-
+    if not recipients: raise HTTPException(400, "Al menos un destinatario es requerido")
+    if not subject: raise HTTPException(400, "subject es obligatorio")
+    if not body: raise HTTPException(400, "body es obligatorio")
     c = cfg()
-    if not c["resend_api_key"]:
-        raise HTTPException(500, "RESEND_API_KEY no configurada")
-    if not c["sender_email"]:
-        raise HTTPException(500, "SENDER_EMAIL no configurada")
-
+    if not c["resend_api_key"]: raise HTTPException(500, "RESEND_API_KEY no configurada")
+    if not c["sender_email"]: raise HTTPException(500, "SENDER_EMAIL no configurada")
     style_cfg = _build_style()
     body_html = build_html_email(body, style_cfg)
-
     results = []
     conn = get_db()
     cur = conn.cursor()
     for to in recipients:
         try:
             resp = send_resend(to, subject, body, body_html, reply_to)
-            email_id = resp.id if hasattr(resp, "id") else "?"
             _log_sent(conn, cur, to, subject, body, body_html, intent, campaign_id)
-            results.append({"to": to, "ok": True, "resend_id": email_id})
-            logger.info(f"Email enviado a {to}")
+            results.append({"to": to, "ok": True})
         except Exception as e:
             logger.error(f"Error enviando a {to}: {e}")
             results.append({"to": to, "ok": False, "error": str(e)})
@@ -887,7 +783,6 @@ async def send_email(request: Request, _: str = Depends(require_auth)):
     finally:
         cur.close()
         conn.close()
-
     sent_ok = [r for r in results if r["ok"]]
     sent_err = [r for r in results if not r["ok"]]
     if not sent_ok and sent_err:
@@ -897,20 +792,12 @@ async def send_email(request: Request, _: str = Depends(require_auth)):
 @app.get("/smtp-test")
 async def smtp_test(_: str = Depends(require_auth)):
     c = cfg()
-    if not c["resend_api_key"]:
-        raise HTTPException(500, "RESEND_API_KEY no configurada")
-    if not c["sender_email"]:
-        raise HTTPException(500, "SENDER_EMAIL no configurada")
+    if not c["resend_api_key"]: raise HTTPException(500, "RESEND_API_KEY no configurada")
+    if not c["sender_email"]: raise HTTPException(500, "SENDER_EMAIL no configurada")
     try:
         resend.api_key = c["resend_api_key"]
         domains = resend.Domains.list()
-        return {
-            "ok": True,
-            "provider": "resend",
-            "sender": c["sender_email"],
-            "sender_name": c["sender_name"],
-            "domains": [d.get("name") for d in (domains.get("data") or [])],
-        }
+        return {"ok": True, "provider": "resend", "sender": c["sender_email"], "sender_name": c["sender_name"], "domains": [d.get("name") for d in (domains.get("data") or [])]}
     except Exception as e:
         raise HTTPException(500, f"{type(e).__name__}: {e}")
 
@@ -926,9 +813,7 @@ def get_inbox(refresh: bool = False, _: str = Depends(require_auth)):
     cur.close()
     conn.close()
     resp = [dict(r) for r in rows]
-    if result:
-        return {"messages": resp, "sync": result}
-    return {"messages": resp, "sync": None}
+    return {"messages": resp, "sync": result}
 
 @app.post("/inbox/mark-replied")
 async def mark_replied(request: Request, _: str = Depends(require_auth)):
@@ -946,8 +831,7 @@ async def save_suggestion(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("UPDATE inbox_cache SET ai_suggestion=%s WHERE message_id=%s",
-        (data.get("suggestion",""), data.get("message_id")))
+    cur.execute("UPDATE inbox_cache SET ai_suggestion=%s WHERE message_id=%s", (data.get("suggestion",""), data.get("message_id")))
     conn.commit()
     cur.close()
     conn.close()
@@ -971,8 +855,7 @@ def get_log(log_id: int, _: str = Depends(require_auth)):
     row = cur.fetchone()
     cur.close()
     conn.close()
-    if not row:
-        raise HTTPException(404, "Log no encontrado")
+    if not row: raise HTTPException(404, "Log no encontrado")
     return dict(row)
 
 @app.get("/memory")
@@ -990,8 +873,7 @@ async def add_memory(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("INSERT INTO memory (type,entity,content,importance) VALUES (%s,%s,%s,%s)",
-        (data.get("type","manual"),data.get("entity",""),data.get("content",""),data.get("importance",1)))
+    cur.execute("INSERT INTO memory (type,entity,content,importance) VALUES (%s,%s,%s,%s)", (data.get("type","manual"),data.get("entity",""),data.get("content",""),data.get("importance",1)))
     conn.commit()
     cur.close()
     conn.close()
@@ -1001,9 +883,7 @@ async def add_memory(request: Request, _: str = Depends(require_auth)):
 def get_supervision(_: str = Depends(require_auth)):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("""SELECT l.*, c.company FROM email_logs l
-        LEFT JOIN contacts c ON l.contact_email=c.email
-        WHERE l.direction='out' ORDER BY l.sent_at DESC LIMIT 100""")
+    cur.execute("""SELECT l.*, c.company FROM email_logs l LEFT JOIN contacts c ON l.contact_email=c.email WHERE l.direction='out' ORDER BY l.sent_at DESC LIMIT 100""")
     sent = cur.fetchall()
     cur.execute("SELECT from_email FROM inbox_cache WHERE replied=1")
     replied_set = {r["from_email"] for r in cur.fetchall()}
@@ -1013,10 +893,7 @@ def get_supervision(_: str = Depends(require_auth)):
         try:
             sent_at_val = d.get("sent_at")
             if sent_at_val:
-                if isinstance(sent_at_val, str):
-                    dt = datetime.fromisoformat(sent_at_val)
-                else:
-                    dt = sent_at_val.replace(tzinfo=None)
+                dt = sent_at_val.replace(tzinfo=None) if not isinstance(sent_at_val, str) else datetime.fromisoformat(sent_at_val)
                 hrs = round((datetime.utcnow() - dt).total_seconds() / 3600, 1)
             else:
                 hrs = None
@@ -1056,9 +933,6 @@ async def head_frontend():
 async def serve_frontend():
     if INDEX_PATH and os.path.exists(INDEX_PATH):
         return FileResponse(INDEX_PATH)
-    root_index = os.path.join(BASE, "index.html")
-    if os.path.exists(root_index):
-        return FileResponse(root_index)
     return JSONResponse({"error": "Frontend no encontrado"}, status_code=404)
 
 @app.get("/{full_path:path}")
@@ -1069,17 +943,12 @@ async def serve_spa(full_path: str):
         raise HTTPException(404, "Not found")
     if INDEX_PATH and os.path.exists(INDEX_PATH):
         return FileResponse(INDEX_PATH)
-    root_index = os.path.join(BASE, "index.html")
-    if os.path.exists(root_index):
-        return FileResponse(root_index)
     return JSONResponse({"error": "Frontend no encontrado"}, status_code=404)
 
 if __name__ == "__main__":
     try:
         init_db()
     except Exception as e:
-        logger.error(f"Error inicializando base de datos: {e}")
-        logger.info("Continuando con la inicialización de la app...")
-    
+        logger.error(f"Error inicializando DB: {e}")
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run("api:app", host="0.0.0.0", port=port)
