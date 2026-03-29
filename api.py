@@ -55,7 +55,7 @@ IS_HTTPS = os.getenv("RENDER", "") != "" or os.getenv("COOKIE_SECURE", "").lower
 BASE         = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
     'DATABASE_URL',
-    'postgresql://postgres:[YOUR-PASSWORD]@db.nruezthkvlvlochtnqjw.supabase.co:5432/postgres'
+    'postgresql://postgres:[YOUR-PASSWORD]@db.rfeqgililkkurebeudfa.supabase.co:5432/postgres'
 )
 
 
