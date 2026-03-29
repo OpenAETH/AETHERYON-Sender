@@ -50,7 +50,11 @@ TOKEN_TTL    = int(os.getenv("TOKEN_TTL_HOURS", "8")) * 3600
 IS_HTTPS = os.getenv("RENDER", "") != "" or os.getenv("COOKIE_SECURE", "").lower() == "true"
 
 BASE         = os.path.dirname(os.path.abspath(__file__))
-DATABASE_URL = os.getenv("DATABASE_URL", "")
+DATABASE_URL = os.environ.get(
+    'DATABASE_URL',
+    'postgresql://postgres:[YOUR-PASSWORD]@db.nruezthkvlvlochtnqjw.supabase.co:5432/postgres'
+)
+
 
 # ─────────────────────────────────────────────
 # DATABASE — PostgreSQL / Supabase
@@ -59,7 +63,7 @@ def _parse_db_url(url: str) -> dict:
     """Descompone DATABASE_URL en sus partes."""
     # Soporta URLs con y sin puerto
     m = _re.match(
-        r'postgresql(?:\+\w+)?://([^:]+):([^@]+)@([^:/]+):?(\d+)?/([^\?]+)',
+        r'postgresql://([^:]+):([^@]+)@([^:/]+):?(\d+)?/(.+)',
         url
     )
     if not m:
@@ -69,7 +73,7 @@ def _parse_db_url(url: str) -> dict:
         'password': m.group(2),
         'host':     m.group(3),
         'port':     int(m.group(4) or 5432),
-        'dbname':   m.group(5),
+        'dbname':   m.group(5).split('?')[0],
     }
 
 def _make_connection():
