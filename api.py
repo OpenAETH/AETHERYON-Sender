@@ -13,6 +13,7 @@ import re as _re
 import socket as _socket
 import psycopg2
 import psycopg2.extras
+from sqlalchemy import create_engine, text
 from email.header import decode_header
 from datetime import datetime, timedelta
 import uvicorn, logging, re, secrets, hashlib, hmac, json, time
@@ -26,11 +27,9 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────
 def cfg():
     return {
-        # Resend
         "resend_api_key": os.getenv("RESEND_API_KEY", ""),
         "sender_email":   os.getenv("SENDER_EMAIL", os.getenv("SMTP_USER", "")),
         "sender_name":    os.getenv("SENDER_NAME", ""),
-        # IMAP
         "imap_host":      os.getenv("IMAP_HOST", ""),
         "imap_port":      int(os.getenv("IMAP_PORT", "993")),
         "imap_user":      os.getenv("IMAP_USER", ""),
@@ -46,18 +45,26 @@ if not SECRET_KEY:
                    "Las sesiones no sobrevivirán reinicios. Configura SECRET_KEY en Render.")
 TOKEN_TTL    = int(os.getenv("TOKEN_TTL_HOURS", "8")) * 3600
 
-# True cuando corre en Render (HTTPS) o cuando se fuerza con COOKIE_SECURE=true
 IS_HTTPS = os.getenv("RENDER", "") != "" or os.getenv("COOKIE_SECURE", "").lower() == "true"
 
 BASE         = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 # ─────────────────────────────────────────────
-# DATABASE — PostgreSQL / Supabase
+# DATABASE — SQLAlchemy + psycopg2 IPv4 forzado
 # ─────────────────────────────────────────────
+# Render resuelve hostnames Supabase como IPv6, pero Supabase solo
+# acepta IPv4. Solución idéntica al proyecto de referencia en producción:
+# - 'host'     → hostname real para SNI TLS (Supabase lo necesita para
+#                identificar el tenant en el pooler)
+# - 'hostaddr' → IP IPv4 resuelta explícitamente con AF_INET, libpq
+#                conecta directo sin DNS lookup (que devolvería IPv6)
+# SQLAlchemy maneja el pool de conexiones: reutiliza conexiones entre
+# requests, evita abrir/cerrar en cada query, y hace pre-ping para
+# detectar conexiones muertas.
+
 def _parse_db_url(url: str) -> dict:
     """Descompone DATABASE_URL en sus partes."""
-    # Soporta URLs con y sin puerto
     m = _re.match(
         r'postgresql(?:\+\w+)?://([^:]+):([^@]+)@([^:/]+):?(\d+)?/([^\?]+)',
         url
@@ -72,72 +79,73 @@ def _parse_db_url(url: str) -> dict:
         'dbname':   m.group(5),
     }
 
-def _make_connection():
+def _make_ipv4_connection():
     """
-    Crea una conexión psycopg2 con manejo robusto de IPv4/IPv6.
+    Creator function para SQLAlchemy: crea una conexión psycopg2 forzando IPv4.
+    Llamada automáticamente por el pool en cada nueva conexión física.
     """
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL no está configurada en las variables de entorno")
-    
     p = _parse_db_url(DATABASE_URL)
-    
-    # Intentar conexión con hostname directo primero (más simple)
-    try:
-        logger.info(f"Intentando conectar a {p['host']}:{p['port']} como {p['user']}...")
-        conn = psycopg2.connect(
-            host     = p['host'],
-            port     = p['port'],
-            user     = p['user'],
-            password = p['password'],
-            dbname   = p['dbname'],
-            sslmode  = 'require',
-            connect_timeout = 10,
-            cursor_factory = psycopg2.extras.RealDictCursor,
-        )
-        logger.info("Conexión a base de datos establecida exitosamente")
-        return conn
-    except Exception as e:
-        logger.warning(f"Error conectando con hostname directo: {e}")
-        
-        # Si falla, intentar resolver IPv4 manualmente
-        try:
-            # Obtener direcciones IPv4
-            addrinfo = _socket.getaddrinfo(p['host'], p['port'], _socket.AF_INET, _socket.SOCK_STREAM)
-            if addrinfo:
-                ipv4 = addrinfo[0][4][0]
-                logger.info(f"Resolviendo {p['host']} a IPv4: {ipv4}")
-                
-                conn = psycopg2.connect(
-                    host     = p['host'],    # Mantener hostname para SNI
-                    hostaddr = ipv4,         # Usar IPv4 para conexión
-                    port     = p['port'],
-                    user     = p['user'],
-                    password = p['password'],
-                    dbname   = p['dbname'],
-                    sslmode  = 'require',
-                    connect_timeout = 10,
-                    cursor_factory = psycopg2.extras.RealDictCursor,
-                )
-                logger.info("Conexión a base de datos establecida vía IPv4")
-                return conn
-        except Exception as e2:
-            logger.error(f"Error resolviendo IPv4: {e2}")
-            raise
-    
-    raise RuntimeError(f"No se pudo conectar a la base de datos: {p['host']}")
+    ipv4 = _socket.getaddrinfo(p['host'], p['port'], _socket.AF_INET)[0][4][0]
+    logger.info(f"DB connect → {p['host']}:{p['port']} via IPv4 {ipv4}")
+    return psycopg2.connect(
+        host     = p['host'],    # hostname real → SNI correcto para TLS
+        hostaddr = ipv4,         # IP IPv4 → libpq conecta directo, sin DNS
+        port     = p['port'],
+        user     = p['user'],
+        password = p['password'],
+        dbname   = p['dbname'],
+        sslmode  = 'require',
+    )
+
+# Pool SQLAlchemy — creado una vez al arrancar, reutilizado en cada request
+engine = None
+
+def init_engine():
+    global engine
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL no está configurada en las variables de entorno")
+    engine = create_engine(
+        "postgresql+psycopg2://",
+        creator      = _make_ipv4_connection,
+        pool_size    = 5,
+        max_overflow = 10,
+        pool_pre_ping= True,   # verifica conexión antes de usarla
+        pool_recycle = 300,    # recicla conexiones cada 5 min
+    )
+    logger.info("SQLAlchemy engine iniciado")
 
 def get_db():
-    """Retorna una conexión psycopg2 con RealDictCursor (acceso por nombre de columna)."""
-    return _make_connection()
+    """
+    Retorna una conexión del pool con autocommit=False y RealDictCursor.
+    conn.close() devuelve la conexión al pool (no la cierra físicamente).
+    Las filas se acceden como dicts: row['columna'].
+    """
+    conn = engine.raw_connection()
+    # Aplicar RealDictCursor como factory global de la conexión
+    conn.cursor_factory = psycopg2.extras.RealDictCursor
+    conn.autocommit = False
+    return conn
+
+def _cursor(conn):
+    """Abre un cursor con RealDictCursor garantizado."""
+    return conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+def _row(cur):
+    """Retorna una fila como dict o None."""
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+def _rows(cur):
+    """Retorna todas las filas como lista de dicts."""
+    return [dict(r) for r in cur.fetchall()]
 
 def init_db():
-    """Crea las tablas si no existen."""
-    conn = None
+    """Crea las tablas si no existen (idempotente)."""
+    conn = get_db()
+    cur  = _cursor(conn)
     try:
-        conn = get_db()
-        cur = conn.cursor()
-        
-        # Tabla contacts
         cur.execute("""
         CREATE TABLE IF NOT EXISTS contacts (
             id         SERIAL PRIMARY KEY,
@@ -150,10 +158,7 @@ def init_db():
             tags       TEXT,
             created_at TIMESTAMPTZ DEFAULT NOW(),
             updated_at TIMESTAMPTZ DEFAULT NOW()
-        )
-        """)
-        
-        # Tabla email_logs
+        )""")
         cur.execute("""
         CREATE TABLE IF NOT EXISTS email_logs (
             id            SERIAL PRIMARY KEY,
@@ -173,10 +178,7 @@ def init_db():
             campaign_id   TEXT,
             ai_suggestion TEXT,
             created_at    TIMESTAMPTZ DEFAULT NOW()
-        )
-        """)
-        
-        # Tabla memory
+        )""")
         cur.execute("""
         CREATE TABLE IF NOT EXISTS memory (
             id         SERIAL PRIMARY KEY,
@@ -185,10 +187,7 @@ def init_db():
             content    TEXT NOT NULL,
             importance INTEGER DEFAULT 1,
             created_at TIMESTAMPTZ DEFAULT NOW()
-        )
-        """)
-        
-        # Tabla inbox_cache
+        )""")
         cur.execute("""
         CREATE TABLE IF NOT EXISTS inbox_cache (
             id            SERIAL PRIMARY KEY,
@@ -203,40 +202,29 @@ def init_db():
             replied       INTEGER DEFAULT 0,
             ai_suggestion TEXT,
             fetched_at    TIMESTAMPTZ DEFAULT NOW()
-        )
-        """)
-        
-        # Tabla settings
+        )""")
         cur.execute("""
         CREATE TABLE IF NOT EXISTS settings (
             key   TEXT PRIMARY KEY,
             value TEXT
-        )
-        """)
-        
-        # Tabla sessions
+        )""")
         cur.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             token      TEXT PRIMARY KEY,
             created_at BIGINT NOT NULL,
             expires_at BIGINT NOT NULL
-        )
-        """)
-        
+        )""")
         conn.commit()
-        logger.info("Base de datos inicializada correctamente")
-        
+        logger.info("DB lista (PostgreSQL/Supabase via SQLAlchemy)")
     except Exception as e:
-        if conn:
-            conn.rollback()
+        conn.rollback()
         logger.error(f"Error en init_db: {e}")
         raise
     finally:
-        if conn:
-            cur.close()
-            conn.close()
+        cur.close()
+        conn.close()
 
-# ─────────────────────────────────────────────
+
 # AUTH — token simple HMAC
 # ─────────────────────────────────────────────
 def make_token() -> str:
@@ -251,7 +239,7 @@ def verify_token(token: str) -> bool:
         if not hmac.compare_digest(sig, expected):
             return False
         conn = get_db()
-        cur  = conn.cursor()
+        cur  = _cursor(conn)
         cur.execute(
             "SELECT expires_at FROM sessions WHERE token=%s AND expires_at>%s",
             (token, int(time.time()))
@@ -259,8 +247,7 @@ def verify_token(token: str) -> bool:
         row = cur.fetchone()
         cur.close(); conn.close()
         return row is not None
-    except Exception as e:
-        logger.error(f"Error en verify_token: {e}")
+    except Exception:
         return False
 
 async def require_auth(request: Request):
@@ -273,32 +260,21 @@ async def require_auth(request: Request):
 # SETTINGS
 # ─────────────────────────────────────────────
 def get_setting(key: str, default: str = "") -> str:
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("SELECT value FROM settings WHERE key=%s", (key,))
-        row = cur.fetchone()
-        cur.close()
-        conn.close()
-        return row["value"] if row else default
-    except Exception as e:
-        logger.error(f"Error en get_setting: {e}")
-        return default
+    conn = get_db()
+    cur  = _cursor(conn)
+    cur.execute("SELECT value FROM settings WHERE key=%s", (key,))
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    return row["value"] if row else default
 
 def set_setting(key: str, value: str):
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
-            (key, value)
-        )
-        conn.commit()
-        cur.close()
-        conn.close()
-    except Exception as e:
-        logger.error(f"Error en set_setting: {e}")
-        raise
+    conn = get_db()
+    cur  = _cursor(conn)
+    cur.execute(
+        "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
+        (key, value)
+    )
+    conn.commit(); cur.close(); conn.close()
 
 # ─────────────────────────────────────────────
 # MARKDOWN → HTML
@@ -375,11 +351,15 @@ def build_html_email(body_text: str, style_cfg: dict = None) -> str:
         '<title>Email</title>'
         '</head>'
         '<body style="margin:0;padding:0;background-color:#f0f0f0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%">'
+        # Wrapper externo
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"'
         ' style="background-color:#f0f0f0;padding:32px 16px">'
         '<tr><td align="center">'
+        # Contenedor principal 600px
         '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"'
         ' style="max-width:600px;width:100%">'
+
+        # ── HEADER ──
         '<tr>'
         '<td style="background-color:' + header_bg + ';border-radius:10px 10px 0 0;padding:24px 36px">'
         '<span style="font-family:Georgia,serif;font-size:21px;font-weight:700;'
@@ -388,13 +368,19 @@ def build_html_email(body_text: str, style_cfg: dict = None) -> str:
         '</span>'
         '</td>'
         '</tr>'
+
+        # ── BODY ──
         '<tr>'
         '<td style="background-color:' + bg + ';padding:36px 36px 28px 36px;'
         'font-family:' + font + ';font-size:' + fsize + ';color:' + text_col + ';line-height:1.75">'
         + body_html +
         '</td>'
         '</tr>'
+
+        # ── FIRMA (opcional) ──
         + sig_block +
+
+        # ── FOOTER ──
         '<tr>'
         '<td style="background-color:#f8f8f8;border-radius:0 0 10px 10px;'
         'border-top:1px solid #e4e4e4;padding:16px 36px">'
@@ -403,9 +389,10 @@ def build_html_email(body_text: str, style_cfg: dict = None) -> str:
         '</p>'
         '</td>'
         '</tr>'
-        '</table>'
+
+        '</table>'  # fin contenedor 600px
         '</td></tr>'
-        '</table>'
+        '</table>'  # fin wrapper
         '</body></html>'
     )
 
@@ -434,6 +421,7 @@ def send_resend(to: str, subject: str, body_plain: str, body_html: str, reply_to
         params["headers"] = {"In-Reply-To": reply_to_mid, "References": reply_to_mid}
 
     response = resend.Emails.send(params)
+    # SendResponse es un objeto con atributo .id, no un dict
     email_id = response.id if hasattr(response, "id") else str(response)
     logger.info(f"Resend OK → {to} | id={email_id}")
     return response
@@ -449,6 +437,12 @@ def decode_str(s):
     return "".join(result)
 
 def fetch_inbox_sync(limit=60):
+    """
+    Sincroniza bandeja con IMAP:
+    - Agrega mensajes nuevos
+    - Elimina de DB los que ya no existen en IMAP
+    - Preserva ai_suggestion y replied si el mensaje sigue existiendo
+    """
     c = cfg()
     if not c["imap_host"] or not c["imap_user"]: return {"added":0,"deleted":0,"error":"IMAP no configurado"}
     try:
@@ -456,17 +450,20 @@ def fetch_inbox_sync(limit=60):
         mail.login(c["imap_user"], c["imap_pass"])
         mail.select("INBOX")
 
+        # Obtener todos los UID actuales del servidor
         _, uid_data = mail.uid("SEARCH", None, "ALL")
         server_uids = set(uid_data[0].decode().split()) if uid_data[0] else set()
 
         conn = get_db()
-        cur  = conn.cursor()
+        cur  = _cursor(conn)
 
+        # Obtener message_ids actuales en DB con su uid
         cur.execute("SELECT message_id, imap_uid FROM inbox_cache")
         db_rows = cur.fetchall()
         db_by_uid = {r["imap_uid"]: r["message_id"] for r in db_rows if r["imap_uid"]}
         db_message_ids = {r["message_id"] for r in db_rows}
 
+        # Detectar UIDs eliminados del servidor y borrarlos de DB
         deleted_uids = set(db_by_uid.keys()) - server_uids
         deleted_count = 0
         for uid in deleted_uids:
@@ -477,6 +474,7 @@ def fetch_inbox_sync(limit=60):
             conn.commit()
             logger.info(f"IMAP sync: {deleted_count} mensajes eliminados de DB")
 
+        # Fetch de los ultimos N mensajes del servidor
         uids_to_fetch = list(server_uids)[-limit:]
         added_count = 0
 
@@ -488,6 +486,7 @@ def fetch_inbox_sync(limit=60):
             mid   = msg.get("Message-ID","").strip()
             if not mid: mid = f"uid-{uid}"
 
+            # Ya existe en DB — skip
             if mid in db_message_ids: continue
 
             subj  = decode_str(msg.get("Subject",""))
@@ -533,14 +532,9 @@ def fetch_inbox_sync(limit=60):
 # ─────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app):
-    try:
-        init_db()
-        logger.info("Aplicación iniciada correctamente")
-    except Exception as e:
-        logger.error(f"Error al iniciar la aplicación: {e}")
-        # No lanzamos la excepción para que la app pueda iniciar y luego reconectar
+    init_engine()
+    init_db()
     yield
-    logger.info("Aplicación cerrada")
 
 app = FastAPI(title="Asistente Ejecutivo API", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
@@ -555,8 +549,8 @@ def find_index_html():
         os.path.join(BASE, "static", "index.html"),
         os.path.join(BASE, "index.html"),
         os.path.join(os.path.dirname(BASE), "static", "index.html"),
-        "/opt/render/project/src/static/index.html",
-        "/app/static/index.html",
+        "/opt/render/project/src/static/index.html",  # Ruta típica en Render
+        "/app/static/index.html",  # Otra ruta común
     ]
     
     for ubicacion in posibles_ubicaciones:
@@ -569,11 +563,13 @@ def find_index_html():
 
 INDEX_PATH = find_index_html()
 
+# Crear directorio static si no existe
 static_dir = os.path.join(BASE, "static")
 if not os.path.exists(static_dir):
     os.makedirs(static_dir)
     logger.info(f"Creado directorio static: {static_dir}")
 
+# Si el archivo index.html está en la raíz, copiarlo a static/
 index_root = os.path.join(BASE, "index.html")
 if os.path.exists(index_root) and not os.path.exists(os.path.join(static_dir, "index.html")):
     import shutil
@@ -581,10 +577,12 @@ if os.path.exists(index_root) and not os.path.exists(os.path.join(static_dir, "i
     logger.info(f"Copiado {index_root} a {static_dir}/")
     INDEX_PATH = os.path.join(static_dir, "index.html")
 
+# Montar archivos estáticos si el directorio existe
 if os.path.exists(static_dir) and os.listdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     logger.info(f"Directorio static montado: {static_dir}")
 
+# Lista de rutas de API que NO deben ser servidas como frontend
 API_PATHS = ["auth", "contacts", "inbox", "send-email", "settings", "context", 
              "preview-email", "logs", "memory", "supervision", "stats", 
              "smtp-test", "config", "api"]
@@ -603,6 +601,7 @@ async def login(request: Request):
     now   = int(time.time())
     conn  = get_db()
     cur   = conn.cursor()
+    # limpiar sesiones expiradas
     cur.execute("DELETE FROM sessions WHERE expires_at<%s", (now,))
     cur.execute("INSERT INTO sessions (token,created_at,expires_at) VALUES (%s,%s,%s)",
                 (token, now, now + TOKEN_TTL))
@@ -614,7 +613,7 @@ async def login(request: Request):
         httponly=True,
         samesite="lax",
         max_age=TOKEN_TTL,
-        secure=IS_HTTPS,
+        secure=IS_HTTPS,   # True en Render (HTTPS), False en local
     )
     return resp
 
@@ -623,7 +622,7 @@ async def logout(request: Request):
     token = request.cookies.get("session","")
     if token:
         conn = get_db()
-        cur  = conn.cursor()
+        cur  = _cursor(conn)
         cur.execute("DELETE FROM sessions WHERE token=%s", (token,))
         conn.commit(); cur.close(); conn.close()
     resp = JSONResponse({"success": True})
@@ -642,7 +641,7 @@ def root(_: str = Depends(require_auth)):
     c = cfg()
     return {
         "status":       "Asistente Ejecutivo API",
-        "smtp_user":    c["sender_email"] or "NO CONFIG",
+        "smtp_user":    c["sender_email"] or "NO CONFIG",   # smtp_user por compatibilidad con el frontend
         "imap_host":    c["imap_host"]    or "NO CONFIG",
         "provider":     "resend",
         "resend_ready": bool(c["resend_api_key"] and c["sender_email"]),
@@ -668,7 +667,7 @@ def get_config(_: str = Depends(require_auth)):
 @app.get("/settings")
 def get_all_settings(_: str = Depends(require_auth)):
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute("SELECT key,value FROM settings")
     rows = cur.fetchall()
     cur.close(); conn.close()
@@ -716,7 +715,7 @@ async def preview_email(request: Request, _: str = Depends(require_auth)):
 @app.get("/contacts")
 def list_contacts(_: str = Depends(require_auth)):
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute("SELECT * FROM contacts ORDER BY name")
     rows = cur.fetchall()
     cur.close(); conn.close()
@@ -728,7 +727,7 @@ async def create_contact(request: Request, _: str = Depends(require_auth)):
     if not data.get("name") or not data.get("email"):
         raise HTTPException(400, "name y email son obligatorios")
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     try:
         cur.execute(
             "INSERT INTO contacts (name,email,company,role,phone,context,tags) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
@@ -750,7 +749,7 @@ async def create_contact(request: Request, _: str = Depends(require_auth)):
 async def update_contact(cid: int, request: Request, _: str = Depends(require_auth)):
     data = await request.json()
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute(
         "UPDATE contacts SET name=%s,company=%s,role=%s,phone=%s,context=%s,tags=%s,updated_at=NOW() WHERE id=%s",
         (data.get("name"),data.get("company",""),data.get("role",""),
@@ -761,7 +760,7 @@ async def update_contact(cid: int, request: Request, _: str = Depends(require_au
 @app.delete("/contacts/{cid}")
 def delete_contact(cid: int, _: str = Depends(require_auth)):
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute("DELETE FROM contacts WHERE id=%s", (cid,))
     conn.commit(); cur.close(); conn.close()
     return {"success": True}
@@ -796,7 +795,9 @@ def _log_sent(conn, cur, to, subject, body, body_html, intent, campaign_id):
 
 @app.post("/send-email")
 async def send_email(request: Request, _: str = Depends(require_auth)):
+    """Envia a uno o multiples destinatarios."""
     data    = await request.json()
+    # Acepta "to" (string) o "recipients" (lista)
     recipients_raw = data.get("recipients") or ([data.get("to","")] if data.get("to") else [])
     recipients = [r.strip() for r in recipients_raw if r.strip()]
     subject     = data.get("subject","").strip()
@@ -811,16 +812,16 @@ async def send_email(request: Request, _: str = Depends(require_auth)):
 
     c = cfg()
     if not c["resend_api_key"]:
-        raise HTTPException(500, "RESEND_API_KEY no configurada")
+        raise HTTPException(500, "RESEND_API_KEY no configurada — agregala en las variables de entorno de Render")
     if not c["sender_email"]:
-        raise HTTPException(500, "SENDER_EMAIL no configurada")
+        raise HTTPException(500, "SENDER_EMAIL no configurada — agregala en las variables de entorno de Render")
 
     style_cfg = _build_style()
     body_html = build_html_email(body, style_cfg)
 
     results = []
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     for to in recipients:
         try:
             resp = send_resend(to, subject, body, body_html, reply_to)
@@ -849,6 +850,7 @@ async def send_email(request: Request, _: str = Depends(require_auth)):
 
 @app.get("/smtp-test")
 async def smtp_test(_: str = Depends(require_auth)):
+    """Verifica que la API key de Resend sea válida enviando un ping a la API."""
     c = cfg()
     if not c["resend_api_key"]:
         raise HTTPException(500, "RESEND_API_KEY no configurada")
@@ -856,6 +858,7 @@ async def smtp_test(_: str = Depends(require_auth)):
         raise HTTPException(500, "SENDER_EMAIL no configurada")
     try:
         resend.api_key = c["resend_api_key"]
+        # Validar la key listando dominios (no envía nada, solo autentica)
         domains = resend.Domains.list()
         return {
             "ok": True,
@@ -876,7 +879,7 @@ def get_inbox(refresh: bool = False, _: str = Depends(require_auth)):
     if refresh:
         result = fetch_inbox_sync(60)
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute("SELECT * FROM inbox_cache ORDER BY date DESC LIMIT 80")
     rows = cur.fetchall()
     cur.close(); conn.close()
@@ -888,7 +891,7 @@ def get_inbox(refresh: bool = False, _: str = Depends(require_auth)):
 async def mark_replied(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute("UPDATE inbox_cache SET replied=1 WHERE message_id=%s", (data.get("message_id"),))
     conn.commit(); cur.close(); conn.close()
     return {"success": True}
@@ -897,7 +900,7 @@ async def mark_replied(request: Request, _: str = Depends(require_auth)):
 async def save_suggestion(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute("UPDATE inbox_cache SET ai_suggestion=%s WHERE message_id=%s",
         (data.get("suggestion",""), data.get("message_id")))
     conn.commit(); cur.close(); conn.close()
@@ -909,7 +912,7 @@ async def save_suggestion(request: Request, _: str = Depends(require_auth)):
 @app.get("/logs")
 def get_logs(limit: int = 100, _: str = Depends(require_auth)):
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute("SELECT * FROM email_logs ORDER BY created_at DESC LIMIT %s", (limit,))
     rows = cur.fetchall()
     cur.close(); conn.close()
@@ -918,7 +921,7 @@ def get_logs(limit: int = 100, _: str = Depends(require_auth)):
 @app.get("/logs/{log_id}")
 def get_log(log_id: int, _: str = Depends(require_auth)):
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute("SELECT * FROM email_logs WHERE id=%s", (log_id,))
     row = cur.fetchone()
     cur.close(); conn.close()
@@ -931,7 +934,7 @@ def get_log(log_id: int, _: str = Depends(require_auth)):
 @app.get("/memory")
 def get_memory(limit: int = 100, _: str = Depends(require_auth)):
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute("SELECT * FROM memory ORDER BY created_at DESC LIMIT %s", (limit,))
     rows = cur.fetchall()
     cur.close(); conn.close()
@@ -941,7 +944,7 @@ def get_memory(limit: int = 100, _: str = Depends(require_auth)):
 async def add_memory(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute("INSERT INTO memory (type,entity,content,importance) VALUES (%s,%s,%s,%s)",
         (data.get("type","manual"),data.get("entity",""),data.get("content",""),data.get("importance",1)))
     conn.commit(); cur.close(); conn.close()
@@ -953,7 +956,7 @@ async def add_memory(request: Request, _: str = Depends(require_auth)):
 @app.get("/supervision")
 def get_supervision(_: str = Depends(require_auth)):
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute("""SELECT l.*, c.company FROM email_logs l
         LEFT JOIN contacts c ON l.contact_email=c.email
         WHERE l.direction='out' ORDER BY l.sent_at DESC LIMIT 100""")
@@ -966,6 +969,7 @@ def get_supervision(_: str = Depends(require_auth)):
         try:
             sent_at_val = d.get("sent_at")
             if sent_at_val:
+                # sent_at es TIMESTAMPTZ → puede ser datetime o string
                 if isinstance(sent_at_val, str):
                     dt = datetime.fromisoformat(sent_at_val)
                 else:
@@ -987,7 +991,7 @@ def get_supervision(_: str = Depends(require_auth)):
 @app.get("/stats")
 def get_stats(_: str = Depends(require_auth)):
     conn = get_db()
-    cur  = conn.cursor()
+    cur  = _cursor(conn)
     cur.execute("SELECT COUNT(*) AS c FROM contacts");          contacts = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) AS c FROM email_logs WHERE direction='out'"); sent = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) AS c FROM inbox_cache");       inbox = cur.fetchone()["c"]
@@ -1001,14 +1005,17 @@ def get_stats(_: str = Depends(require_auth)):
 # ─────────────────────────────────────────────
 @app.head("/")
 async def head_frontend():
+    """Health-check de Render — responde 200 a HEAD /"""
     from fastapi.responses import Response
     return Response(status_code=200)
 
 @app.get("/")
 async def serve_frontend():
+    """Sirve el frontend SPA sin autenticación"""
     if INDEX_PATH and os.path.exists(INDEX_PATH):
         return FileResponse(INDEX_PATH)
     
+    # Intentar servir desde la raíz como fallback
     root_index = os.path.join(BASE, "index.html")
     if os.path.exists(root_index):
         return FileResponse(root_index)
@@ -1018,15 +1025,19 @@ async def serve_frontend():
 
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
+    """Sirve el frontend SPA para cualquier ruta no-API"""
+    # Excluir rutas de API explícitamente
     if full_path.startswith(tuple(API_PATHS)) or full_path in API_PATHS:
         raise HTTPException(404, "Not found")
     
+    # Excluir también rutas con extensión de archivo estático
     if any(full_path.endswith(ext) for ext in ['.js', '.css', '.png', '.jpg', '.svg', '.ico', '.json']):
         raise HTTPException(404, "Not found")
     
     if INDEX_PATH and os.path.exists(INDEX_PATH):
         return FileResponse(INDEX_PATH)
     
+    # Intentar servir desde la raíz como fallback
     root_index = os.path.join(BASE, "index.html")
     if os.path.exists(root_index):
         return FileResponse(root_index)
@@ -1034,11 +1045,7 @@ async def serve_spa(full_path: str):
     return JSONResponse({"error": "Frontend no encontrado"}, status_code=404)
 
 if __name__ == "__main__":
-    try:
-        init_db()
-    except Exception as e:
-        logger.error(f"Error inicializando base de datos: {e}")
-        logger.info("Continuando con la inicialización de la app...")
-    
+    init_engine()
+    init_db()
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run("api:app", host="0.0.0.0", port=port)
