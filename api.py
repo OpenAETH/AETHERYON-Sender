@@ -55,7 +55,7 @@ IS_HTTPS = os.getenv("RENDER", "") != "" or os.getenv("COOKIE_SECURE", "").lower
 BASE         = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
     'DATABASE_URL',
-    'postgresql://postgres:[YOUR-PASSWORD]@db.rfeqgililkkurebeudfa.supabase.co:5432/postgres'
+    'postgresql://postgres:[YOUR-PASSWORD]@db.nruezthkvlvlochtnqjw.supabase.co:5432/postgres'
 )
 
 
@@ -86,26 +86,29 @@ def _make_ipv4_connection():
     - 'hostaddr' lleva la IP IPv4 resuelta → libpq conecta a esa IP directamente,
       sin hacer DNS lookup (que podría devolver IPv6)
     Combinando ambos: conexión por IPv4 + SNI correcto = autenticación exitosa.
+    NOTA: Sin cursor_factory para compatibilidad con SQLAlchemy.
     """
     p = _parse_db_url(DATABASE_URL)
-    
+
     try:
         # Resolver forzando AF_INET para obtener la IPv4
         addrinfo = _socket.getaddrinfo(
-            p['host'], 
-            p['port'], 
+            p['host'],
+            p['port'],
             _socket.AF_INET,
             _socket.SOCK_STREAM
         )
-        
+
         if not addrinfo:
             raise RuntimeError(f"No se pudo resolver {p['host']} a IPv4")
-        
+
         ipv4 = addrinfo[0][4][0]
-        
+
         logger.info(f"Resolviendo {p['host']} a IPv4: {ipv4}")
-        
-        # Conectar usando hostname para SNI y hostaddr para la IP real
+
+        # Conectar usando hostname para SNI y hostaddr para la IP real.
+        # Sin cursor_factory=RealDictCursor: SQLAlchemy necesita cursores estándar
+        # para introspeccionar la versión del servidor correctamente.
         conn = psycopg2.connect(
             host=p['host'],       # hostname real → usado como SNI en TLS
             hostaddr=ipv4,        # IP IPv4 → libpq conecta directo, sin DNS
@@ -115,11 +118,10 @@ def _make_ipv4_connection():
             dbname=p['dbname'],
             sslmode='require',
             connect_timeout=10,
-            #cursor_factory=psycopg2.extras.RealDictCursor,
         )
         logger.info("Conexión a base de datos establecida exitosamente vía IPv4")
         return conn
-        
+
     except Exception as e:
         logger.error(f"Error conectando a la base de datos: {e}")
         raise
@@ -128,11 +130,9 @@ def create_db_engine():
     """Crea un engine de SQLAlchemy con conexión forzada a IPv4"""
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL no está configurada en las variables de entorno")
-    
-    # IMPORTANTE: Usa DATABASE_URL aquí en lugar de un string vacío.
-    # El parámetro 'creator' seguirá mandando sobre la conexión física.
+
     engine = create_engine(
-        DATABASE_URL, 
+        DATABASE_URL,
         creator=_make_ipv4_connection,
         pool_size=5,
         max_overflow=10,
@@ -141,10 +141,9 @@ def create_db_engine():
     )
     return engine
 
-
 # Crear engine y session factory globales
-#engine = None
-#SessionLocal = None
+engine = None
+SessionLocal = None
 
 def init_db():
     """Inicializa la conexión a la base de datos (no crea tablas, asume que ya existen)"""
@@ -152,15 +151,15 @@ def init_db():
     try:
         engine = create_db_engine()
         SessionLocal = scoped_session(sessionmaker(bind=engine))
-        
+
         # Verificar conexión ejecutando una consulta simple
         with engine.connect() as conn:
             result = conn.execute(text("SELECT 1 as test"))
             result.fetchone()
             logger.info("Conexión a base de datos verificada exitosamente")
-        
+
         logger.info("Base de datos inicializada correctamente")
-        
+
     except Exception as e:
         logger.error(f"Error en init_db: {e}")
         raise
@@ -172,10 +171,14 @@ def get_db():
     return SessionLocal()
 
 def dict_from_row(row):
-    """Convierte una fila de SQLAlchemy a diccionario"""
+    """Convierte una fila de SQLAlchemy a diccionario. Retorna None si row es None."""
     if row is None:
         return None
     return dict(row._mapping)
+
+def rows_to_list(rows):
+    """Convierte una lista de filas SQLAlchemy a lista de diccionarios."""
+    return [dict(r._mapping) for r in rows]
 
 # ─────────────────────────────────────────────
 # AUTH — token simple HMAC
@@ -191,7 +194,7 @@ def verify_token(token: str) -> bool:
         expected = hmac.new(SECRET_KEY.encode(), raw.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig, expected):
             return False
-        
+
         db = get_db()
         try:
             result = db.execute(
@@ -201,7 +204,7 @@ def verify_token(token: str) -> bool:
             return result is not None
         finally:
             db.close()
-            
+
     except Exception as e:
         logger.error(f"Error en verify_token: {e}")
         return False
@@ -223,7 +226,9 @@ def get_setting(key: str, default: str = "") -> str:
                 text("SELECT value FROM settings WHERE key=:key"),
                 {"key": key}
             ).fetchone()
-            return result["value"] if result else default
+            # FIX: usar dict_from_row para acceso por nombre de columna
+            row = dict_from_row(result)
+            return row["value"] if row else default
         finally:
             db.close()
     except Exception as e:
@@ -411,10 +416,11 @@ def fetch_inbox_sync(limit=60):
         db = get_db()
         try:
             # Obtener UIDs actuales en DB
+            # FIX: usar dict_from_row para acceso por nombre de columna
             result = db.execute(text("SELECT message_id, imap_uid FROM inbox_cache"))
             db_rows = result.fetchall()
-            db_by_uid = {r["imap_uid"]: r["message_id"] for r in db_rows if r["imap_uid"]}
-            db_message_ids = {r["message_id"] for r in db_rows}
+            db_by_uid = {dict_from_row(r)["imap_uid"]: dict_from_row(r)["message_id"] for r in db_rows if dict_from_row(r)["imap_uid"]}
+            db_message_ids = {dict_from_row(r)["message_id"] for r in db_rows}
 
             # Eliminar mensajes que ya no están en el servidor
             deleted_uids = set(db_by_uid.keys()) - server_uids
@@ -463,8 +469,8 @@ def fetch_inbox_sync(limit=60):
                     except: body = ""
                 try:
                     db.execute(
-                        text("""INSERT INTO inbox_cache (message_id,imap_uid,from_email,from_name,subject,body,date) 
-                                VALUES (:mid,:uid,:from_email,:from_name,:subj,:body,:date) 
+                        text("""INSERT INTO inbox_cache (message_id,imap_uid,from_email,from_name,subject,body,date)
+                                VALUES (:mid,:uid,:from_email,:from_name,:subj,:body,:date)
                                 ON CONFLICT (message_id) DO NOTHING"""),
                         {"mid": mid, "uid": uid, "from_email": from_email, "from_name": from_name,
                          "subj": subj, "body": body[:3000], "date": date_}
@@ -477,7 +483,7 @@ def fetch_inbox_sync(limit=60):
 
         finally:
             db.close()
-        
+
         mail.logout()
         logger.info(f"IMAP sync: +{added_count} nuevos, -{deleted_count} eliminados")
         return {"added": added_count, "deleted": deleted_count, "total": len(server_uids)}
@@ -515,12 +521,12 @@ def find_index_html():
         "/opt/render/project/src/static/index.html",
         "/app/static/index.html",
     ]
-    
+
     for ubicacion in posibles_ubicaciones:
         if os.path.exists(ubicacion):
             logger.info(f"Frontend encontrado en: {ubicacion}")
             return ubicacion
-    
+
     logger.warning("No se encontró index.html en ninguna ubicación")
     return None
 
@@ -542,8 +548,8 @@ if os.path.exists(static_dir) and os.listdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     logger.info(f"Directorio static montado: {static_dir}")
 
-API_PATHS = ["auth", "contacts", "inbox", "send-email", "settings", "context", 
-             "preview-email", "logs", "memory", "supervision", "stats", 
+API_PATHS = ["auth", "contacts", "inbox", "send-email", "settings", "context",
+             "preview-email", "logs", "memory", "supervision", "stats",
              "smtp-test", "config", "api"]
 
 # ─────────────────────────────────────────────
@@ -634,7 +640,8 @@ def get_all_settings(_: str = Depends(require_auth)):
     try:
         result = db.execute(text("SELECT key,value FROM settings"))
         rows = result.fetchall()
-        return {r["key"]: r["value"] for r in rows}
+        # FIX: usar dict_from_row para acceso por nombre de columna
+        return {dict_from_row(r)["key"]: dict_from_row(r)["value"] for r in rows}
     finally:
         db.close()
 
@@ -648,8 +655,8 @@ async def save_settings(request: Request, _: str = Depends(require_auth)):
 @app.get("/context")
 def get_context(_: str = Depends(require_auth)):
     return {
-        "entity": get_setting("ctx_entity"), 
-        "mission": get_setting("ctx_mission"), 
+        "entity": get_setting("ctx_entity"),
+        "mission": get_setting("ctx_mission"),
         "extra": get_setting("ctx_extra")
     }
 
@@ -687,7 +694,7 @@ def list_contacts(_: str = Depends(require_auth)):
     try:
         result = db.execute(text("SELECT * FROM contacts ORDER BY name"))
         rows = result.fetchall()
-        return [dict(r._mapping) for r in rows]
+        return rows_to_list(rows)
     finally:
         db.close()
 
@@ -696,20 +703,21 @@ async def create_contact(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
     if not data.get("name") or not data.get("email"):
         raise HTTPException(400, "name y email son obligatorios")
-    
+
     db = get_db()
     try:
         result = db.execute(
-            text("""INSERT INTO contacts (name,email,company,role,phone,context,tags) 
+            text("""INSERT INTO contacts (name,email,company,role,phone,context,tags)
                     VALUES (:name,:email,:company,:role,:phone,:context,:tags) RETURNING id"""),
             {"name": data["name"], "email": data["email"], "company": data.get("company",""),
-             "role": data.get("role",""), "phone": data.get("phone",""), 
+             "role": data.get("role",""), "phone": data.get("phone",""),
              "context": data.get("context",""), "tags": data.get("tags","")}
         )
-        cid = result.fetchone()["id"]
+        # FIX: usar dict_from_row para acceso por nombre de columna
+        cid = dict_from_row(result.fetchone())["id"]
         db.execute(
             text("INSERT INTO memory (type,entity,content) VALUES (:type,:entity,:content)"),
-            {"type": "contact_added", "entity": data["email"], 
+            {"type": "contact_added", "entity": data["email"],
              "content": f"Contacto: {data['name']} - {data.get('company','')}"}
         )
         db.commit()
@@ -731,7 +739,7 @@ async def update_contact(cid: int, request: Request, _: str = Depends(require_au
             text("""UPDATE contacts SET name=:name,company=:company,role=:role,phone=:phone,
                     context=:context,tags=:tags,updated_at=NOW() WHERE id=:cid"""),
             {"name": data.get("name"), "company": data.get("company",""), "role": data.get("role",""),
-             "phone": data.get("phone",""), "context": data.get("context",""), 
+             "phone": data.get("phone",""), "context": data.get("context",""),
              "tags": data.get("tags",""), "cid": cid}
         )
         db.commit()
@@ -769,17 +777,18 @@ def _build_style():
 
 def _log_sent(db, to, subject, body, body_html, intent, campaign_id):
     result = db.execute(text("SELECT name FROM contacts WHERE email=:email"), {"email": to})
-    row = result.fetchone()
+    row = dict_from_row(result.fetchone())
+    # FIX: usar dict_from_row para acceso por nombre de columna
     cname = row["name"] if row else to.split("@")[0]
     db.execute(
-        text("""INSERT INTO email_logs (direction,contact_email,contact_name,subject,body,body_html,intent,status,sent_at,campaign_id) 
+        text("""INSERT INTO email_logs (direction,contact_email,contact_name,subject,body,body_html,intent,status,sent_at,campaign_id)
                 VALUES (:direction,:contact_email,:contact_name,:subject,:body,:body_html,:intent,:status,NOW(),:campaign_id)"""),
         {"direction": "out", "contact_email": to, "contact_name": cname, "subject": subject,
          "body": body, "body_html": body_html, "intent": intent, "status": "sent", "campaign_id": campaign_id}
     )
     db.execute(
         text("INSERT INTO memory (type,entity,content,importance) VALUES (:type,:entity,:content,:importance)"),
-        {"type": "email_sent", "entity": to, 
+        {"type": "email_sent", "entity": to,
          "content": f"Email enviado a {cname}: {subject}", "importance": 2}
     )
 
@@ -864,7 +873,7 @@ def get_inbox(refresh: bool = False, _: str = Depends(require_auth)):
     db = get_db()
     try:
         rows = db.execute(text("SELECT * FROM inbox_cache ORDER BY date DESC LIMIT 80")).fetchall()
-        resp = [dict(r._mapping) for r in rows]
+        resp = rows_to_list(rows)
         if result: return {"messages": resp, "sync": result}
         return {"messages": resp, "sync": None}
     finally:
@@ -875,7 +884,7 @@ async def mark_replied(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
     db = get_db()
     try:
-        db.execute(text("UPDATE inbox_cache SET replied=1 WHERE message_id=:message_id"), 
+        db.execute(text("UPDATE inbox_cache SET replied=1 WHERE message_id=:message_id"),
                    {"message_id": data.get("message_id")})
         db.commit()
     finally:
@@ -901,9 +910,9 @@ async def save_suggestion(request: Request, _: str = Depends(require_auth)):
 def get_logs(limit: int = 100, _: str = Depends(require_auth)):
     db = get_db()
     try:
-        rows = db.execute(text("SELECT * FROM email_logs ORDER BY created_at DESC LIMIT :limit"), 
+        rows = db.execute(text("SELECT * FROM email_logs ORDER BY created_at DESC LIMIT :limit"),
                          {"limit": limit}).fetchall()
-        return [dict(r._mapping) for r in rows]
+        return rows_to_list(rows)
     finally:
         db.close()
 
@@ -913,7 +922,7 @@ def get_log(log_id: int, _: str = Depends(require_auth)):
     try:
         row = db.execute(text("SELECT * FROM email_logs WHERE id=:log_id"), {"log_id": log_id}).fetchone()
         if not row: raise HTTPException(404, "Log no encontrado")
-        return dict(row._mapping)
+        return dict_from_row(row)
     finally:
         db.close()
 
@@ -924,9 +933,9 @@ def get_log(log_id: int, _: str = Depends(require_auth)):
 def get_memory(limit: int = 100, _: str = Depends(require_auth)):
     db = get_db()
     try:
-        rows = db.execute(text("SELECT * FROM memory ORDER BY created_at DESC LIMIT :limit"), 
+        rows = db.execute(text("SELECT * FROM memory ORDER BY created_at DESC LIMIT :limit"),
                          {"limit": limit}).fetchall()
-        return [dict(r._mapping) for r in rows]
+        return rows_to_list(rows)
     finally:
         db.close()
 
@@ -957,15 +966,16 @@ def get_supervision(_: str = Depends(require_auth)):
                     LEFT JOIN contacts c ON l.contact_email=c.email
                     WHERE l.direction='out' ORDER BY l.sent_at DESC LIMIT 100""")
         ).fetchall()
-        
+
         replied_set = set()
         replied = db.execute(text("SELECT from_email FROM inbox_cache WHERE replied=1")).fetchall()
         for r in replied:
-            replied_set.add(r["from_email"])
-        
+            # FIX: usar dict_from_row para acceso por nombre de columna
+            replied_set.add(dict_from_row(r)["from_email"])
+
         result = []
         for row in sent:
-            d = dict(row._mapping)
+            d = dict_from_row(row)
             try:
                 sent_at_val = d.get("sent_at")
                 if sent_at_val:
@@ -992,11 +1002,12 @@ def get_supervision(_: str = Depends(require_auth)):
 def get_stats(_: str = Depends(require_auth)):
     db = get_db()
     try:
-        contacts = db.execute(text("SELECT COUNT(*) AS c FROM contacts")).fetchone()["c"]
-        sent = db.execute(text("SELECT COUNT(*) AS c FROM email_logs WHERE direction='out'")).fetchone()["c"]
-        inbox = db.execute(text("SELECT COUNT(*) AS c FROM inbox_cache")).fetchone()["c"]
-        replied = db.execute(text("SELECT COUNT(*) AS c FROM inbox_cache WHERE replied=1")).fetchone()["c"]
-        memory = db.execute(text("SELECT COUNT(*) AS c FROM memory")).fetchone()["c"]
+        # FIX: acceder por índice [0] para queries de una sola columna COUNT(*)
+        contacts = db.execute(text("SELECT COUNT(*) FROM contacts")).fetchone()[0]
+        sent     = db.execute(text("SELECT COUNT(*) FROM email_logs WHERE direction='out'")).fetchone()[0]
+        inbox    = db.execute(text("SELECT COUNT(*) FROM inbox_cache")).fetchone()[0]
+        replied  = db.execute(text("SELECT COUNT(*) FROM inbox_cache WHERE replied=1")).fetchone()[0]
+        memory   = db.execute(text("SELECT COUNT(*) FROM memory")).fetchone()[0]
         return {"contacts": contacts, "sent": sent, "inbox": inbox, "replied": replied, "memory": memory}
     finally:
         db.close()
@@ -1013,11 +1024,11 @@ async def head_frontend():
 async def serve_frontend():
     if INDEX_PATH and os.path.exists(INDEX_PATH):
         return FileResponse(INDEX_PATH)
-    
+
     root_index = os.path.join(BASE, "index.html")
     if os.path.exists(root_index):
         return FileResponse(root_index)
-    
+
     logger.error(f"No se pudo encontrar index.html. INDEX_PATH={INDEX_PATH}, BASE={BASE}")
     return JSONResponse({"error": "Frontend no encontrado"}, status_code=404)
 
@@ -1025,17 +1036,17 @@ async def serve_frontend():
 async def serve_spa(full_path: str):
     if full_path.startswith(tuple(API_PATHS)) or full_path in API_PATHS:
         raise HTTPException(404, "Not found")
-    
+
     if any(full_path.endswith(ext) for ext in ['.js', '.css', '.png', '.jpg', '.svg', '.ico', '.json']):
         raise HTTPException(404, "Not found")
-    
+
     if INDEX_PATH and os.path.exists(INDEX_PATH):
         return FileResponse(INDEX_PATH)
-    
+
     root_index = os.path.join(BASE, "index.html")
     if os.path.exists(root_index):
         return FileResponse(root_index)
-    
+
     return JSONResponse({"error": "Frontend no encontrado"}, status_code=404)
 
 if __name__ == "__main__":
@@ -1044,6 +1055,6 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Error inicializando base de datos: {e}")
         logger.info("Continuando con la inicialización de la app...")
-    
+
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run("api:app", host="0.0.0.0", port=port)
