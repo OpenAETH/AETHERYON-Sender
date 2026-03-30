@@ -113,7 +113,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .intent-btn:hover{border-color:var(--border2);color:var(--text2)}
 .intent-btn.active{border-color:var(--green);color:var(--green);background:var(--green-glow)}
 
-/* SUPERVISION */
 .sup-row{display:grid;grid-template-columns:80px 130px 1fr 60px 60px 80px;gap:6px;padding:8px 14px;border-bottom:1px solid var(--border);align-items:center;font-size:11px}
 .sup-row:hover{background:var(--bg3)}
 .sup-header{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);background:var(--bg3)}
@@ -121,7 +120,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .open-email-btn{font-size:9px;padding:2px 7px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:var(--mono);transition:border-color .15s,color .15s}
 .open-email-btn:hover{border-color:var(--green);color:var(--green)}
 
-/* CONTEXT TAB */
 .ctx-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:1rem}
 .ctx-title{font-family:var(--serif);font-size:15px;font-weight:400;color:var(--text);margin-bottom:6px}
 .ctx-hint{font-size:10px;color:var(--text3);margin-bottom:14px;line-height:1.6}
@@ -129,10 +127,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .ctx-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:none;line-height:1.6;caret-color:var(--green)}
 .ctx-input:focus{border-color:var(--border2)}
 
-/* STYLE PREVIEW */
 .preview-frame{width:100%;height:400px;border:1px solid var(--border);border-radius:var(--r2);background:#fff}
 
-/* MODAL */
 .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(5,8,4,.8);z-index:50;align-items:center;justify-content:center}
 .modal-backdrop.visible{display:flex}
 .modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:24px;max-width:680px;width:calc(100% - 2rem);margin:1rem;max-height:90vh;overflow-y:auto}
@@ -154,7 +150,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </head>
 <body>
 
-<!-- ═══ LOGIN SCREEN ═══ -->
+<!-- LOGIN SCREEN -->
 <div id="loginScreen" style="position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center">
   <div style="width:100%;max-width:360px;padding:1.5rem">
     <div style="text-align:center;margin-bottom:2rem">
@@ -264,7 +260,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </div>
 <div class="content">
 
-<!-- ═══ DASHBOARD ═══ -->
+<!-- DASHBOARD -->
 <div class="view active" id="view-dashboard">
   <div class="stats-grid">
     <div class="stat-card"><div class="val" id="s-contacts">-</div><div class="lbl">Contactos</div></div>
@@ -297,7 +293,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ AGENDA ═══ -->
+<!-- AGENDA -->
 <div class="view" id="view-agenda">
   <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
     <input id="searchContact" type="text" placeholder="Buscar por nombre, email, empresa o tag..."
@@ -324,7 +320,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ COMPOSE ═══ -->
+<!-- COMPOSE -->
 <div class="view" id="view-compose">
   <div class="compose-wrap">
     <div>
@@ -388,7 +384,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ INBOX ═══ -->
+<!-- INBOX -->
 <div class="view" id="view-inbox">
   <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
     <span style="font-size:11px;color:var(--text3)" id="inboxCount">- mensajes</span>
@@ -406,7 +402,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ SUPERVISION ═══ -->
+<!-- SUPERVISION -->
 <div class="view" id="view-supervision">
   <div class="panel">
     <div class="panel-header">
@@ -422,7 +418,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ MEMORY ═══ -->
+<!-- MEMORY -->
 <div class="view" id="view-memory">
   <div style="display:flex;gap:10px;margin-bottom:1rem">
     <button class="btn btn-ghost btn-sm" onclick="loadMemory()">Actualizar</button>
@@ -433,7 +429,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ CONTEXTO ═══ -->
+<!-- CONTEXTO -->
 <div class="view" id="view-context">
   <div class="ctx-block">
     <div class="ctx-title">Identidad y Mision</div>
@@ -455,7 +451,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ ESTILO Y FIRMA ═══ -->
+<!-- ESTILO Y FIRMA -->
 <div class="view" id="view-estilo">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
     <div>
@@ -524,7 +520,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
           </div>
           <div class="cfg-field full">
             <label>Firma HTML</label>
-            <textarea id="st-sig" rows="4" placeholder="<strong>Nombre</strong><br>Cargo | Empresa<br><a href='https://...'>web</a>"></textarea>
+            <textarea id="st-sig" rows="4" placeholder="&lt;strong&gt;Nombre&lt;/strong&gt;&lt;br&gt;Cargo | Empresa&lt;br&gt;&lt;a href='https://...'&gt;web&lt;/a&gt;"></textarea>
           </div>
         </div>
         <div class="panel-footer">
@@ -540,7 +536,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ SETTINGS ═══ -->
+<!-- SETTINGS -->
 <div class="view" id="view-settings">
   <div class="section-label">SMTP — Envio</div>
   <div class="panel" style="margin-bottom:1rem">
@@ -579,7 +575,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
 
 
-<!-- ═══ MODAL: MULTI DESTINATARIOS ═══ -->
+<!-- MODAL: MULTI DESTINATARIOS -->
 <div class="modal-backdrop" id="modalMultiRecipient">
   <div class="modal" style="max-width:480px">
     <h2 style="margin-bottom:14px">Agregar destinatarios</h2>
@@ -594,7 +590,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ CAMPANAS IA ═══ -->
+<!-- CAMPANAS IA -->
 <div class="view" id="view-campaigns">
 
   <!-- LISTA DE CAMPANAS -->
@@ -686,7 +682,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </div><!-- /main -->
 </div><!-- /shell -->
 
-<!-- ═══ MODAL: CONFIRM SEND ═══ -->
+<!-- MODAL: CONFIRM SEND -->
 <div class="modal-backdrop" id="modalSend">
   <div class="modal">
     <h2>Confirmar envio</h2>
@@ -701,7 +697,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ MODAL: VER EMAIL (supervision) ═══ -->
+<!-- MODAL: VER EMAIL (supervision) -->
 <div class="modal-backdrop" id="modalEmail">
   <div class="modal" style="max-width:720px">
     <h2 id="modalEmailSubject" style="margin-bottom:6px">Email enviado</h2>
@@ -716,7 +712,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ MODAL: PREVIEW HTML COMPOSE ═══ -->
+<!-- MODAL: PREVIEW HTML COMPOSE -->
 <div class="modal-backdrop" id="modalPreview">
   <div class="modal" style="max-width:720px">
     <h2 style="margin-bottom:14px">Vista previa HTML</h2>
@@ -728,7 +724,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ MODAL: ADD MEMORY ═══ -->
+<!-- MODAL: ADD MEMORY -->
 <div class="modal-backdrop" id="modalMemory">
   <div class="modal">
     <h2>Agregar nota a la memoria</h2>
@@ -756,7 +752,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </div>
 
 
-<!-- ═══ MODAL: CONFIRM BULK SEND ═══ -->
+<!-- MODAL: CONFIRM BULK SEND -->
 <div class="modal-backdrop" id="modalBulk">
   <div class="modal">
     <h2>Confirmar envio multiple</h2>
@@ -824,7 +820,6 @@ async function doLogout(){
 async function showApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appShell').style.display='flex';
-  // Cargar Groq key desde API
   try{
     const r=await apiFetch('/groq-key');
     if(r.ok){const d=await r.json(); if(d.configured) GROQ_KEY=d.key;}
@@ -854,7 +849,6 @@ async function apiFetch(path,opts={}){
 
 // ── GROQ HELPER ──
 function getGroqKey(){
-  // Prioriza key del campo visible (si el usuario la escribió), luego la de env vars
   const fieldEl=document.getElementById('groqKey');
   const fieldVal=fieldEl?fieldEl.value.trim():'';
   return fieldVal||GROQ_KEY||'';
@@ -1007,8 +1001,7 @@ function toggleMultiContact(email,btn){
 function applyMultiRecipients(){
   extraRecipients=new Set(multiSelectedContacts);
   const extra=document.getElementById('multiExtraEmails').value;
-  extra.split(/[
-,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>extraRecipients.add(e));
+  extra.split(/[\n,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>extraRecipients.add(e));
   renderExtraRecipientTags();
   closeModal('modalMultiRecipient');
 }
@@ -1044,9 +1037,7 @@ async function getEntityContext(){
     if(ctx.entity||ctx.mission||ctx.extra)return `
 
 CONTEXTO DE LA ENTIDAD:
-${ctx.entity?'Entidad: '+ctx.entity+'
-':''}${ctx.mission?'Mision: '+ctx.mission+'
-':''}${ctx.extra?'Instrucciones: '+ctx.extra:''}`;
+${ctx.entity?'Entidad: '+ctx.entity+'\n':''}${ctx.mission?'Mision: '+ctx.mission+'\n':''}${ctx.extra?'Instrucciones: '+ctx.extra:''}`;
   }catch(e){}
   return '';
 }
@@ -1088,8 +1079,7 @@ Contexto: ${c.context||'N/A'}`:'';
           {role:'user',content:prompt}]})});
     if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'Error Groq');}
     const reader=res.body.getReader(),decoder=new TextDecoder();let buffer='';
-    while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('
-');buffer=lines.pop();for(const line of lines){const clean=line.replace(/^data: /,'').trim();if(!clean||clean==='[DONE]')continue;try{body.textContent+=JSON.parse(clean).choices?.[0]?.delta?.content||'';}catch{}}}
+    while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){const clean=line.replace(/^data: /,'').trim();if(!clean||clean==='[DONE]')continue;try{body.textContent+=JSON.parse(clean).choices?.[0]?.delta?.content||'';}catch{}}}
     body.classList.remove('streaming');
   }catch(e){toast('Error Groq: '+e.message,'error');body.classList.remove('streaming');}
   finally{btn.disabled=false;btn.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar con Groq';}
@@ -1171,7 +1161,7 @@ function renderInbox(){
       <div class="ii-date">${formatDate(m.date)}</div>
     </div>`).join('');
 }
-function escId(s){return(s||'').replace(/'/g,"\'").replace(/"/g,'\"');}
+function escId(s){return(s||'').replace(/'/g,"\\'").replace(/"/g,'\\"');}
 async function selectInbox(mid){
   const m=inboxItems.find(x=>(x.message_id||'')==mid);if(!m)return;selectedInboxMsg=m;
   document.querySelectorAll('.inbox-item').forEach(i=>i.classList.remove('selected'));
@@ -1268,10 +1258,8 @@ function showCampaignForm(){
   document.getElementById('campaignListView').style.display='none';
   document.getElementById('campaignFormView').style.display='block';
   document.getElementById('campaignApprovalView').style.display='none';
-  // Precargar fecha actual
   const today=new Date().toISOString().split('T')[0];
   document.getElementById('camp-start').value=today;
-  // Fecha fin: 2 semanas
   const end=new Date();end.setDate(end.getDate()+14);
   document.getElementById('camp-end').value=end.toISOString().split('T')[0];
   initCampContacts();
@@ -1282,7 +1270,7 @@ function initCampContacts(){
   campSelectedContacts.clear();
   const list=document.getElementById('campContactList');
   list.innerHTML=contacts.map(c=>`
-    <button class="tag" style="cursor:pointer;padding:5px 10px;font-size:10px" onclick="toggleCampContact('${c.email}','${c.name.replace(/'/g,"\'")}',this)">
+    <button class="tag" style="cursor:pointer;padding:5px 10px;font-size:10px" onclick="toggleCampContact('${c.email}','${c.name.replace(/'/g,"\\'")}',this)">
       ${c.name}
     </button>`).join('');
   document.getElementById('campSelectedTags').innerHTML='';
@@ -1337,7 +1325,7 @@ function previewDates(start,end,mode){
   const endD=new Date(end+'T12:00:00');
   let idx=0;
   while(cur<=endD){
-    const wd=cur.getDay(); // 0=dom,1=lun,...
+    const wd=cur.getDay();
     let ok=false;
     if(mode==='daily') ok=true;
     else if(mode==='alternate') ok=(idx%2===0);
@@ -1363,8 +1351,7 @@ async function generateCampaign(){
   if(!intent)return toast('Ingresa la intencion de la campana','error');
 
   const allContacts=[...campSelectedContacts];
-  extraEmails.split(/[
-,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>allContacts.push(e));
+  extraEmails.split(/[\n,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>allContacts.push(e));
   if(!allContacts.length)return toast('Agrega al menos un contacto','error');
 
   const dates=previewDates(start,end,campMode);
@@ -1507,16 +1494,11 @@ async function saveEmailEdit(campId,emailId){
   const subject=document.getElementById('editSubject_'+emailId)?.value.trim();
   const body=document.getElementById('editBody_'+emailId)?.value.trim();
   if(!subject||!body)return toast('Asunto y cuerpo son requeridos','error');
-  // Actualizar visualmente primero
   document.getElementById('subject_'+emailId).textContent=subject;
   document.getElementById('bodyDisplay_'+emailId).textContent=body;
   toggleEmailEdit(emailId);
-  // Guardar via approve con campos editados — hacemos un patch directo al endpoint de retry con feedback vacío para solo actualizar
   try{
-    // Usamos el endpoint de approve con patch manual via retry forzado con el texto dado
     await apiFetch('/campaigns/'+campId+'/approve-email',{method:'POST',body:JSON.stringify({email_id:emailId,action:'pending'})});
-    // Forzar update del texto mediante retry con contenido fijo
-    // Como no tenemos PATCH de email directo, hacemos un workaround: el usuario edita y aprueba manualmente
     toast('Guardado. Ahora aprueba el email.','success');
     showApprovalView(campId);
   }catch(e){toast('Error guardando','error');}
