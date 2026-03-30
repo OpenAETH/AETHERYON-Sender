@@ -493,6 +493,9 @@ def fetch_inbox_sync(limit=60):
 
 # ─────────────────────────────────────────────
 # APP LIFESPAN
+
+# ─────────────────────────────────────────────
+# APP LIFESPAN
 # ─────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app):
@@ -501,7 +504,6 @@ async def lifespan(app):
         logger.info("Aplicación iniciada correctamente")
     except Exception as e:
         logger.error(f"Error al iniciar la aplicación: {e}")
-        # No lanzamos la excepción para que la app pueda iniciar y luego reconectar
     yield
     logger.info("Aplicación cerrada")
 
@@ -510,24 +512,18 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
                    allow_credentials=True)
 
 # ─────────────────────────────────────────────
-# BUSCAR EL FRONTEND EN MÚLTIPLES UBICACIONES
+# FRONTEND SERVING
 # ─────────────────────────────────────────────
 def find_index_html():
-    """Busca index.html en múltiples ubicaciones posibles"""
-    posibles_ubicaciones = [
+    for loc in [
         os.path.join(BASE, "static", "index.html"),
         os.path.join(BASE, "index.html"),
-        os.path.join(os.path.dirname(BASE), "static", "index.html"),
         "/opt/render/project/src/static/index.html",
         "/app/static/index.html",
-    ]
-
-    for ubicacion in posibles_ubicaciones:
-        if os.path.exists(ubicacion):
-            logger.info(f"Frontend encontrado en: {ubicacion}")
-            return ubicacion
-
-    logger.warning("No se encontró index.html en ninguna ubicación")
+    ]:
+        if os.path.exists(loc):
+            logger.info(f"Frontend: {loc}")
+            return loc
     return None
 
 INDEX_PATH = find_index_html()
@@ -535,26 +531,20 @@ INDEX_PATH = find_index_html()
 static_dir = os.path.join(BASE, "static")
 if not os.path.exists(static_dir):
     os.makedirs(static_dir)
-    logger.info(f"Creado directorio static: {static_dir}")
 
 index_root = os.path.join(BASE, "index.html")
 if os.path.exists(index_root) and not os.path.exists(os.path.join(static_dir, "index.html")):
     import shutil
     shutil.copy2(index_root, os.path.join(static_dir, "index.html"))
-    logger.info(f"Copiado {index_root} a {static_dir}/")
     INDEX_PATH = os.path.join(static_dir, "index.html")
 
 if os.path.exists(static_dir) and os.listdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
-    logger.info(f"Directorio static montado: {static_dir}")
 
-API_PATHS = ["auth", "contacts", "inbox", "send-email", "settings", "context",
-             "preview-email", "logs", "memory", "supervision", "stats",
-             "smtp-test", "config", "api"]
+API_PATHS = ["auth","contacts","inbox","send-email","settings","context",
+             "preview-email","logs","memory","supervision","stats",
+             "smtp-test","config","api","campaigns","groq-key"]
 
-# ─────────────────────────────────────────────
-# ROUTES — AUTH (sin autenticación para login)
-# ─────────────────────────────────────────────
 @app.post("/auth/login")
 async def login(request: Request):
     data = await request.json()
@@ -1015,46 +1005,442 @@ def get_stats(_: str = Depends(require_auth)):
 # ─────────────────────────────────────────────
 # SERVIR FRONTEND (sin autenticación)
 # ─────────────────────────────────────────────
+
+# ─────────────────────────────────────────────
+# ROUTES — GROQ KEY (provista por API)
+# ─────────────────────────────────────────────
+@app.get("/groq-key")
+def get_groq_key(_: str = Depends(require_auth)):
+    """Devuelve la Groq API Key configurada en env vars (sin exponerla completa)."""
+    key = os.getenv("GROQ_API_KEY", "")
+    if not key:
+        return {"configured": False, "key": ""}
+    # Devuelve la key completa — solo accesible a usuarios autenticados
+    return {"configured": True, "key": key}
+
+# ─────────────────────────────────────────────
+# ROUTES — CAMPAIGNS
+# ─────────────────────────────────────────────
+
+def _get_campaign_dates(start_date: str, end_date: str, send_mode: str) -> list:
+    """Genera la lista de fechas válidas según el modo de envío."""
+    from datetime import date, timedelta
+    try:
+        start = date.fromisoformat(start_date)
+        end   = date.fromisoformat(end_date)
+    except ValueError:
+        raise HTTPException(400, "Fechas inválidas. Usar formato YYYY-MM-DD")
+    if start > end:
+        raise HTTPException(400, "start_date debe ser anterior a end_date")
+
+    dates = []
+    current = start
+    while current <= end:
+        wd = current.weekday()  # 0=lun, 1=mar, 2=mie, 3=jue, 4=vie, 5=sab, 6=dom
+        include = False
+        if send_mode == "daily":
+            include = True
+        elif send_mode == "alternate":
+            delta = (current - start).days
+            include = (delta % 2 == 0)
+        elif send_mode == "mon_wed_fri":
+            include = wd in (0, 2, 4)
+        elif send_mode == "tue_thu":
+            include = wd in (1, 3)
+        else:
+            include = True
+        if include:
+            dates.append(str(current))
+        current += timedelta(days=1)
+    return dates
+
+@app.get("/campaigns")
+def list_campaigns(_: str = Depends(require_auth)):
+    db = get_db()
+    try:
+        rows = db.execute(text("""
+            SELECT c.*,
+                   COUNT(e.id) AS total_emails,
+                   SUM(CASE WHEN e.status='approved' THEN 1 ELSE 0 END) AS approved_count,
+                   SUM(CASE WHEN e.status='pending'  THEN 1 ELSE 0 END) AS pending_count
+            FROM campaigns c
+            LEFT JOIN campaign_emails e ON e.campaign_id = c.id
+            GROUP BY c.id ORDER BY c.created_at DESC
+        """)).fetchall()
+        return rows_to_list(rows)
+    except Exception as e:
+        logger.error(f"list_campaigns: {e}")
+        return []
+    finally:
+        db.close()
+
+@app.get("/campaigns/{cid}")
+def get_campaign(cid: int, _: str = Depends(require_auth)):
+    db = get_db()
+    try:
+        camp = dict_from_row(db.execute(text("SELECT * FROM campaigns WHERE id=:id"), {"id": cid}).fetchone())
+        if not camp:
+            raise HTTPException(404, "Campaña no encontrada")
+        emails = rows_to_list(db.execute(text(
+            "SELECT * FROM campaign_emails WHERE campaign_id=:id ORDER BY day_number"), {"id": cid}).fetchall())
+        contacts = rows_to_list(db.execute(text(
+            "SELECT * FROM campaign_contacts WHERE campaign_id=:id"), {"id": cid}).fetchall())
+        camp["emails"]   = emails
+        camp["contacts"] = contacts
+        return camp
+    finally:
+        db.close()
+
+@app.delete("/campaigns/{cid}")
+def delete_campaign(cid: int, _: str = Depends(require_auth)):
+    db = get_db()
+    try:
+        db.execute(text("DELETE FROM campaign_emails   WHERE campaign_id=:id"), {"id": cid})
+        db.execute(text("DELETE FROM campaign_contacts WHERE campaign_id=:id"), {"id": cid})
+        db.execute(text("DELETE FROM campaigns WHERE id=:id"), {"id": cid})
+        db.commit()
+        return {"success": True}
+    finally:
+        db.close()
+
+@app.post("/campaigns/generate")
+async def generate_campaign(request: Request, _: str = Depends(require_auth)):
+    """
+    Genera la secuencia completa de emails para una campaña usando Groq.
+    Llama a Groq desde el backend usando GROQ_API_KEY de env vars.
+    """
+    import httpx
+    data = await request.json()
+
+    contacts_list = data.get("contacts", [])
+    start_date    = data.get("start_date", "")
+    end_date      = data.get("end_date", "")
+    intent        = data.get("intent", "").strip()
+    send_mode     = data.get("send_mode", "daily")
+    tone          = data.get("tone", "informative")
+    campaign_name = data.get("name", f"Campaña {start_date}")
+
+    if not contacts_list: raise HTTPException(400, "Se requiere al menos un contacto")
+    if not start_date or not end_date: raise HTTPException(400, "Fechas requeridas")
+    if not intent: raise HTTPException(400, "Intención requerida")
+
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key:
+        raise HTTPException(500, "GROQ_API_KEY no configurada en variables de entorno")
+
+    # Calcular fechas válidas
+    dates = _get_campaign_dates(start_date, end_date, send_mode)
+    if not dates:
+        raise HTTPException(400, f"No hay fechas válidas en el rango con modo '{send_mode}'")
+
+    n = len(dates)
+
+    # Contexto de entidad
+    entity_ctx = ""
+    db_ctx = get_db()
+    try:
+        row = dict_from_row(db_ctx.execute(text("SELECT value FROM settings WHERE key='ctx_entity'")).fetchone())
+        if row: entity_ctx += f"\nEntidad: {row['value']}"
+        row2 = dict_from_row(db_ctx.execute(text("SELECT value FROM settings WHERE key='ctx_mission'")).fetchone())
+        if row2: entity_ctx += f"\nMisión: {row2['value']}"
+    except Exception:
+        pass
+    finally:
+        db_ctx.close()
+
+    tone_desc = {
+        "aggressive": "tono persuasivo y directo, CTA fuerte, urgencia, beneficios concretos",
+        "informative": "tono educativo y de construcción de confianza, informativo, suave",
+    }.get(tone, "tono profesional")
+
+    mode_desc = {
+        "daily": "diariamente",
+        "alternate": "día por medio",
+        "mon_wed_fri": "lunes, miércoles y viernes",
+        "tue_thu": "martes y jueves",
+    }.get(send_mode, send_mode)
+
+    system_prompt = f"""Eres un experto en email marketing. Vas a generar una secuencia de {n} emails para una campaña.
+
+INTENCIÓN: {intent}
+TONO: {tone_desc}
+FRECUENCIA: emails enviados {mode_desc}
+FECHAS: {dates[0]} al {dates[-1]}
+{entity_ctx}
+
+REGLAS:
+- Genera exactamente {n} emails numerados
+- Mantén coherencia narrativa progresiva entre emails
+- Varía el ángulo y CTA en cada email
+- Usa formato Markdown: **negrita**, *italica*, ## títulos, listas con -
+- Cada email debe tener asunto y cuerpo distintos
+- NO incluyas encabezados como Para:/De:/Asunto: en el cuerpo
+
+Responde ÚNICAMENTE con JSON válido con esta estructura exacta (sin texto extra, sin markdown):
+{{
+  "emails": [
+    {{
+      "day_number": 1,
+      "subject": "Asunto del email 1",
+      "body": "Cuerpo en Markdown..."
+    }}
+  ]
+}}"""
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Genera la secuencia de {n} emails para la campaña. Responde solo con el JSON."}
+                    ],
+                    "temperature": 0.8,
+                    "max_tokens": 8000,
+                }
+            )
+        resp.raise_for_status()
+        groq_data = resp.json()
+        raw_content = groq_data["choices"][0]["message"]["content"].strip()
+        # Limpiar posibles backticks de markdown
+        raw_content = re.sub(r'^```(?:json)?\s*', '', raw_content)
+        raw_content = re.sub(r'\s*```$', '', raw_content)
+        emails_data = json.loads(raw_content)
+        emails_list = emails_data.get("emails", [])
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(502, f"Groq API error: {e.response.status_code}")
+    except json.JSONDecodeError as e:
+        raise HTTPException(502, f"Error parseando respuesta de Groq: {e}")
+    except Exception as e:
+        raise HTTPException(502, f"Error generando campaña: {e}")
+
+    if len(emails_list) != n:
+        # Rellenar o truncar si Groq no respetó el count exacto
+        while len(emails_list) < n:
+            emails_list.append({"day_number": len(emails_list)+1, "subject": f"Email {len(emails_list)+1}", "body": "Contenido pendiente de regeneración."})
+        emails_list = emails_list[:n]
+
+    # Guardar en DB
+    db = get_db()
+    try:
+        result = db.execute(text("""
+            INSERT INTO campaigns (name, intent, start_date, end_date, send_mode, tone, status)
+            VALUES (:name,:intent,:start_date,:end_date,:send_mode,:tone,'draft')
+            RETURNING id
+        """), {"name": campaign_name, "intent": intent, "start_date": start_date,
+               "end_date": end_date, "send_mode": send_mode, "tone": tone})
+        camp_id = result.fetchone()[0]
+
+        for i, em in enumerate(emails_list):
+            db.execute(text("""
+                INSERT INTO campaign_emails (campaign_id, day_number, subject, body, status, scheduled_at, version, regenerated_count)
+                VALUES (:cid,:day,:subject,:body,'pending',:scheduled_at,1,0)
+            """), {
+                "cid": camp_id,
+                "day": em.get("day_number", i+1),
+                "subject": em.get("subject",""),
+                "body": em.get("body",""),
+                "scheduled_at": dates[i] if i < len(dates) else dates[-1],
+            })
+
+        for email_addr in contacts_list:
+            email_addr = email_addr.strip()
+            if email_addr:
+                db.execute(text("INSERT INTO campaign_contacts (campaign_id, email) VALUES (:cid,:email)"),
+                           {"cid": camp_id, "email": email_addr})
+
+        db.commit()
+        logger.info(f"Campaña {camp_id} creada con {n} emails")
+        return {"success": True, "campaign_id": camp_id, "total_emails": n, "dates": dates}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error guardando campaña: {e}")
+        raise HTTPException(500, f"Error guardando en DB: {e}")
+    finally:
+        db.close()
+
+@app.post("/campaigns/{cid}/approve-email")
+async def approve_email(cid: int, request: Request, _: str = Depends(require_auth)):
+    data   = await request.json()
+    email_id = data.get("email_id")
+    action   = data.get("action", "approved")  # approved | rejected
+    db = get_db()
+    try:
+        db.execute(text("UPDATE campaign_emails SET status=:status WHERE id=:id AND campaign_id=:cid"),
+                   {"status": action, "id": email_id, "cid": cid})
+        db.commit()
+        return {"success": True}
+    finally:
+        db.close()
+
+@app.post("/campaigns/{cid}/retry-email")
+async def retry_email(cid: int, request: Request, _: str = Depends(require_auth)):
+    """Regenera un email específico de la campaña manteniendo contexto y posición."""
+    import httpx
+    data     = await request.json()
+    email_id = data.get("email_id")
+    feedback = data.get("feedback", "")
+
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key:
+        raise HTTPException(500, "GROQ_API_KEY no configurada")
+
+    db = get_db()
+    try:
+        em = dict_from_row(db.execute(text(
+            "SELECT e.*, c.intent, c.tone, c.send_mode, c.start_date, c.end_date FROM campaign_emails e JOIN campaigns c ON c.id=e.campaign_id WHERE e.id=:id AND e.campaign_id=:cid"),
+            {"id": email_id, "cid": cid}).fetchone())
+        if not em:
+            raise HTTPException(404, "Email no encontrado")
+
+        # Contexto de emails ya generados para coherencia
+        others = rows_to_list(db.execute(text(
+            "SELECT day_number, subject, body FROM campaign_emails WHERE campaign_id=:cid AND id!=:id ORDER BY day_number"),
+            {"cid": cid, "id": email_id}).fetchall())
+
+        context_summary = "\n".join([f"- Email {o['day_number']}: {o['subject']}" for o in others[:5]])
+
+        tone_desc = {
+            "aggressive": "tono persuasivo y directo, CTA fuerte, urgencia",
+            "informative": "tono educativo, informativo, construcción de confianza",
+        }.get(em.get("tone","informative"), "tono profesional")
+
+        prompt = f"""Estás regenerando el email #{em['day_number']} de una secuencia de campaña.
+
+INTENCIÓN DE LA CAMPAÑA: {em['intent']}
+TONO: {tone_desc}
+POSICIÓN: email {em['day_number']} de la secuencia
+OTROS EMAILS EN LA CAMPAÑA:
+{context_summary}
+
+EMAIL ANTERIOR (a mejorar):
+Asunto: {em['subject']}
+Cuerpo: {em['body']}
+
+{'FEEDBACK DEL USUARIO: ' + feedback if feedback else ''}
+
+Genera un nuevo email mejorado para esta posición. Responde SOLO con JSON:
+{{"subject": "Nuevo asunto", "body": "Nuevo cuerpo en Markdown"}}"""
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json={"model": "llama-3.3-70b-versatile",
+                      "messages": [{"role": "user", "content": prompt}],
+                      "temperature": 0.9, "max_tokens": 2000}
+            )
+        resp.raise_for_status()
+        raw = resp.json()["choices"][0]["message"]["content"].strip()
+        raw = re.sub(r'^```(?:json)?\s*', '', raw)
+        raw = re.sub(r'\s*```$', '', raw)
+        new_data = json.loads(raw)
+
+        db.execute(text("""
+            UPDATE campaign_emails
+            SET subject=:subject, body=:body, status='pending',
+                version=version+1, regenerated_count=regenerated_count+1
+            WHERE id=:id
+        """), {"subject": new_data.get("subject",""), "body": new_data.get("body",""), "id": email_id})
+        db.commit()
+        return {"success": True, "subject": new_data.get("subject",""), "body": new_data.get("body","")}
+    except json.JSONDecodeError:
+        raise HTTPException(502, "Error parseando respuesta de Groq")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
+@app.post("/campaigns/{cid}/finalize")
+async def finalize_campaign(cid: int, _: str = Depends(require_auth)):
+    """Valida que todos los emails estén aprobados y marca la campaña como scheduled."""
+    db = get_db()
+    try:
+        pending = db.execute(text(
+            "SELECT COUNT(*) as n FROM campaign_emails WHERE campaign_id=:cid AND status='pending'"),
+            {"cid": cid}).fetchone()
+        if dict_from_row(pending)["n"] > 0:
+            raise HTTPException(400, "Hay emails pendientes de aprobación")
+
+        rejected = db.execute(text(
+            "SELECT COUNT(*) as n FROM campaign_emails WHERE campaign_id=:cid AND status='rejected'"),
+            {"cid": cid}).fetchone()
+        if dict_from_row(rejected)["n"] > 0:
+            raise HTTPException(400, "Hay emails rechazados — regeneralos antes de finalizar")
+
+        db.execute(text("UPDATE campaigns SET status='scheduled' WHERE id=:id"), {"id": cid})
+        db.commit()
+        return {"success": True, "message": "Campaña programada exitosamente"}
+    finally:
+        db.close()
+
+@app.post("/campaigns/{cid}/send-now")
+async def send_campaign_now(cid: int, _: str = Depends(require_auth)):
+    """Envía todos los emails aprobados de la campaña inmediatamente."""
+    db = get_db()
+    try:
+        camp = dict_from_row(db.execute(text("SELECT * FROM campaigns WHERE id=:id"), {"id": cid}).fetchone())
+        if not camp:
+            raise HTTPException(404, "Campaña no encontrada")
+
+        emails = rows_to_list(db.execute(text(
+            "SELECT * FROM campaign_emails WHERE campaign_id=:id AND status='approved' ORDER BY day_number"),
+            {"id": cid}).fetchall())
+        contacts_rows = rows_to_list(db.execute(text(
+            "SELECT email FROM campaign_contacts WHERE campaign_id=:id"), {"id": cid}).fetchall())
+        contact_emails = [r["email"] for r in contacts_rows]
+
+        if not emails:
+            raise HTTPException(400, "No hay emails aprobados para enviar")
+        if not contact_emails:
+            raise HTTPException(400, "No hay contactos en la campaña")
+
+        c = cfg()
+        style_cfg = _build_style()
+        results = []
+
+        for em in emails:
+            body_html = build_html_email(em["body"], style_cfg)
+            for to in contact_emails:
+                try:
+                    send_resend(to, em["subject"], em["body"], body_html)
+                    results.append({"email_day": em["day_number"], "to": to, "ok": True})
+                except Exception as e:
+                    results.append({"email_day": em["day_number"], "to": to, "ok": False, "error": str(e)})
+
+        db.execute(text("UPDATE campaigns SET status='sent' WHERE id=:id"), {"id": cid})
+        db.commit()
+        sent_ok = sum(1 for r in results if r["ok"])
+        return {"success": True, "sent": sent_ok, "failed": len(results)-sent_ok, "results": results}
+    finally:
+        db.close()
+
+# ─────────────────────────────────────────────
+# ROUTES — FRONTEND SPA
+# ─────────────────────────────────────────────
 @app.head("/")
 async def head_frontend():
-    from fastapi.responses import Response
-    return Response(status_code=200)
+    return JSONResponse({})
 
 @app.get("/")
 async def serve_frontend():
     if INDEX_PATH and os.path.exists(INDEX_PATH):
-        return FileResponse(INDEX_PATH)
-
-    root_index = os.path.join(BASE, "index.html")
-    if os.path.exists(root_index):
-        return FileResponse(root_index)
-
-    logger.error(f"No se pudo encontrar index.html. INDEX_PATH={INDEX_PATH}, BASE={BASE}")
+        return FileResponse(INDEX_PATH, media_type="text/html")
     return JSONResponse({"error": "Frontend no encontrado"}, status_code=404)
 
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
-    if full_path.startswith(tuple(API_PATHS)) or full_path in API_PATHS:
+    if any(full_path.startswith(p) for p in API_PATHS):
         raise HTTPException(404, "Not found")
-
-    if any(full_path.endswith(ext) for ext in ['.js', '.css', '.png', '.jpg', '.svg', '.ico', '.json']):
-        raise HTTPException(404, "Not found")
-
     if INDEX_PATH and os.path.exists(INDEX_PATH):
-        return FileResponse(INDEX_PATH)
-
-    root_index = os.path.join(BASE, "index.html")
-    if os.path.exists(root_index):
-        return FileResponse(root_index)
-
+        return FileResponse(INDEX_PATH, media_type="text/html")
     return JSONResponse({"error": "Frontend no encontrado"}, status_code=404)
 
 if __name__ == "__main__":
-    try:
-        init_db()
-    except Exception as e:
-        logger.error(f"Error inicializando base de datos: {e}")
-        logger.info("Continuando con la inicialización de la app...")
-
+    init_db()
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run("api:app", host="0.0.0.0", port=port)

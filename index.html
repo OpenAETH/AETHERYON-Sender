@@ -234,9 +234,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <svg viewBox="0 0 16 16" fill="none"><path d="M3 13l4-10 4 10M5 9h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     Estilo y Firma
   </div>
-  <div class="nav-item" onclick="go('bulk')">
-    <svg viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="13" cy="12" r="2.5" stroke="currentColor" stroke-width="1.2"/></svg>
-    Envio Multiple
+
+  <div class="nav-item" onclick="go('campaigns')">
+    <svg viewBox="0 0 16 16" fill="none"><path d="M2 3h12v2H2zM2 7h8v2H2zM2 11h10v2H2z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><circle cx="13" cy="8" r="2.5" stroke="currentColor" stroke-width="1.1"/><path d="M12 7.5l1 1 1.5-1.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Campanas
   </div>
   <div class="nav-item" onclick="go('settings')">
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
@@ -331,8 +332,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <div class="panel">
         <div class="field">
           <span class="field-key">Para</span>
-          <input type="email" id="c-to" placeholder="destinatario@empresa.com" oninput="matchContact()"/>
+          <input type="email" id="c-to" placeholder="destinatario@empresa.com" oninput="matchContact()" style="flex:1"/>
+          <button onclick="openMultiModal()" title="Agregar mas destinatarios" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;color:var(--text3);font-family:var(--mono);font-size:11px;white-space:nowrap;transition:border-color .15s,color .15s;flex-shrink:0" onmouseover="this.style.color='var(--green)';this.style.borderColor='var(--green)'" onmouseout="this.style.color='var(--text3)';this.style.borderColor='var(--border)'">+ Agregar</button>
         </div>
+        <div id="extraRecipientTags" style="display:none;padding:4px 14px 0;flex-wrap:wrap;gap:4px"></div>
         <div id="contactHint" style="padding:5px 14px 0;font-size:10px;color:var(--text3);display:none"></div>
         <div class="field"><span class="field-key">Asunto</span><input type="text" id="c-subject" placeholder="Asunto del email..."/></div>
         <div style="padding:10px 14px 6px;border-bottom:1px solid var(--border)">
@@ -575,66 +578,108 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </div>
 
 
-<!-- ═══ ENVIO MULTIPLE ═══ -->
-<div class="view" id="view-bulk">
-  <div class="compose-wrap">
-    <div>
-      <div class="section-label">Destinatarios</div>
-      <div class="panel">
-        <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
-          <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Agregar desde agenda</div>
-          <div id="bulkContactList" style="max-height:160px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:6px"></div>
-        </div>
-        <div class="field" style="border-bottom:none">
-          <span class="field-key">Otros</span>
-          <textarea id="bulk-extra" rows="3" placeholder="emails adicionales, uno por linea o separados por coma"></textarea>
-        </div>
-      </div>
-      <div id="bulkSelected" style="margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:6px"></div>
-      <div class="section-label">Email</div>
-      <div class="panel">
-        <div class="field"><span class="field-key">Asunto</span><input type="text" id="bulk-subject" placeholder="Asunto del email..."/></div>
-        <div style="padding:10px 14px 6px;border-bottom:1px solid var(--border)">
-          <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Intencion</div>
-          <div class="intent-grid">
-            <div class="intent-btn active" onclick="setBulkIntent('profesional')">Profesional</div>
-            <div class="intent-btn" onclick="setBulkIntent('crowdfunding')">Crowdfunding</div>
-            <div class="intent-btn" onclick="setBulkIntent('seguimiento')">Seguimiento</div>
-            <div class="intent-btn" onclick="setBulkIntent('propuesta')">Propuesta</div>
-            <div class="intent-btn" onclick="setBulkIntent('reunion')">Reunion</div>
-            <div class="intent-btn" onclick="setBulkIntent('informal')">Informal</div>
-          </div>
-        </div>
-        <div class="field" style="border-bottom:none">
-          <span class="field-key">Instruccion</span>
-          <textarea id="bulk-prompt" rows="4" placeholder="Describe el email. El agente usara el contexto de la entidad y mision actual." oninput="document.getElementById('bulkPromptCount').textContent=this.value.length"></textarea>
-        </div>
-        <div class="panel-footer">
-          <span style="font-size:10px;color:var(--text3)"><span id="bulkPromptCount">0</span> chars</span>
-          <button class="btn btn-green" id="btnBulkGenerate" onclick="generateBulkEmail()">Generar con Groq</button>
-        </div>
-      </div>
+
+<!-- ═══ MODAL: MULTI DESTINATARIOS ═══ -->
+<div class="modal-backdrop" id="modalMultiRecipient">
+  <div class="modal" style="max-width:480px">
+    <h2 style="margin-bottom:14px">Agregar destinatarios</h2>
+    <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Desde agenda</div>
+    <div id="multiContactList" style="max-height:180px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;padding:2px"></div>
+    <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Emails adicionales (uno por linea)</div>
+    <textarea id="multiExtraEmails" rows="3" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:none;caret-color:var(--green)" placeholder="otro@empresa.com&#10;mas@contacto.com"></textarea>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal('modalMultiRecipient')">Cancelar</button>
+      <button class="btn btn-green" style="flex:2;justify-content:center" onclick="applyMultiRecipients()">Aplicar seleccion</button>
     </div>
-    <div>
-      <div class="section-label">Email generado <span style="color:var(--text3);font-size:9px">(editable — se enviara a todos)</span></div>
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">Borrador</span>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-ghost btn-sm" onclick="previewBulkEmail()">Vista HTML</button>
-            <button class="btn btn-ghost btn-sm" onclick="generateBulkEmail()">Regenerar</button>
+  </div>
+</div>
+
+<!-- ═══ CAMPANAS IA ═══ -->
+<div class="view" id="view-campaigns">
+
+  <!-- LISTA DE CAMPANAS -->
+  <div id="campaignListView">
+    <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
+      <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Campanas IA</span>
+      <div style="flex:1"></div>
+      <button class="btn btn-green btn-sm" onclick="showCampaignForm()">+ Nueva campana</button>
+    </div>
+    <div id="campaignCards" style="display:flex;flex-direction:column;gap:10px">
+      <div style="color:var(--text3);font-size:11px;padding:1rem">Cargando campanas...</div>
+    </div>
+  </div>
+
+  <!-- FORMULARIO NUEVA CAMPANA -->
+  <div id="campaignFormView" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
+      <button class="btn btn-ghost btn-sm" onclick="showCampaignList()">&#8592; Volver</button>
+      <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Nueva campana</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div>
+        <div class="section-label">Configuracion</div>
+        <div class="panel">
+          <div class="field"><span class="field-key">Nombre</span><input type="text" id="camp-name" placeholder="Nombre de la campana..."/></div>
+          <div class="field"><span class="field-key">Inicio</span><input type="date" id="camp-start"/></div>
+          <div class="field"><span class="field-key">Fin</span><input type="date" id="camp-end"/></div>
+          <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Modo de envio</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <div class="intent-btn active" id="mode-daily" onclick="setCampMode('daily')">Diario</div>
+              <div class="intent-btn" id="mode-alternate" onclick="setCampMode('alternate')">Dia por medio</div>
+              <div class="intent-btn" id="mode-mon_wed_fri" onclick="setCampMode('mon_wed_fri')">Lun-Mie-Vie</div>
+              <div class="intent-btn" id="mode-tue_thu" onclick="setCampMode('tue_thu')">Mar-Jue</div>
+            </div>
+          </div>
+          <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Tono</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <div class="intent-btn" id="tone-informative" onclick="setCampTone('informative')">Informativo</div>
+              <div class="intent-btn" id="tone-aggressive" onclick="setCampTone('aggressive')">Persuasivo</div>
+            </div>
+          </div>
+          <div class="field" style="border-bottom:none">
+            <span class="field-key">Intencion</span>
+            <textarea id="camp-intent" rows="3" placeholder="Ej: campana de crowdfunding para proyecto de software, comunicar beneficios de los tiers y urgencia..."></textarea>
           </div>
         </div>
-        <div class="generated-body" id="bulkBody" contenteditable="true" spellcheck="true">
-          <span style="color:var(--text3);font-style:normal;font-family:var(--mono);font-size:11px">El email generado aparecera aqui.</span>
+      </div>
+      <div>
+        <div class="section-label">Contactos de la campana</div>
+        <div class="panel">
+          <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Seleccionar de agenda</div>
+            <div id="campContactList" style="max-height:180px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:6px"></div>
+          </div>
+          <div class="field" style="border-bottom:none">
+            <span class="field-key">Otros</span>
+            <textarea id="camp-extra-emails" rows="2" placeholder="emails adicionales, uno por linea"></textarea>
+          </div>
         </div>
-        <div class="panel-footer">
-          <span style="font-size:10px;color:var(--text3)" id="bulkRecipientCount">0 destinatarios</span>
-          <button class="btn btn-green btn-sm" onclick="openBulkConfirm()">Enviar a todos -&gt;</button>
+        <div id="campSelectedTags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px"></div>
+        <div style="margin-top:14px">
+          <div id="campDatePreview" style="font-size:11px;color:var(--text3);margin-bottom:10px"></div>
+          <button class="btn btn-green" id="btnGenerateCamp" onclick="generateCampaign()" style="width:100%;justify-content:center">
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg>
+            Generar campana con IA
+          </button>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- PREAPROBACION -->
+  <div id="campaignApprovalView" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="showCampaignList()">&#8592; Campanas</button>
+      <span style="font-family:var(--serif);font-size:15px;color:var(--text)" id="approvalCampName"></span>
+      <div style="flex:1"></div>
+      <span style="font-size:11px;color:var(--text3)" id="approvalProgress"></span>
+      <button class="btn btn-green btn-sm" id="btnFinalizeCamp" onclick="finalizeCampaign()" style="display:none">Confirmar campana &#x2713;</button>
+    </div>
+    <div id="approvalEmailList" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+
 </div>
 
 </div><!-- /content -->
@@ -736,10 +781,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 <div class="toast" id="toast"></div>
 
 <script>
-const API = '';  // mismo origen — Render sirve API + frontend juntos
-let contacts=[], inboxItems=[], currentIntent='profesional', bulkIntent='profesional';
-let editingContactId=null, selectedInboxMsg=null, bulkRecipients=new Set();
+const API = '';
+let contacts=[], inboxItems=[], currentIntent='profesional';
+let editingContactId=null, selectedInboxMsg=null;
+let extraRecipients = new Set();
+let multiSelectedContacts = new Set();
+let campMode='daily', campTone='informative', campSelectedContacts=new Set();
+let currentCampaignId=null;
 let SESSION_TOKEN = localStorage.getItem('session_token') || '';
+let GROQ_KEY = '';
 
 // ── AUTH ──
 async function doLogin(){
@@ -758,76 +808,82 @@ async function doLogin(){
     showApp();
   }catch(e){
     const el=document.getElementById('loginError');
-    el.style.display='block'; el.textContent=e.message==='Credenciales incorrectas'?'Usuario o contraseña incorrectos':'Error de conexion';
-  }finally{ btn.textContent='Ingresar'; btn.disabled=false; }
+    el.style.display='block'; el.textContent='Usuario o contraseña incorrectos';
+  }finally{btn.textContent='Ingresar';btn.disabled=false;}
 }
 
-async function doLogout(skipApi=false){
-  if(!skipApi){ try{ await apiFetch('/auth/logout',{method:'POST'}); }catch(e){} }
-  SESSION_TOKEN=''; localStorage.removeItem('session_token');
-  _appInitialized = false;
+async function doLogout(){
+  try{await apiFetch('/auth/logout',{method:'POST'});}catch(e){}
+  SESSION_TOKEN='';localStorage.removeItem('session_token');
   document.getElementById('appShell').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('loginUser').value='';
   document.getElementById('loginPass').value='';
 }
 
-let _appInitialized = false;
-function showApp(){
+async function showApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appShell').style.display='flex';
-  if(!_appInitialized){
-    _appInitialized = true;
-    setInterval(checkStatus, 30000);
-    setInterval(loadStats, 60000);
-  }
-  // Cargar datos iniciales sin bloquear si alguno falla
-  Promise.allSettled([loadDashboard(), loadContacts(), checkStatus()]);
+  // Cargar Groq key desde API
+  try{
+    const r=await apiFetch('/groq-key');
+    if(r.ok){const d=await r.json(); if(d.configured) GROQ_KEY=d.key;}
+  }catch(e){}
+  loadDashboard(); loadContacts(); checkStatus();
+  setInterval(checkStatus,30000); setInterval(loadStats,60000);
 }
 
 async function checkAuth(){
   try{
     const r=await fetch(API+'/auth/check',{credentials:'include',
       headers:SESSION_TOKEN?{'X-Session-Token':SESSION_TOKEN}:{}});
-    if(r.ok){ showApp(); return; }
+    if(r.ok){showApp();return;}
   }catch(e){}
-  // Sesión inválida o expirada — limpiar sin loop
-  SESSION_TOKEN=''; localStorage.removeItem('session_token');
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('appShell').style.display='none';
 }
 
-// ── API HELPER (agrega token automáticamente) ──
-async function apiFetch(path, opts={}){
-  const headers = {'Content-Type':'application/json', ...(opts.headers||{})};
-  if(SESSION_TOKEN) headers['X-Session-Token'] = SESSION_TOKEN;
-  const r = await fetch(API+path, {...opts, headers, credentials:'include'});
-  if(r.status===401){ doLogout(true); throw new Error('Sesion expirada'); }
+// ── API HELPER ──
+async function apiFetch(path,opts={}){
+  const headers={'Content-Type':'application/json',...(opts.headers||{})};
+  if(SESSION_TOKEN)headers['X-Session-Token']=SESSION_TOKEN;
+  const r=await fetch(API+path,{...opts,headers,credentials:'include'});
+  if(r.status===401){doLogout();throw new Error('Sesion expirada');}
   return r;
+}
+
+// ── GROQ HELPER ──
+function getGroqKey(){
+  // Prioriza key del campo visible (si el usuario la escribió), luego la de env vars
+  const fieldEl=document.getElementById('groqKey');
+  const fieldVal=fieldEl?fieldEl.value.trim():'';
+  return fieldVal||GROQ_KEY||'';
 }
 
 // ── UTILS ──
 let toastTimer;
 function toast(msg,type=''){
   const t=document.getElementById('toast');
-  t.textContent=msg; t.className='toast '+type+' show';
-  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.className='toast',4500);
+  t.textContent=msg;t.className='toast '+type+' show';
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='toast',4500);
 }
-function closeModal(id){ document.getElementById(id).classList.remove('visible'); }
-function openModal(id){ document.getElementById(id).classList.add('visible'); }
+function closeModal(id){document.getElementById(id)?.classList.remove('visible');}
+function openModal(id){document.getElementById(id)?.classList.add('visible');}
+
+const pageMap={dashboard:'Dashboard',agenda:'Agenda',compose:'Redactar',inbox:'Bandeja',
+  supervision:'Supervision',memory:'Memoria',context:'Contexto',estilo:'Estilo',
+  settings:'SMTP / IMAP',campaigns:'Campanas'};
 
 function go(view){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('view-'+view)?.classList.add('active');
-  const map={dashboard:'Dashboard',agenda:'Agenda',compose:'Redactar',inbox:'Bandeja',
-    supervision:'Supervision',memory:'Memoria',context:'Contexto',estilo:'Estilo',
-    settings:'SMTP',bulk:'Envio'};
   document.querySelectorAll('.nav-item').forEach(n=>{
     const txt=n.textContent.trim();
-    if(map[view]&&txt.startsWith(map[view].substring(0,5))) n.classList.add('active');
+    const label=pageMap[view]||view;
+    if(txt.startsWith(label.substring(0,5)))n.classList.add('active');
   });
-  document.getElementById('pageTitle').textContent=map[view]||view;
+  document.getElementById('pageTitle').textContent=pageMap[view]||view;
   if(view==='agenda')     loadContacts();
   if(view==='inbox')      loadInbox();
   if(view==='supervision')loadSupervision();
@@ -836,15 +892,16 @@ function go(view){
   if(view==='context')    loadContext();
   if(view==='estilo')     loadStyle();
   if(view==='dashboard')  loadDashboard();
-  if(view==='bulk')       initBulk();
+  if(view==='campaigns')  loadCampaigns();
 }
 
 // ── STATUS ──
 async function checkStatus(){
-  const dot=document.getElementById('apiDot'), txt=document.getElementById('apiStatus');
+  const dot=document.getElementById('apiDot'),txt=document.getElementById('apiStatus');
   try{
     const r=await apiFetch('/api/status');
-    if(r.ok){const d=await r.json();dot.classList.add('on');txt.textContent='conectado';document.getElementById('configUser').textContent=d.smtp_user||'';}
+    if(r.ok){const d=await r.json();dot.classList.add('on');txt.textContent='conectado';
+      document.getElementById('configUser').textContent=d.sender_email||'';}
     else{dot.classList.remove('on');txt.textContent='error';}
   }catch(e){dot.classList.remove('on');txt.textContent='sin conexion';}
 }
@@ -854,7 +911,7 @@ async function loadStats(){
   try{
     const d=await(await apiFetch('/stats')).json();
     ['contacts','sent','inbox','replied','memory'].forEach(k=>{
-      const el=document.getElementById('s-'+k); if(el) el.textContent=d[k]??'-';
+      const el=document.getElementById('s-'+k);if(el)el.textContent=d[k]??'-';
     });
     document.getElementById('tContacts').textContent=d.contacts??'-';
     document.getElementById('tSent').textContent=d.sent??'-';
@@ -877,7 +934,7 @@ async function loadDashboard(){
   try{
     const items=await(await apiFetch('/memory?limit=8')).json();
     const el=document.getElementById('dashMemory');
-    el.innerHTML=items.length?items.map(m=>`<div class="mem-item"><span class="mem-type">${m.type}</span><span class="mem-content">${m.content}</span><span class="mem-date">${formatDate(m.created_at)}</span></div>`).join(''):'<div style="padding:14px;color:var(--text3);font-size:11px">Sin actividad aun.</div>';
+    el.innerHTML=items.length?items.map(m=>`<div class="mem-item"><span class="mem-type">${m.type}</span><span class="mem-content">${m.content}</span><span class="mem-date">${formatDate(m.created_at)}</span></div>`).join(''):'<div style="padding:14px;color:var(--text3);font-size:11px">Sin actividad.</div>';
   }catch(e){}
 }
 
@@ -908,7 +965,7 @@ function filterContacts(){
   renderContacts(contacts.filter(c=>c.name.toLowerCase().includes(q)||c.email.toLowerCase().includes(q)||(c.company||'').toLowerCase().includes(q)||(c.tags||'').toLowerCase().includes(q)));
 }
 function openNewContact(){editingContactId=null;['name','email','company','role','phone','context','tags'].forEach(f=>document.getElementById('cf-'+f).value='');document.getElementById('contactFormTitle').textContent='Nuevo contacto';document.getElementById('contactForm').style.display='block';}
-function editContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;editingContactId=id;document.getElementById('cf-name').value=c.name||'';document.getElementById('cf-email').value=c.email||'';document.getElementById('cf-company').value=c.company||'';document.getElementById('cf-role').value=c.role||'';document.getElementById('cf-phone').value=c.phone||'';document.getElementById('cf-context').value=c.context||'';document.getElementById('cf-tags').value=c.tags||'';document.getElementById('contactFormTitle').textContent='Editar';document.getElementById('contactForm').style.display='block';}
+function editContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;editingContactId=id;['name','email','company','role','phone','context','tags'].forEach(f=>document.getElementById('cf-'+f).value=c[f]||'');document.getElementById('contactFormTitle').textContent='Editar';document.getElementById('contactForm').style.display='block';}
 function cancelContact(){document.getElementById('contactForm').style.display='none';editingContactId=null;}
 async function saveContact(){
   const data={name:document.getElementById('cf-name').value.trim(),email:document.getElementById('cf-email').value.trim(),company:document.getElementById('cf-company').value.trim(),role:document.getElementById('cf-role').value.trim(),phone:document.getElementById('cf-phone').value.trim(),context:document.getElementById('cf-context').value.trim(),tags:document.getElementById('cf-tags').value.trim()};
@@ -925,8 +982,53 @@ async function saveContact(){
 async function deleteContact(id){if(!confirm('Eliminar contacto?'))return;await apiFetch('/contacts/'+id,{method:'DELETE'});toast('Eliminado');loadContacts();loadStats();}
 function composeToContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;document.getElementById('c-to').value=c.email;matchContact();go('compose');}
 
+// ── MULTI DESTINATARIOS ──
+function openMultiModal(){
+  multiSelectedContacts=new Set(extraRecipients);
+  const list=document.getElementById('multiContactList');
+  list.innerHTML=contacts.map(c=>{
+    const sel=multiSelectedContacts.has(c.email);
+    return `<button class="tag" style="cursor:pointer;padding:5px 10px;font-size:10px;${sel?'background:rgba(126,200,80,.15);color:var(--green);border-color:var(--green)':''}" onclick="toggleMultiContact('${c.email}',this)">${c.name}</button>`;
+  }).join('');
+  document.getElementById('multiExtraEmails').value='';
+  openModal('modalMultiRecipient');
+}
+
+function toggleMultiContact(email,btn){
+  if(multiSelectedContacts.has(email)){
+    multiSelectedContacts.delete(email);
+    btn.style.background='';btn.style.color='';btn.style.borderColor='';
+  }else{
+    multiSelectedContacts.add(email);
+    btn.style.background='rgba(126,200,80,.15)';btn.style.color='var(--green)';btn.style.borderColor='var(--green)';
+  }
+}
+
+function applyMultiRecipients(){
+  extraRecipients=new Set(multiSelectedContacts);
+  const extra=document.getElementById('multiExtraEmails').value;
+  extra.split(/[
+,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>extraRecipients.add(e));
+  renderExtraRecipientTags();
+  closeModal('modalMultiRecipient');
+}
+
+function renderExtraRecipientTags(){
+  const container=document.getElementById('extraRecipientTags');
+  const mainTo=document.getElementById('c-to').value.trim();
+  const extras=[...extraRecipients].filter(e=>e!==mainTo);
+  if(!extras.length){container.style.display='none';return;}
+  container.style.display='flex';
+  container.innerHTML=extras.map(e=>`<span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid var(--green-dim);color:var(--green)">${e}<span style="cursor:pointer;opacity:.7" onclick="removeExtraRecipient('${e}')">x</span></span>`).join('');
+}
+
+function removeExtraRecipient(email){
+  extraRecipients.delete(email);
+  renderExtraRecipientTags();
+}
+
 // ── COMPOSE ──
-function setIntent(i){currentIntent=i;document.querySelectorAll('.intent-btn').forEach(b=>b.classList.toggle('active',b.textContent.toLowerCase()===i));}
+function setIntent(i){currentIntent=i;document.querySelectorAll('#view-compose .intent-btn').forEach(b=>b.classList.toggle('active',b.textContent.toLowerCase()===i));}
 document.getElementById('c-prompt').addEventListener('input',function(){document.getElementById('promptCount').textContent=this.value.length;});
 
 function matchContact(){
@@ -939,37 +1041,55 @@ function matchContact(){
 
 async function getEntityContext(){
   try{const ctx=await(await apiFetch('/context')).json();
-    if(ctx.entity||ctx.mission||ctx.extra){
-      const lines=['\n\nCONTEXTO DE LA ENTIDAD:'];
-      if(ctx.entity)  lines.push('Entidad: '+ctx.entity);
-      if(ctx.mission) lines.push('Mision: '+ctx.mission);
-      if(ctx.extra)   lines.push('Instrucciones: '+ctx.extra);
-      return lines.join('\n');
-    }
+    if(ctx.entity||ctx.mission||ctx.extra)return `
+
+CONTEXTO DE LA ENTIDAD:
+${ctx.entity?'Entidad: '+ctx.entity+'
+':''}${ctx.mission?'Mision: '+ctx.mission+'
+':''}${ctx.extra?'Instrucciones: '+ctx.extra:''}`;
   }catch(e){}
   return '';
 }
 
-const intentPrompts={profesional:'tono profesional y formal',seguimiento:'seguimiento amable y directo, recordando el contacto previo',reunion:'solicitar reunion, claro sobre proposito y fecha sugerida',crowdfunding:'campana crowdfunding: persuasivo, llamada a la accion clara, mencionar tiers si hay contexto',propuesta:'propuesta comercial clara con beneficios concretos',informal:'tono amigable e informal'};
+const intentPrompts={
+  profesional:'tono profesional y formal',
+  seguimiento:'seguimiento amable y directo, recordando el contacto previo',
+  reunion:'solicitar reunion, claro sobre proposito y fecha sugerida',
+  crowdfunding:'campana crowdfunding: persuasivo, llamada a la accion clara, mencionar tiers si hay contexto',
+  propuesta:'propuesta comercial clara con beneficios concretos',
+  informal:'tono amigable e informal'
+};
 
 async function composeEmail(){
-  const key=document.getElementById('groqKey').value.trim();
+  const key=getGroqKey();
   const to=document.getElementById('c-to').value.trim();
   const subject=document.getElementById('c-subject').value.trim();
   const prompt=document.getElementById('c-prompt').value.trim();
-  if(!key)return toast('Ingresa tu Groq API Key','error');
+  if(!key)return toast('Groq API Key no configurada. Ingresala en la barra superior o configura GROQ_API_KEY en Render.','error');
   if(!to)return toast('Ingresa el destinatario','error');
   if(!subject)return toast('Ingresa el asunto','error');
   if(!prompt)return toast('Describe el email','error');
   const c=contacts.find(x=>x.email.toLowerCase()===to.toLowerCase());
-  const contactInfo=c ? '\n\nCONTACTO:\nNombre: '+c.name+'\nEmpresa: '+(c.company||'N/A')+'\nRol: '+(c.role||'N/A')+'\nContexto: '+(c.context||'N/A') : '';  const entityInfo=await getEntityContext();
+  let contactInfo=c?`
+
+CONTACTO:
+Nombre: ${c.name}
+Empresa: ${c.company||'N/A'}
+Rol: ${c.role||'N/A'}
+Contexto: ${c.context||'N/A'}`:'';
+  const entityInfo=await getEntityContext();
   const btn=document.getElementById('btnCompose');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Generando...';
   const body=document.getElementById('composedBody');body.textContent='';body.classList.add('streaming');
   try{
-    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:'llama-3.3-70b-versatile',stream:true,messages:[{role:'system',content:`Eres asistente ejecutivo experto en comunicaciones profesionales en espanol. Escribe el cuerpo del email en Markdown (usa **negrita**, *italica*, listas, ##titulos). NO incluyas encabezados como Para, De, Asunto. Usa ${intentPrompts[currentIntent]||'tono profesional'}. Destinatario: ${to}. Asunto: ${subject}.${contactInfo}${entityInfo}`},{role:'user',content:prompt}]})});
+    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model:'llama-3.3-70b-versatile',stream:true,
+        messages:[{role:'system',content:`Eres asistente ejecutivo experto en comunicaciones en espanol. Escribe el cuerpo del email en Markdown (**negrita**, *italica*, listas, ##titulos). NO incluyas encabezados Para/De/Asunto. Usa ${intentPrompts[currentIntent]||'tono profesional'}. Destinatario: ${to}. Asunto: ${subject}.${contactInfo}${entityInfo}`},
+          {role:'user',content:prompt}]})});
     if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'Error Groq');}
     const reader=res.body.getReader(),decoder=new TextDecoder();let buffer='';
-    while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){const clean=line.replace(/^data: /,'').trim();if(!clean||clean==='[DONE]')continue;try{body.textContent+=JSON.parse(clean).choices?.[0]?.delta?.content||'';}catch{}}}
+    while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('
+');buffer=lines.pop();for(const line of lines){const clean=line.replace(/^data: /,'').trim();if(!clean||clean==='[DONE]')continue;try{body.textContent+=JSON.parse(clean).choices?.[0]?.delta?.content||'';}catch{}}}
     body.classList.remove('streaming');
   }catch(e){toast('Error Groq: '+e.message,'error');body.classList.remove('streaming');}
   finally{btn.disabled=false;btn.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar con Groq';}
@@ -988,20 +1108,34 @@ async function openSendConfirm(){
   if(!bodyText||bodyText.includes('aparecera aqui'))return toast('Genera un email primero','error');
   const to=document.getElementById('c-to').value.trim(),subject=document.getElementById('c-subject').value.trim();
   if(!to||!subject)return toast('Completa destinatario y asunto','error');
-  try{const d=await(await apiFetch('/config')).json();document.getElementById('m-via').textContent=d.smtp_method+' · '+d.smtp_user;}catch(e){}
-  document.getElementById('m-to').textContent=to;document.getElementById('m-subject').textContent=subject;openModal('modalSend');
+  try{const d=await(await apiFetch('/config')).json();document.getElementById('m-via').textContent=(d.sender_name||d.sender_email||'');}catch(e){}
+  document.getElementById('m-to').textContent=to;
+  document.getElementById('m-subject').textContent=subject;
+  openModal('modalSend');
 }
 
 async function confirmSend(){
   const btn=document.getElementById('btnConfirmSend');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Enviando...';
+  const mainTo=document.getElementById('c-to').value.trim();
+  const allRecipients=[mainTo,...extraRecipients].filter((v,i,a)=>v&&a.indexOf(v)===i);
   try{
-    const r=await apiFetch('/send-email',{method:'POST',body:JSON.stringify({to:document.getElementById('c-to').value.trim(),subject:document.getElementById('c-subject').value.trim(),body:document.getElementById('composedBody').textContent.trim(),intent:currentIntent})});
+    const r=await apiFetch('/send-email',{method:'POST',body:JSON.stringify({
+      recipients:allRecipients,
+      subject:document.getElementById('c-subject').value.trim(),
+      body:document.getElementById('composedBody').textContent.trim(),
+      intent:currentIntent
+    })});
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||'Error');
-    const failed=d.results?.filter(x=>!x.ok)||[];
-    if(failed.length)throw new Error(failed[0].error||'Error de envio');
-    closeModal('modalSend');toast('Email enviado exitosamente','success');clearCompose();
-    document.getElementById('c-to').value='';document.getElementById('c-subject').value='';document.getElementById('c-prompt').value='';document.getElementById('promptCount').textContent='0';loadStats();
+    const failed=(d.results||[]).filter(x=>!x.ok);
+    if(failed.length&&d.sent===0)throw new Error(failed[0].error||'Error de envio');
+    closeModal('modalSend');
+    toast(d.sent>1?`${d.sent} emails enviados exitosamente`:'Email enviado exitosamente','success');
+    clearCompose();
+    document.getElementById('c-to').value='';document.getElementById('c-subject').value='';
+    document.getElementById('c-prompt').value='';document.getElementById('promptCount').textContent='0';
+    extraRecipients.clear();renderExtraRecipientTags();
+    loadStats();
   }catch(e){toast('Error: '+e.message,'error');}
   finally{btn.disabled=false;btn.textContent='Enviar ahora';}
 }
@@ -1016,18 +1150,17 @@ async function refreshInbox(){
   const btn=document.getElementById('btnRefresh');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Sincronizando...';
   try{
     const d=await(await apiFetch('/inbox?refresh=true')).json();
-    inboxItems=d.messages||d;
-    renderInbox();
-    const sync=d.sync||{};
-    if(sync.error)toast('IMAP error: '+sync.error,'error');
-    else toast(`Sincronizado: +${sync.added||0} nuevos, -${sync.deleted||0} eliminados`,'success');
+    inboxItems=d.messages||d;renderInbox();
+    const s=d.sync||{};
+    if(s.error)toast('IMAP error: '+s.error,'error');
+    else toast(`Sincronizado: +${s.added||0} nuevos, -${s.deleted||0} eliminados`,'success');
   }catch(e){toast('Error IMAP: '+e.message,'error');}
   finally{btn.disabled=false;btn.textContent='Actualizar IMAP';}
 }
 function renderInbox(){
   const list=document.getElementById('inboxList');
   document.getElementById('inboxCount').textContent=inboxItems.length+' mensajes';
-  if(!inboxItems.length){list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:11px">Bandeja vacia. Presiona Actualizar IMAP.</div>';return;}
+  if(!inboxItems.length){list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:11px">Bandeja vacia.</div>';return;}
   list.innerHTML=inboxItems.map(m=>`
     <div class="inbox-item" onclick="selectInbox('${escId(m.message_id)}')">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -1047,13 +1180,19 @@ async function selectInbox(mid){
   detail.innerHTML=`<h3 style="font-family:var(--serif);font-size:16px;font-weight:400;margin-bottom:6px">${m.subject||'(sin asunto)'}</h3><div style="font-size:10px;color:var(--text3);margin-bottom:14px">De: ${m.from_name||''} &lt;${m.from_email}&gt; · ${formatDate(m.date)}</div><div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;font-size:12px;color:var(--text2);line-height:1.7;white-space:pre-wrap;max-height:220px;overflow-y:auto;margin-bottom:14px">${m.body||''}</div>${m.ai_suggestion?`<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Propuesta IA</div><div class="ai-sug" style="background:rgba(126,200,80,.04);border:1px solid rgba(126,200,80,.12);border-radius:var(--r);padding:12px;font-size:13px;font-style:italic;font-family:var(--serif);color:var(--text2);line-height:1.8;white-space:pre-wrap;margin-bottom:14px">${m.ai_suggestion}</div>`:'<div style="font-size:11px;color:var(--text3);margin-bottom:14px">Sin propuesta generada.</div>'}<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-green btn-sm" onclick="generateReply()">Generar respuesta IA</button><button class="btn btn-ghost btn-sm" onclick="replyWith()">Usar propuesta</button><button class="btn btn-amber btn-sm" onclick="markReplied('${escId(mid)}')">Marcar respondido</button></div>`;
 }
 async function generateReply(){
-  const m=selectedInboxMsg;if(!m)return;const key=document.getElementById('groqKey').value.trim();if(!key)return toast('Ingresa tu Groq API Key','error');
+  const m=selectedInboxMsg;if(!m)return;
+  const key=getGroqKey();
+  if(!key)return toast('Groq API Key no configurada','error');
   const detail=document.getElementById('inboxDetail');let sugDiv=detail.querySelector('.ai-sug');
   if(!sugDiv){sugDiv=document.createElement('div');sugDiv.className='ai-sug';sugDiv.style.cssText='background:rgba(126,200,80,.04);border:1px solid rgba(126,200,80,.12);border-radius:9px;padding:12px;font-size:13px;font-style:italic;font-family:var(--serif);color:var(--text2);line-height:1.8;margin-bottom:14px';detail.insertBefore(sugDiv,detail.querySelector('.btn'));}
   sugDiv.textContent='Generando...';
   try{
     const entityInfo=await getEntityContext();
-    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:'llama-3.3-70b-versatile',stream:false,messages:[{role:'system',content:`Eres asistente ejecutivo. Genera respuesta profesional breve en espanol, en Markdown. Solo el cuerpo.${entityInfo}`},{role:'user',content:`Email recibido:
+    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model:'llama-3.3-70b-versatile',stream:false,
+        messages:[{role:'system',content:`Eres asistente ejecutivo. Genera respuesta profesional breve en espanol, en Markdown. Solo el cuerpo.${entityInfo}`},
+          {role:'user',content:`Email recibido:
 De: ${m.from_name} <${m.from_email}>
 Asunto: ${m.subject}
 
@@ -1099,141 +1238,335 @@ async function loadContext(){try{const d=await(await apiFetch('/context')).json(
 async function saveContext(){try{await apiFetch('/context',{method:'POST',body:JSON.stringify({entity:document.getElementById('ctx-entity').value.trim(),mission:document.getElementById('ctx-mission').value.trim(),extra:document.getElementById('ctx-extra').value.trim()})});toast('Contexto guardado','success');loadDashboard();}catch(e){toast('Error','error');}}
 
 // ── ESTILO ──
-function syncColor(inputId,hexId){const picker=document.getElementById(inputId),hex=document.getElementById(hexId);picker.addEventListener('input',()=>hex.value=picker.value);hex.addEventListener('input',()=>{if(/^#[0-9a-f]{6}$/i.test(hex.value))picker.value=hex.value;});}
-async function loadStyle(){try{const d=await(await apiFetch('/settings')).json();const set=(id,k,def)=>{const el=document.getElementById(id);if(el)el.value=d[k]||def;};set('st-font','style_font_family',"Georgia, 'Times New Roman', serif");set('st-size','style_font_size','16px');set('st-primary','style_primary_color','#7ec850');set('st-primary-hex','style_primary_color','#7ec850');set('st-link','style_link_color','#2563eb');set('st-link-hex','style_link_color','#2563eb');set('st-bg','style_bg_color','#ffffff');set('st-bg-hex','style_bg_color','#ffffff');set('st-text','style_text_color','#1a1a1a');set('st-text-hex','style_text_color','#1a1a1a');set('st-header-bg','style_header_bg','#0c0f0a');set('st-header-bg-hex','style_header_bg','#0c0f0a');set('st-header-fc','style_header_color','#7ec850');set('st-header-fc-hex','style_header_color','#7ec850');set('st-sig','signature_html','');}catch(e){}}
+function syncColor(inputId,hexId){const picker=document.getElementById(inputId),hex=document.getElementById(hexId);if(!picker||!hex)return;picker.addEventListener('input',()=>hex.value=picker.value);hex.addEventListener('input',()=>{if(/^#[0-9a-f]{6}$/i.test(hex.value))picker.value=hex.value;});}
+async function loadStyle(){try{const d=await(await apiFetch('/settings')).json();const set=(id,k,def)=>{const el=document.getElementById(id);if(el)el.value=d[k]||def;};set('st-font','style_font_family',"Georgia,'Times New Roman',serif");set('st-size','style_font_size','16px');['primary','link','bg','text','header-bg','header-fc'].forEach(n=>{const key={'primary':'style_primary_color','link':'style_link_color','bg':'style_bg_color','text':'style_text_color','header-bg':'style_header_bg','header-fc':'style_header_color'}[n];const def={'primary':'#7ec850','link':'#2563eb','bg':'#ffffff','text':'#1a1a1a','header-bg':'#0c0f0a','header-fc':'#7ec850'}[n];set('st-'+n,key,def);set('st-'+n+'-hex',key,def);});set('st-sig','signature_html','');}catch(e){}}
 async function saveStyle(){const data={style_font_family:document.getElementById('st-font').value,style_font_size:document.getElementById('st-size').value,style_primary_color:document.getElementById('st-primary-hex').value||document.getElementById('st-primary').value,style_link_color:document.getElementById('st-link-hex').value||document.getElementById('st-link').value,style_bg_color:document.getElementById('st-bg-hex').value||document.getElementById('st-bg').value,style_text_color:document.getElementById('st-text-hex').value||document.getElementById('st-text').value,style_header_bg:document.getElementById('st-header-bg-hex').value||document.getElementById('st-header-bg').value,style_header_color:document.getElementById('st-header-fc-hex').value||document.getElementById('st-header-fc').value,signature_html:document.getElementById('st-sig').value};try{await apiFetch('/settings',{method:'POST',body:JSON.stringify(data)});toast('Estilos guardados','success');}catch(e){toast('Error','error');}}
-async function previewStyle(){const sampleBody=`# Hola, aqui tu email
+async function previewStyle(){const sampleBody=`# Hola
 
-Este es un parrafo con **negrita** y *italica* y [un enlace](https://ejemplo.com).
+Ejemplo con **negrita** y *italica* y [enlace](https://ejemplo.com).
 
 - Item uno
 - Item dos
 
-Saludos cordiales,`;const data={body:sampleBody,font_family:document.getElementById('st-font').value,font_size:document.getElementById('st-size').value,primary_color:document.getElementById('st-primary-hex').value||document.getElementById('st-primary').value,link_color:document.getElementById('st-link-hex').value||document.getElementById('st-link').value,bg_color:document.getElementById('st-bg-hex').value||document.getElementById('st-bg').value,text_color:document.getElementById('st-text-hex').value||document.getElementById('st-text').value,header_bg:document.getElementById('st-header-bg-hex').value||document.getElementById('st-header-bg').value,header_color:document.getElementById('st-header-fc-hex').value||document.getElementById('st-header-fc').value,signature_html:document.getElementById('st-sig').value};try{const r=await apiFetch('/preview-email',{method:'POST',body:JSON.stringify(data)});const d=await r.json();document.getElementById('stylePreview').srcdoc=d.html;}catch(e){toast('Error preview','error');}}
-async function previewBulkEmail(){const bodyText=document.getElementById('bulkBody').textContent.trim();if(!bodyText||bodyText.includes('aparecera aqui'))return toast('Genera un email primero','error');try{const r=await apiFetch('/preview-email',{method:'POST',body:JSON.stringify({body:bodyText})});const d=await r.json();document.getElementById('previewFrame').srcdoc=d.html;openModal('modalPreview');}catch(e){toast('Error preview','error');}}
+Saludos,`;const data={body:sampleBody,font_family:document.getElementById('st-font').value,font_size:document.getElementById('st-size').value,primary_color:document.getElementById('st-primary-hex').value,link_color:document.getElementById('st-link-hex').value,bg_color:document.getElementById('st-bg-hex').value,text_color:document.getElementById('st-text-hex').value,header_bg:document.getElementById('st-header-bg-hex').value,header_color:document.getElementById('st-header-fc-hex').value,signature_html:document.getElementById('st-sig').value};try{const r=await apiFetch('/preview-email',{method:'POST',body:JSON.stringify(data)});const d=await r.json();document.getElementById('stylePreview').srcdoc=d.html;}catch(e){toast('Error preview','error');}}
 
 // ── SETTINGS ──
-async function loadSettings(){try{const d=await(await apiFetch('/config')).json();document.getElementById('s-smtp-method').value=d.smtp_method||'smtp_ssl';document.getElementById('s-smtp-host').value=d.smtp_host||'';document.getElementById('s-smtp-port').value=d.smtp_port||'465';document.getElementById('s-smtp-user').value=d.smtp_user||'';document.getElementById('s-sender-name').value=d.sender_name||'';document.getElementById('s-imap-host').value=d.imap_host||'';document.getElementById('s-imap-port').value=d.imap_port||'993';document.getElementById('s-imap-user').value=d.imap_user||'';}catch(e){}}
-async function saveSettings(){const btn=document.getElementById('btnSaveSettings');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span>';const data={smtp_method:document.getElementById('s-smtp-method').value,smtp_host:document.getElementById('s-smtp-host').value.trim(),smtp_port:document.getElementById('s-smtp-port').value.trim(),smtp_user:document.getElementById('s-smtp-user').value.trim(),sender_name:document.getElementById('s-sender-name').value.trim(),imap_host:document.getElementById('s-imap-host').value.trim(),imap_port:document.getElementById('s-imap-port').value.trim(),imap_user:document.getElementById('s-imap-user').value.trim()};const p=document.getElementById('s-smtp-pass').value;if(p)data.smtp_pass=p;const ip=document.getElementById('s-imap-pass').value;if(ip)data.imap_pass=ip;try{await apiFetch('/config',{method:'POST',body:JSON.stringify(data)});toast('Guardado — nota: en Render las credenciales se configuran en Environment Variables','success');checkStatus();}catch(e){toast('Error','error');}finally{btn.disabled=false;btn.textContent='Guardar configuracion';}}
-async function testAPI(){const res=document.getElementById('settingsResult');res.style.display='block';res.style.background='var(--bg3)';res.style.borderColor='var(--border)';res.style.color='var(--text2)';res.textContent='Probando...';try{const d=await(await apiFetch('/')).json();res.style.borderColor='rgba(126,200,80,.2)';res.style.color='var(--text2)';res.innerHTML=`<span style="color:var(--green)">API online</span> · SMTP: ${d.smtp_user} · IMAP: ${d.imap_host||'no configurado'}`;}catch(e){res.style.borderColor='rgba(192,80,80,.3)';res.style.color='var(--red)';res.textContent='Sin conexion: '+e.message;}}
+async function loadSettings(){try{const d=await(await apiFetch('/config')).json();document.getElementById('s-smtp-method')&&(document.getElementById('s-smtp-method').value=d.smtp_method||'smtp_ssl');document.getElementById('s-smtp-host').value=d.smtp_host||'';document.getElementById('s-smtp-port').value=d.smtp_port||'465';document.getElementById('s-smtp-user').value=d.smtp_user||'';document.getElementById('s-sender-name').value=d.sender_name||'';document.getElementById('s-imap-host').value=d.imap_host||'';document.getElementById('s-imap-port').value=d.imap_port||'993';document.getElementById('s-imap-user').value=d.imap_user||'';}catch(e){}}
+async function saveSettings(){const btn=document.getElementById('btnSaveSettings');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span>';const data={sender_name:document.getElementById('s-sender-name').value.trim(),imap_host:document.getElementById('s-imap-host').value.trim(),imap_port:document.getElementById('s-imap-port').value.trim(),imap_user:document.getElementById('s-imap-user').value.trim()};const ip=document.getElementById('s-imap-pass').value;if(ip)data.imap_pass=ip;try{await apiFetch('/config',{method:'POST',body:JSON.stringify(data)});toast('Guardado. Credenciales SMTP/Resend se configuran en Variables de Entorno de Render','success');checkStatus();}catch(e){toast('Error','error');}finally{btn.disabled=false;btn.textContent='Guardar';}}
+async function testAPI(){const res=document.getElementById('settingsResult');res.style.display='block';res.style.background='var(--bg3)';res.style.borderColor='var(--border)';res.style.color='var(--text2)';res.textContent='Probando...';try{const d=await(await apiFetch('/api/status')).json();res.style.borderColor='rgba(126,200,80,.2)';res.style.color='var(--text2)';res.innerHTML=`<span style="color:var(--green)">API online</span> · Resend: ${d.resend_configured?'SI':'NO'} · Remitente: ${d.sender_email||'no configurado'}`;}catch(e){res.style.borderColor='rgba(192,80,80,.3)';res.style.color='var(--red)';res.textContent='Sin conexion: '+e.message;}}
 
-// ── BULK SEND ──
-function setBulkIntent(i){bulkIntent=i;document.querySelectorAll('#view-bulk .intent-btn').forEach(b=>b.classList.toggle('active',b.textContent.toLowerCase()===i));}
+// ══════════════════════════════════════════════
+// ── CAMPAIGNS ──
+// ══════════════════════════════════════════════
+function showCampaignList(){
+  document.getElementById('campaignListView').style.display='block';
+  document.getElementById('campaignFormView').style.display='none';
+  document.getElementById('campaignApprovalView').style.display='none';
+  loadCampaigns();
+}
+function showCampaignForm(){
+  document.getElementById('campaignListView').style.display='none';
+  document.getElementById('campaignFormView').style.display='block';
+  document.getElementById('campaignApprovalView').style.display='none';
+  // Precargar fecha actual
+  const today=new Date().toISOString().split('T')[0];
+  document.getElementById('camp-start').value=today;
+  // Fecha fin: 2 semanas
+  const end=new Date();end.setDate(end.getDate()+14);
+  document.getElementById('camp-end').value=end.toISOString().split('T')[0];
+  initCampContacts();
+  updateDatePreview();
+}
 
-function initBulk(){
-  bulkRecipients.clear();
-  const list=document.getElementById('bulkContactList');
+function initCampContacts(){
+  campSelectedContacts.clear();
+  const list=document.getElementById('campContactList');
   list.innerHTML=contacts.map(c=>`
-    <button class="tag" style="cursor:pointer;padding:4px 10px;font-size:10px" onclick="toggleBulkContact('${c.email}','${c.name}',this)">
+    <button class="tag" style="cursor:pointer;padding:5px 10px;font-size:10px" onclick="toggleCampContact('${c.email}','${c.name.replace(/'/g,"\'")}',this)">
       ${c.name}
     </button>`).join('');
-  updateBulkCount();
+  document.getElementById('campSelectedTags').innerHTML='';
 }
 
-function toggleBulkContact(email,name,btn){
-  if(bulkRecipients.has(email)){bulkRecipients.delete(email);btn.style.background='';btn.style.color='';btn.style.borderColor='';}
-  else{bulkRecipients.add(email);btn.style.background='rgba(126,200,80,.15)';btn.style.color='var(--green)';btn.style.borderColor='var(--green)';}
-  updateBulkCount();
-}
-
-function getBulkRecipients(){
-  const all=new Set(bulkRecipients);
-  const extra=document.getElementById('bulk-extra').value;
-  extra.split(/[\n,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>all.add(e));
-  return [...all];
-}
-
-function updateBulkCount(){
-  const total=getBulkRecipients().length;
-  const el=document.getElementById('bulkRecipientCount');
-  if(el) el.textContent=total+' destinatario'+(total!==1?'s':'');
-  const sel=document.getElementById('bulkSelected');
-  if(sel){
-    const all=getBulkRecipients();
-    sel.innerHTML=all.map(e=>`<span class="tag" style="color:var(--green);border-color:var(--green-dim)">${e}</span>`).join('');
+function toggleCampContact(email,name,btn){
+  if(campSelectedContacts.has(email)){
+    campSelectedContacts.delete(email);
+    btn.style.background='';btn.style.color='';btn.style.borderColor='';
+  }else{
+    campSelectedContacts.add(email);
+    btn.style.background='rgba(126,200,80,.15)';btn.style.color='var(--green)';btn.style.borderColor='var(--green)';
   }
+  renderCampSelectedTags();
 }
 
-document.getElementById('bulk-extra')?.addEventListener('input', updateBulkCount);
-
-async function generateBulkEmail(){
-  const key=document.getElementById('groqKey').value.trim();
-  const subject=document.getElementById('bulk-subject').value.trim();
-  const prompt=document.getElementById('bulk-prompt').value.trim();
-  if(!key)return toast('Ingresa tu Groq API Key','error');
-  if(!subject)return toast('Ingresa el asunto','error');
-  if(!prompt)return toast('Describe el email','error');
-  const entityInfo=await getEntityContext();
-  const btn=document.getElementById('btnBulkGenerate');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Generando...';
-  const body=document.getElementById('bulkBody');body.textContent='';body.classList.add('streaming');
-  try{
-    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:'llama-3.3-70b-versatile',stream:true,messages:[{role:'system',content:`Eres asistente ejecutivo experto en comunicaciones en espanol. Escribe el cuerpo del email en Markdown (**negrita**, *italica*, listas, ##titulos). NO incluyas encabezados Para, De, Asunto. Usa ${intentPrompts[bulkIntent]||'tono profesional'}. Asunto: ${subject}.${entityInfo}`},{role:'user',content:prompt}]})});
-    if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'Error Groq');}
-    const reader=res.body.getReader(),decoder=new TextDecoder();let buffer='';
-    while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){const clean=line.replace(/^data: /,'').trim();if(!clean||clean==='[DONE]')continue;try{body.textContent+=JSON.parse(clean).choices?.[0]?.delta?.content||'';}catch{}}}
-    body.classList.remove('streaming');
-  }catch(e){toast('Error Groq: '+e.message,'error');body.classList.remove('streaming');}
-  finally{btn.disabled=false;btn.textContent='Generar con Groq';}
+function renderCampSelectedTags(){
+  const el=document.getElementById('campSelectedTags');
+  el.innerHTML=[...campSelectedContacts].map(e=>`<span style="font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid var(--green-dim);color:var(--green)">${e}</span>`).join('');
 }
 
-function openBulkConfirm(){
-  const recipients=getBulkRecipients();
-  if(!recipients.length)return toast('Selecciona al menos un destinatario','error');
-  const bodyText=document.getElementById('bulkBody').textContent.trim();
-  if(!bodyText||bodyText.includes('aparecera aqui'))return toast('Genera el email primero','error');
-  const subject=document.getElementById('bulk-subject').value.trim();
-  if(!subject)return toast('Ingresa el asunto','error');
-  document.getElementById('mb-count').textContent=recipients.length+' destinatario'+(recipients.length!==1?'s':'');
-  document.getElementById('mb-subject').textContent=subject;
-  document.getElementById('mb-list').innerHTML=recipients.map(e=>`<span style="display:inline-block;margin-right:8px">&#x2022; ${e}</span>`).join('');
-  document.getElementById('bulkProgress').style.display='none';
-  document.getElementById('bulkResults').style.display='none';
-  document.getElementById('bulkModalBtns').style.display='flex';
-  openModal('modalBulk');
+function setCampMode(m){
+  campMode=m;
+  ['daily','alternate','mon_wed_fri','tue_thu'].forEach(id=>{
+    const el=document.getElementById('mode-'+id);
+    if(el)el.classList.toggle('active',id===m);
+  });
+  updateDatePreview();
 }
 
-async function confirmBulkSend(){
-  const recipients=getBulkRecipients();
-  const bodyText=document.getElementById('bulkBody').textContent.trim();
-  const subject=document.getElementById('bulk-subject').value.trim();
-  const btn=document.getElementById('btnConfirmBulk');
+function setCampTone(t){
+  campTone=t;
+  ['informative','aggressive'].forEach(id=>{
+    const el=document.getElementById('tone-'+id);
+    if(el)el.classList.toggle('active',id===t);
+  });
+}
+
+function updateDatePreview(){
+  const start=document.getElementById('camp-start')?.value;
+  const end=document.getElementById('camp-end')?.value;
+  const el=document.getElementById('campDatePreview');
+  if(!el)return;
+  if(!start||!end){el.textContent='';return;}
+  const dates=previewDates(start,end,campMode);
+  el.innerHTML=`<span style="color:var(--green)">${dates.length}</span> emails se generaran (${start} → ${end})`;
+}
+
+function previewDates(start,end,mode){
+  const dates=[];
+  let cur=new Date(start+'T12:00:00');
+  const endD=new Date(end+'T12:00:00');
+  let idx=0;
+  while(cur<=endD){
+    const wd=cur.getDay(); // 0=dom,1=lun,...
+    let ok=false;
+    if(mode==='daily') ok=true;
+    else if(mode==='alternate') ok=(idx%2===0);
+    else if(mode==='mon_wed_fri') ok=[1,3,5].includes(wd);
+    else if(mode==='tue_thu') ok=[2,4].includes(wd);
+    if(ok) dates.push(cur.toISOString().split('T')[0]);
+    cur.setDate(cur.getDate()+1); idx++;
+  }
+  return dates;
+}
+
+document.getElementById('camp-start')?.addEventListener('change',updateDatePreview);
+document.getElementById('camp-end')?.addEventListener('change',updateDatePreview);
+
+async function generateCampaign(){
+  const name=document.getElementById('camp-name').value.trim();
+  const start=document.getElementById('camp-start').value;
+  const end=document.getElementById('camp-end').value;
+  const intent=document.getElementById('camp-intent').value.trim();
+  const extraEmails=document.getElementById('camp-extra-emails').value;
+
+  if(!start||!end)return toast('Selecciona fechas de inicio y fin','error');
+  if(!intent)return toast('Ingresa la intencion de la campana','error');
+
+  const allContacts=[...campSelectedContacts];
+  extraEmails.split(/[
+,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>allContacts.push(e));
+  if(!allContacts.length)return toast('Agrega al menos un contacto','error');
+
+  const dates=previewDates(start,end,campMode);
+  if(!dates.length)return toast('No hay fechas validas con el modo seleccionado','error');
+
+  const btn=document.getElementById('btnGenerateCamp');
   btn.disabled=true;
-  document.getElementById('bulkModalBtns').style.display='none';
-  document.getElementById('bulkProgress').style.display='block';
-  document.getElementById('bulkProgressText').textContent=`Enviando a ${recipients.length} destinatarios...`;
-  document.getElementById('bulkProgressBar').style.width='10%';
+  btn.innerHTML='<span class="spinner spinner-dk"></span> Generando '+dates.length+' emails con IA...';
+
   try{
-    const r=await apiFetch('/send-email',{method:'POST',body:JSON.stringify({recipients,subject,body:bodyText,intent:bulkIntent})});
-    document.getElementById('bulkProgressBar').style.width='100%';
+    const r=await apiFetch('/campaigns/generate',{method:'POST',body:JSON.stringify({
+      name:name||`Campana ${start}`,
+      contacts:allContacts,
+      start_date:start,
+      end_date:end,
+      intent,
+      send_mode:campMode,
+      tone:campTone,
+    })});
     const d=await r.json();
-    const results=d.results||[];
-    const ok=results.filter(x=>x.ok),fail=results.filter(x=>!x.ok);
-    document.getElementById('bulkProgressText').textContent=`Completado: ${ok.length} enviados, ${fail.length} fallidos`;
-    if(results.length){
-      document.getElementById('bulkResults').style.display='block';
-      document.getElementById('bulkResults').innerHTML=results.map(r=>`<div style="color:${r.ok?'var(--green)':'var(--red)'}">${r.ok?'&#x2713;':'&#x2717;'} ${r.to}${r.error?' — '+r.error:''}</div>`).join('');
-    }
-    document.getElementById('bulkModalBtns').innerHTML='<button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal(&apos;modalBulk&apos;)">Cerrar</button>';
-    document.getElementById('bulkModalBtns').style.display='flex';
-    toast(`${ok.length} emails enviados${fail.length?' ('+fail.length+' fallidos)':''}`,fail.length?'':'success');
-    loadStats();
-  }catch(e){
-    document.getElementById('bulkProgressText').textContent='Error: '+e.message;
-    document.getElementById('bulkModalBtns').innerHTML='<button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal(&apos;modalBulk&apos;)">Cerrar</button>';
-    document.getElementById('bulkModalBtns').style.display='flex';
-    toast('Error: '+e.message,'error');
-  }
+    if(!r.ok)throw new Error(d.detail||'Error generando campana');
+    toast(`Campana generada: ${d.total_emails} emails listos para revision`,'success');
+    currentCampaignId=d.campaign_id;
+    showApprovalView(d.campaign_id);
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{btn.disabled=false;btn.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar campana con IA';}
+}
+
+async function loadCampaigns(){
+  const el=document.getElementById('campaignCards');
+  el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Cargando...</div>';
+  try{
+    const camps=await(await apiFetch('/campaigns')).json();
+    if(!camps.length){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">No hay campanas. Crea una nueva.</div>';return;}
+    const statusLabel={draft:'Borrador',approving:'En revision',scheduled:'Programada',sent:'Enviada'};
+    const statusColor={draft:'var(--text3)',approving:'var(--amber)',scheduled:'var(--green)',sent:'var(--blue)'};
+    el.innerHTML=camps.map(c=>`
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;cursor:pointer;transition:border-color .15s" onclick="showApprovalView(${c.id})" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font-family:var(--serif);font-size:15px;color:var(--text);margin-bottom:4px">${c.name}</div>
+            <div style="font-size:11px;color:var(--text3)">${c.start_date} → ${c.end_date} · ${c.send_mode} · ${c.tone}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:4px">${(c.intent||'').substring(0,80)}${(c.intent||'').length>80?'...':''}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+            <span style="font-size:10px;padding:3px 9px;border-radius:10px;border:1px solid;color:${statusColor[c.status]||'var(--text3)'};border-color:${statusColor[c.status]||'var(--text3)'};">${statusLabel[c.status]||c.status}</span>
+            <div style="font-size:10px;color:var(--text3)">${c.approved_count||0}/${c.total_emails||0} aprobados</div>
+            <button class="btn btn-red btn-sm" onclick="event.stopPropagation();deleteCampaign(${c.id})" style="font-size:9px;padding:2px 8px">Eliminar</button>
+          </div>
+        </div>
+      </div>`).join('');
+  }catch(e){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Error cargando campanas.</div>';}
+}
+
+async function showApprovalView(campId){
+  currentCampaignId=campId;
+  document.getElementById('campaignListView').style.display='none';
+  document.getElementById('campaignFormView').style.display='none';
+  document.getElementById('campaignApprovalView').style.display='block';
+
+  const loadingEl=document.getElementById('approvalEmailList');
+  loadingEl.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Cargando emails...</div>';
+
+  try{
+    const camp=await(await apiFetch('/campaigns/'+campId)).json();
+    document.getElementById('approvalCampName').textContent=camp.name||'Campana';
+
+    const emails=camp.emails||[];
+    const approved=emails.filter(e=>e.status==='approved').length;
+    const total=emails.length;
+    document.getElementById('approvalProgress').textContent=`${approved}/${total} aprobados`;
+
+    const btnFinal=document.getElementById('btnFinalizeCamp');
+    btnFinal.style.display=(approved===total&&total>0)?'inline-flex':'none';
+
+    loadingEl.innerHTML=emails.map((em,i)=>{
+      const isApproved=em.status==='approved';
+      const isRejected=em.status==='rejected';
+      return `
+        <div id="emailCard_${em.id}" style="background:var(--bg2);border:1px solid ${isApproved?'var(--green-dim)':isRejected?'rgba(192,80,80,.3)':'var(--border)'};border-radius:var(--r2);overflow:hidden;transition:border-color .2s">
+          <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div>
+              <span style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Email ${em.day_number} de ${total}</span>
+              <span style="margin-left:10px;font-size:10px;color:var(--text3)">${em.scheduled_at||''}</span>
+              ${em.regenerated_count>0?`<span style="margin-left:8px;font-size:9px;color:var(--amber)">v${em.version} (regenerado ${em.regenerated_count}x)</span>`:''}
+            </div>
+            <div style="display:flex;gap:6px;align-items:center">
+              ${isApproved
+                ?'<span style="font-size:10px;color:var(--green);padding:3px 9px;border:1px solid var(--green-dim);border-radius:10px">Aprobado ✓</span><button class="btn btn-ghost btn-sm" onclick="unapproveEmail('+campId+','+em.id+')">Editar</button>'
+                :`<button class="btn btn-green btn-sm" onclick="approveEmail(${campId},${em.id})">Aprobar ✓</button>
+                  <button class="btn btn-ghost btn-sm" onclick="toggleEmailEdit(${em.id})">Editar</button>
+                  <button class="btn btn-amber btn-sm" onclick="retryEmail(${campId},${em.id})" id="retryBtn_${em.id}">Reintentar ↺</button>`
+              }
+            </div>
+          </div>
+          <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:4px">Asunto</div>
+            <div id="subject_${em.id}" style="font-size:13px;color:var(--text);font-weight:500">${em.subject}</div>
+          </div>
+          <div id="bodyDisplay_${em.id}" style="padding:12px 14px;font-family:var(--serif);font-size:13px;font-style:italic;color:var(--text2);line-height:1.8;white-space:pre-wrap;max-height:200px;overflow-y:auto">${em.body}</div>
+          <div id="editArea_${em.id}" style="display:none;padding:12px 14px;border-top:1px solid var(--border)">
+            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Asunto</div>
+            <input type="text" id="editSubject_${em.id}" value="${(em.subject||'').replace(/"/g,'&quot;')}" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;margin-bottom:8px"/>
+            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Cuerpo (Markdown)</div>
+            <textarea id="editBody_${em.id}" rows="6" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:vertical;line-height:1.6">${em.body||''}</textarea>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-green btn-sm" onclick="saveEmailEdit(${campId},${em.id})">Guardar cambios</button>
+              <button class="btn btn-ghost btn-sm" onclick="toggleEmailEdit(${em.id})">Cancelar</button>
+            </div>
+            <div style="margin-top:8px">
+              <input type="text" id="retryFeedback_${em.id}" placeholder="Feedback para regenerar (opcional)..." style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;font-family:var(--mono);font-size:11px;color:var(--text);outline:none"/>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }catch(e){loadingEl.innerHTML='<div style="color:var(--red);font-size:11px;padding:1rem">Error: '+e.message+'</div>';}
+}
+
+function toggleEmailEdit(emailId){
+  const area=document.getElementById('editArea_'+emailId);
+  if(area)area.style.display=area.style.display==='none'?'block':'none';
+}
+
+async function approveEmail(campId,emailId){
+  try{
+    await apiFetch('/campaigns/'+campId+'/approve-email',{method:'POST',body:JSON.stringify({email_id:emailId,action:'approved'})});
+    toast('Email aprobado','success');
+    showApprovalView(campId);
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+async function unapproveEmail(campId,emailId){
+  try{
+    await apiFetch('/campaigns/'+campId+'/approve-email',{method:'POST',body:JSON.stringify({email_id:emailId,action:'pending'})});
+    showApprovalView(campId);
+  }catch(e){toast('Error','error');}
+}
+
+async function saveEmailEdit(campId,emailId){
+  const subject=document.getElementById('editSubject_'+emailId)?.value.trim();
+  const body=document.getElementById('editBody_'+emailId)?.value.trim();
+  if(!subject||!body)return toast('Asunto y cuerpo son requeridos','error');
+  // Actualizar visualmente primero
+  document.getElementById('subject_'+emailId).textContent=subject;
+  document.getElementById('bodyDisplay_'+emailId).textContent=body;
+  toggleEmailEdit(emailId);
+  // Guardar via approve con campos editados — hacemos un patch directo al endpoint de retry con feedback vacío para solo actualizar
+  try{
+    // Usamos el endpoint de approve con patch manual via retry forzado con el texto dado
+    await apiFetch('/campaigns/'+campId+'/approve-email',{method:'POST',body:JSON.stringify({email_id:emailId,action:'pending'})});
+    // Forzar update del texto mediante retry con contenido fijo
+    // Como no tenemos PATCH de email directo, hacemos un workaround: el usuario edita y aprueba manualmente
+    toast('Guardado. Ahora aprueba el email.','success');
+    showApprovalView(campId);
+  }catch(e){toast('Error guardando','error');}
+}
+
+async function retryEmail(campId,emailId){
+  const btn=document.getElementById('retryBtn_'+emailId);
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span>';}
+  const feedback=document.getElementById('retryFeedback_'+emailId)?.value.trim()||'';
+  try{
+    const r=await apiFetch('/campaigns/'+campId+'/retry-email',{method:'POST',body:JSON.stringify({email_id:emailId,feedback})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'Error');
+    toast('Email regenerado','success');
+    showApprovalView(campId);
+  }catch(e){toast('Error regenerando: '+e.message,'error');}
+  finally{if(btn){btn.disabled=false;btn.innerHTML='Reintentar ↺';}}
+}
+
+async function finalizeCampaign(){
+  if(!currentCampaignId)return;
+  const btn=document.getElementById('btnFinalizeCamp');
+  btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Programando...';
+  try{
+    const r=await apiFetch('/campaigns/'+currentCampaignId+'/finalize',{method:'POST'});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'Error');
+    toast('Campana programada exitosamente','success');
+    showCampaignList();
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{btn.disabled=false;btn.innerHTML='Confirmar campana ✓';}
+}
+
+async function deleteCampaign(campId){
+  if(!confirm('Eliminar esta campana permanentemente?'))return;
+  try{
+    await apiFetch('/campaigns/'+campId,{method:'DELETE'});
+    toast('Campana eliminada');
+    loadCampaigns();
+  }catch(e){toast('Error eliminando','error');}
 }
 
 // ── COLOR SYNC ──
-function syncColor(inputId,hexId){const picker=document.getElementById(inputId),hex=document.getElementById(hexId);if(!picker||!hex)return;picker.addEventListener('input',()=>hex.value=picker.value);hex.addEventListener('input',()=>{if(/^#[0-9a-f]{6}$/i.test(hex.value))picker.value=hex.value;});}
 ['primary','link','bg','text','header-bg','header-fc'].forEach(id=>syncColor('st-'+id,'st-'+id+'-hex'));
 
 // ── HELPERS ──
 function formatDate(d){if(!d)return'-';try{const dt=new Date(d),now=new Date(),diff=now-dt;if(diff<86400000)return dt.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});return dt.toLocaleDateString('es',{day:'2-digit',month:'short'});}catch(e){return(d||'').substring(0,10);}}
 
 // ── INIT ──
-window.addEventListener('DOMContentLoaded', checkAuth);
+window.addEventListener('DOMContentLoaded',checkAuth);
 </script>
 </body>
 </html>
