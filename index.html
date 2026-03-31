@@ -113,7 +113,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .intent-btn:hover{border-color:var(--border2);color:var(--text2)}
 .intent-btn.active{border-color:var(--green);color:var(--green);background:var(--green-glow)}
 
-/* SUPERVISION */
 .sup-row{display:grid;grid-template-columns:80px 130px 1fr 60px 60px 80px;gap:6px;padding:8px 14px;border-bottom:1px solid var(--border);align-items:center;font-size:11px}
 .sup-row:hover{background:var(--bg3)}
 .sup-header{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);background:var(--bg3)}
@@ -121,7 +120,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .open-email-btn{font-size:9px;padding:2px 7px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:var(--mono);transition:border-color .15s,color .15s}
 .open-email-btn:hover{border-color:var(--green);color:var(--green)}
 
-/* CONTEXT TAB */
 .ctx-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:1rem}
 .ctx-title{font-family:var(--serif);font-size:15px;font-weight:400;color:var(--text);margin-bottom:6px}
 .ctx-hint{font-size:10px;color:var(--text3);margin-bottom:14px;line-height:1.6}
@@ -129,10 +127,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .ctx-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:none;line-height:1.6;caret-color:var(--green)}
 .ctx-input:focus{border-color:var(--border2)}
 
-/* STYLE PREVIEW */
 .preview-frame{width:100%;height:400px;border:1px solid var(--border);border-radius:var(--r2);background:#fff}
 
-/* MODAL */
 .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(5,8,4,.8);z-index:50;align-items:center;justify-content:center}
 .modal-backdrop.visible{display:flex}
 .modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:24px;max-width:680px;width:calc(100% - 2rem);margin:1rem;max-height:90vh;overflow-y:auto}
@@ -154,7 +150,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </head>
 <body>
 
-<!-- ═══ LOGIN SCREEN ═══ -->
+<!-- LOGIN SCREEN -->
 <div id="loginScreen" style="position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center">
   <div style="width:100%;max-width:360px;padding:1.5rem">
     <div style="text-align:center;margin-bottom:2rem">
@@ -264,7 +260,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </div>
 <div class="content">
 
-<!-- ═══ DASHBOARD ═══ -->
+<!-- DASHBOARD -->
 <div class="view active" id="view-dashboard">
   <div class="stats-grid">
     <div class="stat-card"><div class="val" id="s-contacts">-</div><div class="lbl">Contactos</div></div>
@@ -297,7 +293,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ AGENDA ═══ -->
+<!-- AGENDA -->
 <div class="view" id="view-agenda">
   <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
     <input id="searchContact" type="text" placeholder="Buscar por nombre, email, empresa o tag..."
@@ -324,7 +320,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ COMPOSE ═══ -->
+<!-- COMPOSE -->
 <div class="view" id="view-compose">
   <div class="compose-wrap">
     <div>
@@ -388,7 +384,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ INBOX ═══ -->
+<!-- INBOX -->
 <div class="view" id="view-inbox">
   <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
     <span style="font-size:11px;color:var(--text3)" id="inboxCount">- mensajes</span>
@@ -406,7 +402,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ SUPERVISION ═══ -->
+<!-- SUPERVISION -->
 <div class="view" id="view-supervision">
   <div class="panel">
     <div class="panel-header">
@@ -422,7 +418,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ MEMORY ═══ -->
+<!-- MEMORY -->
 <div class="view" id="view-memory">
   <div style="display:flex;gap:10px;margin-bottom:1rem">
     <button class="btn btn-ghost btn-sm" onclick="loadMemory()">Actualizar</button>
@@ -433,7 +429,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ CONTEXTO ═══ -->
+<!-- CONTEXTO -->
 <div class="view" id="view-context">
   <div class="ctx-block">
     <div class="ctx-title">Identidad y Mision</div>
@@ -455,7 +451,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ ESTILO Y FIRMA ═══ -->
+<!-- ESTILO Y FIRMA -->
 <div class="view" id="view-estilo">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
     <div>
@@ -524,7 +520,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
           </div>
           <div class="cfg-field full">
             <label>Firma HTML</label>
-            <textarea id="st-sig" rows="4" placeholder="<strong>Nombre</strong><br>Cargo | Empresa<br><a href='https://...'>web</a>"></textarea>
+            <textarea id="st-sig" rows="4" placeholder="&lt;strong&gt;Nombre&lt;/strong&gt;&lt;br&gt;Cargo | Empresa&lt;br&gt;&lt;a href='https://...'&gt;web&lt;/a&gt;"></textarea>
           </div>
         </div>
         <div class="panel-footer">
@@ -540,7 +536,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ SETTINGS ═══ -->
+<!-- SETTINGS -->
 <div class="view" id="view-settings">
   <div class="section-label">SMTP — Envio</div>
   <div class="panel" style="margin-bottom:1rem">
@@ -579,7 +575,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
 
 
-<!-- ═══ MODAL: MULTI DESTINATARIOS ═══ -->
+<!-- MODAL: MULTI DESTINATARIOS -->
 <div class="modal-backdrop" id="modalMultiRecipient">
   <div class="modal" style="max-width:480px">
     <h2 style="margin-bottom:14px">Agregar destinatarios</h2>
@@ -594,7 +590,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ CAMPANAS IA ═══ -->
+<!-- CAMPANAS IA -->
 <div class="view" id="view-campaigns">
 
   <!-- LISTA -->
@@ -673,7 +669,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     </div>
   </div>
 
-  <!-- REVISION DE CAMPANA (lista completa post-generacion) -->
+  <!-- REVISION DE CAMPANA -->
   <div id="campaignApprovalView" style="display:none">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="showCampaignList()">&#8592; Campanas</button>
@@ -691,7 +687,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </div><!-- /main -->
 </div><!-- /shell -->
 
-<!-- ═══ MODAL: CONFIRM SEND ═══ -->
+<!-- MODAL: CONFIRM SEND -->
 <div class="modal-backdrop" id="modalSend">
   <div class="modal">
     <h2>Confirmar envio</h2>
@@ -706,7 +702,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ MODAL: VER EMAIL (supervision) ═══ -->
+<!-- MODAL: VER EMAIL (supervision) -->
 <div class="modal-backdrop" id="modalEmail">
   <div class="modal" style="max-width:720px">
     <h2 id="modalEmailSubject" style="margin-bottom:6px">Email enviado</h2>
@@ -721,7 +717,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ MODAL: PREVIEW HTML COMPOSE ═══ -->
+<!-- MODAL: PREVIEW HTML COMPOSE -->
 <div class="modal-backdrop" id="modalPreview">
   <div class="modal" style="max-width:720px">
     <h2 style="margin-bottom:14px">Vista previa HTML</h2>
@@ -733,7 +729,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ═══ MODAL: ADD MEMORY ═══ -->
+<!-- MODAL: ADD MEMORY -->
 <div class="modal-backdrop" id="modalMemory">
   <div class="modal">
     <h2>Agregar nota a la memoria</h2>
@@ -761,7 +757,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </div>
 
 
-<!-- ═══ MODAL: CONFIRM BULK SEND ═══ -->
+<!-- MODAL: CONFIRM BULK SEND -->
 <div class="modal-backdrop" id="modalBulk">
   <div class="modal">
     <h2>Confirmar envio multiple</h2>
@@ -784,42 +780,31 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </div>
 
 
-<!-- ═══ MODAL: GENERACION GALERIA DE CAMPANA ═══ -->
+<!-- MODAL: GENERACION GALERIA DE CAMPANA -->
 <div class="modal-backdrop" id="modalCampGen" style="z-index:60">
   <div class="modal" style="max-width:780px;width:calc(100% - 2rem)">
-
-    <!-- Header del modal -->
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
       <div style="flex:1">
         <div style="font-family:var(--serif);font-size:18px;font-weight:400;color:var(--text)" id="campGenTitle">Generando campana...</div>
         <div style="font-size:10px;color:var(--text3);margin-top:3px" id="campGenSubtitle"></div>
       </div>
-      <!-- Progress pills -->
       <div id="campGenPills" style="display:flex;gap:4px;flex-wrap:wrap"></div>
     </div>
-
-    <!-- Barra de progreso -->
     <div style="background:var(--bg3);border-radius:20px;height:3px;overflow:hidden;margin-bottom:16px">
       <div id="campGenBar" style="background:var(--green);height:100%;width:0%;transition:width .4s ease"></div>
     </div>
-
-    <!-- Contenido del email actual -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px" id="campGenContent">
-      <!-- Izquierda: borrador editable -->
       <div>
         <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Asunto</div>
         <div id="campGenSubjectDisplay" style="font-size:13px;color:var(--text);font-weight:500;min-height:20px;padding:6px 10px;background:var(--bg3);border-radius:var(--r);margin-bottom:10px;border:1px solid var(--border)"></div>
         <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Cuerpo</div>
         <div id="campGenBodyDisplay" contenteditable="false" style="font-family:var(--serif);font-size:13px;font-style:italic;color:var(--text2);line-height:1.8;white-space:pre-wrap;min-height:200px;max-height:320px;overflow-y:auto;padding:10px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);outline:none"></div>
       </div>
-      <!-- Derecha: preview HTML o edicion -->
       <div id="campGenRight">
         <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Vista previa HTML</div>
         <iframe id="campGenPreview" style="width:100%;height:360px;border:1px solid var(--border);border-radius:var(--r);background:#fff" srcdoc="<html><body style='display:flex;align-items:center;justify-content:center;height:100%;color:#aaa;font-family:sans-serif;font-size:13px'>Generando...</body></html>"></iframe>
       </div>
     </div>
-
-    <!-- Campo edicion asunto / feedback -->
     <div id="campGenEditArea" style="display:none;margin-bottom:12px">
       <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Editar asunto</div>
       <input type="text" id="campGenEditSubject" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;margin-bottom:8px"/>
@@ -830,8 +815,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <button class="btn btn-ghost btn-sm" onclick="cancelGenEdit()">Cancelar</button>
       </div>
     </div>
-
-    <!-- Feedback para reintentar -->
     <div id="campGenRetryArea" style="display:none;margin-bottom:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px">
       <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Feedback (opcional)</div>
       <div style="display:flex;gap:8px">
@@ -839,8 +822,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <button class="btn btn-amber btn-sm" onclick="retryCurrentEmail()">Regenerar ↺</button>
       </div>
     </div>
-
-    <!-- Botones de accion -->
     <div id="campGenActions" style="display:flex;gap:8px;flex-wrap:wrap">
       <div style="flex:1"></div>
       <button class="btn btn-ghost btn-sm" id="btnCampGenEdit" onclick="toggleGenEdit()">Editar</button>
@@ -852,8 +833,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         Aprobar y siguiente &#x2192;
       </button>
     </div>
-
-    <!-- Estado de generacion -->
     <div id="campGenStatus" style="margin-top:10px;font-size:11px;color:var(--text3);text-align:right"></div>
   </div>
 </div>
@@ -871,7 +850,7 @@ let currentCampaignId=null;
 let SESSION_TOKEN = localStorage.getItem('session_token') || '';
 let GROQ_KEY = '';
 
-// ── AUTH ──
+// AUTH
 async function doLogin(){
   const btn=document.getElementById('btnLogin');
   const user=document.getElementById('loginUser').value.trim();
@@ -904,7 +883,6 @@ async function doLogout(){
 async function showApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appShell').style.display='flex';
-  // Cargar Groq key desde API
   try{
     const r=await apiFetch('/groq-key');
     if(r.ok){const d=await r.json(); if(d.configured) GROQ_KEY=d.key;}
@@ -923,7 +901,6 @@ async function checkAuth(){
   document.getElementById('appShell').style.display='none';
 }
 
-// ── API HELPER ──
 async function apiFetch(path,opts={}){
   const headers={'Content-Type':'application/json',...(opts.headers||{})};
   if(SESSION_TOKEN)headers['X-Session-Token']=SESSION_TOKEN;
@@ -932,15 +909,12 @@ async function apiFetch(path,opts={}){
   return r;
 }
 
-// ── GROQ HELPER ──
 function getGroqKey(){
-  // Prioriza key del campo visible (si el usuario la escribió), luego la de env vars
   const fieldEl=document.getElementById('groqKey');
   const fieldVal=fieldEl?fieldEl.value.trim():'';
   return fieldVal||GROQ_KEY||'';
 }
 
-// ── UTILS ──
 let toastTimer;
 function toast(msg,type=''){
   const t=document.getElementById('toast');
@@ -975,7 +949,6 @@ function go(view){
   if(view==='campaigns')  loadCampaigns();
 }
 
-// ── STATUS ──
 async function checkStatus(){
   const dot=document.getElementById('apiDot'),txt=document.getElementById('apiStatus');
   try{
@@ -986,7 +959,6 @@ async function checkStatus(){
   }catch(e){dot.classList.remove('on');txt.textContent='sin conexion';}
 }
 
-// ── STATS ──
 async function loadStats(){
   try{
     const d=await(await apiFetch('/stats')).json();
@@ -1018,7 +990,6 @@ async function loadDashboard(){
   }catch(e){}
 }
 
-// ── CONTACTS ──
 async function loadContacts(){
   try{contacts=await(await apiFetch('/contacts')).json();renderContacts(contacts);}
   catch(e){toast('Error cargando contactos','error');}
@@ -1062,7 +1033,6 @@ async function saveContact(){
 async function deleteContact(id){if(!confirm('Eliminar contacto?'))return;await apiFetch('/contacts/'+id,{method:'DELETE'});toast('Eliminado');loadContacts();loadStats();}
 function composeToContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;document.getElementById('c-to').value=c.email;matchContact();go('compose');}
 
-// ── MULTI DESTINATARIOS ──
 function openMultiModal(){
   multiSelectedContacts=new Set(extraRecipients);
   const list=document.getElementById('multiContactList');
@@ -1087,8 +1057,7 @@ function toggleMultiContact(email,btn){
 function applyMultiRecipients(){
   extraRecipients=new Set(multiSelectedContacts);
   const extra=document.getElementById('multiExtraEmails').value;
-  extra.split(/[
-,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>extraRecipients.add(e));
+  extra.split(/[\n,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>extraRecipients.add(e));
   renderExtraRecipientTags();
   closeModal('modalMultiRecipient');
 }
@@ -1107,7 +1076,6 @@ function removeExtraRecipient(email){
   renderExtraRecipientTags();
 }
 
-// ── COMPOSE ──
 function setIntent(i){currentIntent=i;document.querySelectorAll('#view-compose .intent-btn').forEach(b=>b.classList.toggle('active',b.textContent.toLowerCase()===i));}
 document.getElementById('c-prompt').addEventListener('input',function(){document.getElementById('promptCount').textContent=this.value.length;});
 
@@ -1124,9 +1092,7 @@ async function getEntityContext(){
     if(ctx.entity||ctx.mission||ctx.extra)return `
 
 CONTEXTO DE LA ENTIDAD:
-${ctx.entity?'Entidad: '+ctx.entity+'
-':''}${ctx.mission?'Mision: '+ctx.mission+'
-':''}${ctx.extra?'Instrucciones: '+ctx.extra:''}`;
+${ctx.entity?'Entidad: '+ctx.entity+'\n':''}${ctx.mission?'Mision: '+ctx.mission+'\n':''}${ctx.extra?'Instrucciones: '+ctx.extra:''}`;
   }catch(e){}
   return '';
 }
@@ -1168,8 +1134,7 @@ Contexto: ${c.context||'N/A'}`:'';
           {role:'user',content:prompt}]})});
     if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'Error Groq');}
     const reader=res.body.getReader(),decoder=new TextDecoder();let buffer='';
-    while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('
-');buffer=lines.pop();for(const line of lines){const clean=line.replace(/^data: /,'').trim();if(!clean||clean==='[DONE]')continue;try{body.textContent+=JSON.parse(clean).choices?.[0]?.delta?.content||'';}catch{}}}
+    while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){const clean=line.replace(/^data: /,'').trim();if(!clean||clean==='[DONE]')continue;try{body.textContent+=JSON.parse(clean).choices?.[0]?.delta?.content||'';}catch{}}}
     body.classList.remove('streaming');
   }catch(e){toast('Error Groq: '+e.message,'error');body.classList.remove('streaming');}
   finally{btn.disabled=false;btn.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar con Groq';}
@@ -1220,7 +1185,6 @@ async function confirmSend(){
   finally{btn.disabled=false;btn.textContent='Enviar ahora';}
 }
 
-// ── INBOX ──
 async function loadInbox(){
   document.getElementById('inboxList').innerHTML='<div style="padding:14px;color:var(--text3);font-size:11px">Cargando cache...</div>';
   try{const d=await(await apiFetch('/inbox')).json();inboxItems=d.messages||d;renderInbox();}
@@ -1251,7 +1215,7 @@ function renderInbox(){
       <div class="ii-date">${formatDate(m.date)}</div>
     </div>`).join('');
 }
-function escId(s){return(s||'').replace(/'/g,"\'").replace(/"/g,'\"');}
+function escId(s){return(s||'').replace(/'/g,"\\'").replace(/"/g,'\\"');}
 async function selectInbox(mid){
   const m=inboxItems.find(x=>(x.message_id||'')==mid);if(!m)return;selectedInboxMsg=m;
   document.querySelectorAll('.inbox-item').forEach(i=>i.classList.remove('selected'));
@@ -1288,7 +1252,6 @@ Redacta una respuesta.`}]})});
 function replyWith(){const m=selectedInboxMsg;if(!m||!m.ai_suggestion)return toast('Genera una propuesta primero','error');document.getElementById('c-to').value=m.from_email;document.getElementById('c-subject').value='Re: '+(m.subject||'');document.getElementById('composedBody').textContent=m.ai_suggestion;go('compose');}
 async function markReplied(mid){await apiFetch('/inbox/mark-replied',{method:'POST',body:JSON.stringify({message_id:mid})});toast('Marcado como respondido');loadInbox();}
 
-// ── SUPERVISION ──
 async function loadSupervision(){
   try{
     const rows=await(await apiFetch('/supervision')).json();
@@ -1306,18 +1269,15 @@ async function openEmailModal(logId){
   try{const row=await(await apiFetch('/logs/'+logId)).json();document.getElementById('modalEmailSubject').textContent=row.subject||'(sin asunto)';document.getElementById('modalEmailMeta').innerHTML=`Para: <b>${row.contact_name||row.contact_email}</b> &lt;${row.contact_email}&gt; · ${formatDate(row.sent_at)} · ${row.intent||''}`;document.getElementById('modalEmailBody').textContent=row.body||'';document.getElementById('modalEmailHtml').srcdoc=row.body_html||'<html><body style="display:flex;align-items:center;justify-content:center;height:100%;color:#aaa;font-family:sans-serif;font-size:13px">Sin HTML</body></html>';openModal('modalEmail');}catch(e){toast('Error cargando email','error');}
 }
 
-// ── MEMORY ──
 async function loadMemory(){
   try{const items=await(await apiFetch('/memory?limit=100')).json();const el=document.getElementById('memoryList');el.innerHTML=items.length?items.map(m=>`<div class="mem-item"><span class="mem-type">${m.type}</span><div style="flex:1">${m.entity?`<div style="font-size:10px;color:var(--text3);margin-bottom:2px">${m.entity}</div>`:''}<div class="mem-content">${m.content}</div></div><span class="mem-date">${formatDate(m.created_at)}</span></div>`).join(''):'<div style="padding:14px;color:var(--text3);font-size:11px">Sin memorias.</div>';}catch(e){}
 }
 function openAddMemory(){document.getElementById('mem-type').value='nota';document.getElementById('mem-entity').value='';document.getElementById('mem-content').value='';openModal('modalMemory');}
 async function saveMemory(){const content=document.getElementById('mem-content').value.trim();if(!content)return toast('Escribe el contenido','error');try{await apiFetch('/memory',{method:'POST',body:JSON.stringify({type:document.getElementById('mem-type').value,entity:document.getElementById('mem-entity').value.trim(),content})});closeModal('modalMemory');toast('Nota guardada','success');loadMemory();loadStats();}catch(e){toast('Error','error');}}
 
-// ── CONTEXT ──
 async function loadContext(){try{const d=await(await apiFetch('/context')).json();document.getElementById('ctx-entity').value=d.entity||'';document.getElementById('ctx-mission').value=d.mission||'';document.getElementById('ctx-extra').value=d.extra||'';}catch(e){}}
 async function saveContext(){try{await apiFetch('/context',{method:'POST',body:JSON.stringify({entity:document.getElementById('ctx-entity').value.trim(),mission:document.getElementById('ctx-mission').value.trim(),extra:document.getElementById('ctx-extra').value.trim()})});toast('Contexto guardado','success');loadDashboard();}catch(e){toast('Error','error');}}
 
-// ── ESTILO ──
 function syncColor(inputId,hexId){const picker=document.getElementById(inputId),hex=document.getElementById(hexId);if(!picker||!hex)return;picker.addEventListener('input',()=>hex.value=picker.value);hex.addEventListener('input',()=>{if(/^#[0-9a-f]{6}$/i.test(hex.value))picker.value=hex.value;});}
 async function loadStyle(){try{const d=await(await apiFetch('/settings')).json();const set=(id,k,def)=>{const el=document.getElementById(id);if(el)el.value=d[k]||def;};set('st-font','style_font_family',"Georgia,'Times New Roman',serif");set('st-size','style_font_size','16px');['primary','link','bg','text','header-bg','header-fc'].forEach(n=>{const key={'primary':'style_primary_color','link':'style_link_color','bg':'style_bg_color','text':'style_text_color','header-bg':'style_header_bg','header-fc':'style_header_color'}[n];const def={'primary':'#7ec850','link':'#2563eb','bg':'#ffffff','text':'#1a1a1a','header-bg':'#0c0f0a','header-fc':'#7ec850'}[n];set('st-'+n,key,def);set('st-'+n+'-hex',key,def);});set('st-sig','signature_html','');}catch(e){}}
 async function saveStyle(){const data={style_font_family:document.getElementById('st-font').value,style_font_size:document.getElementById('st-size').value,style_primary_color:document.getElementById('st-primary-hex').value||document.getElementById('st-primary').value,style_link_color:document.getElementById('st-link-hex').value||document.getElementById('st-link').value,style_bg_color:document.getElementById('st-bg-hex').value||document.getElementById('st-bg').value,style_text_color:document.getElementById('st-text-hex').value||document.getElementById('st-text').value,style_header_bg:document.getElementById('st-header-bg-hex').value||document.getElementById('st-header-bg').value,style_header_color:document.getElementById('st-header-fc-hex').value||document.getElementById('st-header-fc').value,signature_html:document.getElementById('st-sig').value};try{await apiFetch('/settings',{method:'POST',body:JSON.stringify(data)});toast('Estilos guardados','success');}catch(e){toast('Error','error');}}
@@ -1330,22 +1290,17 @@ Ejemplo con **negrita** y *italica* y [enlace](https://ejemplo.com).
 
 Saludos,`;const data={body:sampleBody,font_family:document.getElementById('st-font').value,font_size:document.getElementById('st-size').value,primary_color:document.getElementById('st-primary-hex').value,link_color:document.getElementById('st-link-hex').value,bg_color:document.getElementById('st-bg-hex').value,text_color:document.getElementById('st-text-hex').value,header_bg:document.getElementById('st-header-bg-hex').value,header_color:document.getElementById('st-header-fc-hex').value,signature_html:document.getElementById('st-sig').value};try{const r=await apiFetch('/preview-email',{method:'POST',body:JSON.stringify(data)});const d=await r.json();document.getElementById('stylePreview').srcdoc=d.html;}catch(e){toast('Error preview','error');}}
 
-// ── SETTINGS ──
 async function loadSettings(){try{const d=await(await apiFetch('/config')).json();document.getElementById('s-smtp-method')&&(document.getElementById('s-smtp-method').value=d.smtp_method||'smtp_ssl');document.getElementById('s-smtp-host').value=d.smtp_host||'';document.getElementById('s-smtp-port').value=d.smtp_port||'465';document.getElementById('s-smtp-user').value=d.smtp_user||'';document.getElementById('s-sender-name').value=d.sender_name||'';document.getElementById('s-imap-host').value=d.imap_host||'';document.getElementById('s-imap-port').value=d.imap_port||'993';document.getElementById('s-imap-user').value=d.imap_user||'';}catch(e){}}
 async function saveSettings(){const btn=document.getElementById('btnSaveSettings');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span>';const data={sender_name:document.getElementById('s-sender-name').value.trim(),imap_host:document.getElementById('s-imap-host').value.trim(),imap_port:document.getElementById('s-imap-port').value.trim(),imap_user:document.getElementById('s-imap-user').value.trim()};const ip=document.getElementById('s-imap-pass').value;if(ip)data.imap_pass=ip;try{await apiFetch('/config',{method:'POST',body:JSON.stringify(data)});toast('Guardado. Credenciales SMTP/Resend se configuran en Variables de Entorno de Render','success');checkStatus();}catch(e){toast('Error','error');}finally{btn.disabled=false;btn.textContent='Guardar';}}
 async function testAPI(){const res=document.getElementById('settingsResult');res.style.display='block';res.style.background='var(--bg3)';res.style.borderColor='var(--border)';res.style.color='var(--text2)';res.textContent='Probando...';try{const d=await(await apiFetch('/api/status')).json();res.style.borderColor='rgba(126,200,80,.2)';res.style.color='var(--text2)';res.innerHTML=`<span style="color:var(--green)">API online</span> · Resend: ${d.resend_configured?'SI':'NO'} · Remitente: ${d.sender_email||'no configurado'}`;}catch(e){res.style.borderColor='rgba(192,80,80,.3)';res.style.color='var(--red)';res.textContent='Sin conexion: '+e.message;}}
 
-// ══════════════════════════════════════════════
-// ── CAMPAIGNS ──
-// ══════════════════════════════════════════════
-
-// Estado de generación en curso
+// CAMPAIGNS
 let campGenState = {
   campaignId: null,
   totalEmails: 0,
   currentDay: 1,
   dates: [],
-  emails: {},        // day_number -> {subject, body, status}
+  emails: {},
   generating: false,
 };
 
@@ -1364,7 +1319,6 @@ function showCampaignForm(){
   document.getElementById('camp-start').value=today;
   const end=new Date();end.setDate(end.getDate()+14);
   document.getElementById('camp-end').value=end.toISOString().split('T')[0];
-  // Tono informative activo por defecto
   setCampTone('informative');
   initCampContacts();
   updateDatePreview();
@@ -1441,7 +1395,6 @@ function previewDates(start,end,mode){
   return dates;
 }
 
-// ── INICIO DE GENERACION: crea la campaña y abre el modal galería ──
 async function startCampaignGeneration(){
   const name  = document.getElementById('camp-name').value.trim();
   const start = document.getElementById('camp-start').value;
@@ -1465,7 +1418,6 @@ async function startCampaignGeneration(){
   btn.innerHTML='<span class="spinner spinner-dk"></span> Creando campana...';
 
   try{
-    // Paso 1: init — crea estructura en DB
     const r=await apiFetch('/campaigns/init',{method:'POST',body:JSON.stringify({
       name: name||`Campana ${start}`,
       contacts: allContacts,
@@ -1479,7 +1431,6 @@ async function startCampaignGeneration(){
     const d=await r.json();
     if(!r.ok) throw new Error(d.detail||'Error creando campana');
 
-    // Inicializar estado
     campGenState = {
       campaignId: d.campaign_id,
       totalEmails: d.total_emails,
@@ -1489,9 +1440,7 @@ async function startCampaignGeneration(){
       generating: false,
     };
 
-    // Abrir modal galería
     openCampGenModal(d.campaign_id, d.total_emails, d.dates, name||`Campana ${start}`);
-    // Generar el primer email
     await generateEmailInModal(1);
 
   }catch(e){
@@ -1503,17 +1452,14 @@ async function startCampaignGeneration(){
 }
 
 function openCampGenModal(campId, total, dates, campName){
-  // Título
   document.getElementById('campGenTitle').textContent = campName;
   document.getElementById('campGenSubtitle').textContent = `${total} emails · ${dates[0]} → ${dates[dates.length-1]}`;
 
-  // Pills de progreso
   const pills = document.getElementById('campGenPills');
   pills.innerHTML = dates.map((d,i)=>`
     <div id="pill_${i+1}" style="width:24px;height:24px;border-radius:50%;border:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text3);transition:all .2s;cursor:pointer" onclick="jumpToEmail(${i+1})" title="${d}">${i+1}</div>
   `).join('');
 
-  // Reset UI
   document.getElementById('campGenBar').style.width = '0%';
   document.getElementById('campGenSubjectDisplay').textContent = '';
   document.getElementById('campGenBodyDisplay').textContent = 'Generando...';
@@ -1527,7 +1473,6 @@ function openCampGenModal(campId, total, dates, campName){
 }
 
 function setGenModalButtons(state){
-  // state: generating | ready | done
   const approve = document.getElementById('btnCampGenApprove');
   const retry   = document.getElementById('btnCampGenRetry');
   const edit    = document.getElementById('btnCampGenEdit');
@@ -1540,7 +1485,7 @@ function setGenModalButtons(state){
   } else if(state === 'ready'){
     approve.disabled=false; retry.disabled=false; edit.disabled=false; preview.disabled=false;
     const isLast = campGenState.currentDay >= campGenState.totalEmails;
-    approve.innerHTML = isLast ? 'Aprobar y finalizar &#x2713;' : 'Aprobar y siguiente &#x2192;';
+    approve.innerHTML = isLast ? 'Aprobar y finalizar ✓' : 'Aprobar y siguiente →';
     document.getElementById('retryBtnLabel').textContent = 'Reintentar ↺';
   } else if(state === 'retrying'){
     approve.disabled=true; retry.disabled=true; edit.disabled=true; preview.disabled=true;
@@ -1610,22 +1555,18 @@ async function generateEmailInModal(dayNumber, feedback=''){
           const ev = JSON.parse(raw);
           if(ev.delta){
             fullText += ev.delta;
-            // Mostrar streaming del JSON
             document.getElementById('campGenStatus').textContent = `Generando... ${fullText.length} chars`;
           } else if(ev.done){
-            // Email completo
             campGenState.emails[dayNumber] = {
               subject: ev.subject,
               body: ev.body,
               status: 'pending'
             };
-            // Mostrar en UI
             document.getElementById('campGenSubjectDisplay').textContent = ev.subject;
             document.getElementById('campGenBodyDisplay').textContent = ev.body;
             document.getElementById('campGenBar').style.width = `${(dayNumber/campGenState.totalEmails)*100}%`;
             document.getElementById('campGenStatus').textContent = '';
             setGenModalButtons('ready');
-            // Generar preview HTML
             generateGenPreview(ev.body);
             updatePill(dayNumber, 'pending');
           } else if(ev.error){
@@ -1661,22 +1602,18 @@ async function approveCurrentAndNext(){
   const em  = campGenState.emails[day];
   if(!em) return toast('Sin contenido para aprobar','error');
 
-  // Aprobar en DB
   try{
     await apiFetch(`/campaigns/${campGenState.campaignId}/approve-email`,{
       method:'POST',
-      body: JSON.stringify({email_id: null, day_number: day, action:'approved'})
+      body: JSON.stringify({day_number: day, action:'approved'})
     });
-  }catch(e){
-    // Si falla por email_id null, intentar sin ella — el backend puede manejar day_number
-  }
+  } catch(e){}
 
   campGenState.emails[day].status = 'approved';
   updatePill(day, 'approved');
 
   const next = day + 1;
   if(next > campGenState.totalEmails){
-    // Todos aprobados — cerrar modal y mostrar vista de aprobación
     const bar = document.getElementById('campGenBar');
     bar.style.width = '100%';
     document.getElementById('campGenStatus').textContent = '¡Campana completa! Todos los emails aprobados.';
@@ -1693,7 +1630,6 @@ async function approveCurrentAndNext(){
       document.getElementById('campaignApprovalView').style.display='block';
     }, 1200);
   } else {
-    // Generar el siguiente
     await generateEmailInModal(next);
   }
 }
@@ -1713,8 +1649,6 @@ function toggleGenRetry(){
   area.style.display = area.style.display==='none' ? 'block' : 'none';
   if(area.style.display==='block') document.getElementById('campGenFeedback')?.focus();
 }
-
-// El botón Reintentar usa onclick directo en el HTML
 
 function toggleGenEdit(){
   const area = document.getElementById('campGenEditArea');
@@ -1740,10 +1674,9 @@ function saveGenEdit(){
   document.getElementById('campGenBodyDisplay').textContent = body;
   document.getElementById('campGenEditArea').style.display = 'none';
   generateGenPreview(body);
-  // Actualizar en DB via reintentar silenciosamente (el backend acepta feedback vacío = solo actualizar)
   apiFetch(`/campaigns/${campGenState.campaignId}/retry-email`,{
     method:'POST',
-    body: JSON.stringify({email_id_by_day: day, feedback:`EDIT:${subject}|||${body}`})
+    body: JSON.stringify({day_number: day, feedback:`EDIT:${subject}|||${body}`})
   }).catch(()=>{});
   toast('Cambios guardados','success');
 }
@@ -1757,7 +1690,6 @@ function toggleGenPreviewHtml(){
   genPreviewMode = !genPreviewMode;
   const preview = document.getElementById('campGenPreview');
   const bodyDisplay = document.getElementById('campGenBodyDisplay');
-  const right = document.getElementById('campGenRight');
   if(genPreviewMode){
     preview.style.height = '360px';
     document.getElementById('btnCampGenPreview').textContent = 'Ver Markdown';
@@ -1770,10 +1702,8 @@ async function jumpToEmail(day){
   if(campGenState.generating) return toast('Espera a que termine la generacion actual','error');
   const em = campGenState.emails[day];
   if(!em || !em.subject) {
-    // No generado aún — generar
     await generateEmailInModal(day);
   } else {
-    // Ya generado — mostrar
     campGenState.currentDay = day;
     document.getElementById('campGenTitle').textContent = `Email ${day} de ${campGenState.totalEmails}`;
     document.getElementById('campGenSubtitle').textContent = `Fecha: ${campGenState.dates[day-1]||''}`;
@@ -1781,13 +1711,12 @@ async function jumpToEmail(day){
     document.getElementById('campGenBodyDisplay').textContent = em.body;
     document.getElementById('campGenBar').style.width = `${(day/campGenState.totalEmails)*100}%`;
     generateGenPreview(em.body);
-    setGenModalButtons(em.status==='approved'?'ready':'ready');
+    setGenModalButtons('ready');
     const isLast = day >= campGenState.totalEmails;
-    document.getElementById('btnCampGenApprove').innerHTML = isLast ? 'Aprobar y finalizar &#x2713;' : 'Aprobar y siguiente &#x2192;';
+    document.getElementById('btnCampGenApprove').innerHTML = isLast ? 'Aprobar y finalizar ✓' : 'Aprobar y siguiente →';
   }
 }
 
-// ── LISTA Y APROBACIÓN POSTERIOR ──
 async function loadCampaigns(){
   const el=document.getElementById('campaignCards');
   el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Cargando...</div>';
@@ -1843,7 +1772,6 @@ async function showApprovalView(campId){
     loadingEl.innerHTML=emails.map((em)=>{
       const isApproved=em.status==='approved';
       const isRejected=em.status==='rejected';
-      const isPending=em.status==='pending';
       const isEmpty=!em.subject&&!em.body;
       return `
         <div id="emailCard_${em.id}" style="background:var(--bg2);border:1px solid ${isApproved?'var(--green-dim)':isRejected?'rgba(192,80,80,.3)':'var(--border)'};border-radius:var(--r2);overflow:hidden">
@@ -1884,7 +1812,6 @@ async function showApprovalView(campId){
 }
 
 async function regenFromApproval(campId, dayNumber){
-  // Abrir modal galería en ese día
   const r = await apiFetch('/campaigns/'+campId);
   const camp = await r.json();
   campGenState = {
@@ -1895,7 +1822,6 @@ async function regenFromApproval(campId, dayNumber){
     emails: {},
     generating: false,
   };
-  // Cargar emails ya aprobados en el estado
   (camp.emails||[]).forEach(e=>{
     if(e.subject) campGenState.emails[e.day_number] = {subject:e.subject, body:e.body, status:e.status};
   });
@@ -1962,7 +1888,7 @@ async function finalizeCampaign(){
     toast('Campana programada exitosamente','success');
     showCampaignList();
   }catch(e){toast('Error: '+e.message,'error');}
-  finally{btn.disabled=false;btn.innerHTML='Confirmar campana &#x2713;';}
+  finally{btn.disabled=false;btn.innerHTML='Confirmar campana ✓';}
 }
 
 async function deleteCampaign(campId){
@@ -1974,14 +1900,10 @@ async function deleteCampaign(campId){
   }catch(e){toast('Error eliminando','error');}
 }
 
-
-// ── COLOR SYNC ──
 ['primary','link','bg','text','header-bg','header-fc'].forEach(id=>syncColor('st-'+id,'st-'+id+'-hex'));
 
-// ── HELPERS ──
 function formatDate(d){if(!d)return'-';try{const dt=new Date(d),now=new Date(),diff=now-dt;if(diff<86400000)return dt.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});return dt.toLocaleDateString('es',{day:'2-digit',month:'short'});}catch(e){return(d||'').substring(0,10);}}
 
-// ── INIT ──
 window.addEventListener('DOMContentLoaded',checkAuth);
 </script>
 </body>
