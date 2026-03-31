@@ -113,6 +113,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .intent-btn:hover{border-color:var(--border2);color:var(--text2)}
 .intent-btn.active{border-color:var(--green);color:var(--green);background:var(--green-glow)}
 
+/* SUPERVISION */
 .sup-row{display:grid;grid-template-columns:80px 130px 1fr 60px 60px 80px;gap:6px;padding:8px 14px;border-bottom:1px solid var(--border);align-items:center;font-size:11px}
 .sup-row:hover{background:var(--bg3)}
 .sup-header{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);background:var(--bg3)}
@@ -120,6 +121,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .open-email-btn{font-size:9px;padding:2px 7px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:var(--mono);transition:border-color .15s,color .15s}
 .open-email-btn:hover{border-color:var(--green);color:var(--green)}
 
+/* CONTEXT TAB */
 .ctx-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:1rem}
 .ctx-title{font-family:var(--serif);font-size:15px;font-weight:400;color:var(--text);margin-bottom:6px}
 .ctx-hint{font-size:10px;color:var(--text3);margin-bottom:14px;line-height:1.6}
@@ -127,8 +129,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .ctx-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:none;line-height:1.6;caret-color:var(--green)}
 .ctx-input:focus{border-color:var(--border2)}
 
+/* STYLE PREVIEW */
 .preview-frame{width:100%;height:400px;border:1px solid var(--border);border-radius:var(--r2);background:#fff}
 
+/* MODAL */
 .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(5,8,4,.8);z-index:50;align-items:center;justify-content:center}
 .modal-backdrop.visible{display:flex}
 .modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:24px;max-width:680px;width:calc(100% - 2rem);margin:1rem;max-height:90vh;overflow-y:auto}
@@ -150,7 +154,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </head>
 <body>
 
-<!-- LOGIN SCREEN -->
+<!-- ═══ LOGIN SCREEN ═══ -->
 <div id="loginScreen" style="position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center">
   <div style="width:100%;max-width:360px;padding:1.5rem">
     <div style="text-align:center;margin-bottom:2rem">
@@ -260,7 +264,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </div>
 <div class="content">
 
-<!-- DASHBOARD -->
+<!-- ═══ DASHBOARD ═══ -->
 <div class="view active" id="view-dashboard">
   <div class="stats-grid">
     <div class="stat-card"><div class="val" id="s-contacts">-</div><div class="lbl">Contactos</div></div>
@@ -293,7 +297,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- AGENDA -->
+<!-- ═══ AGENDA ═══ -->
 <div class="view" id="view-agenda">
   <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
     <input id="searchContact" type="text" placeholder="Buscar por nombre, email, empresa o tag..."
@@ -320,7 +324,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- COMPOSE -->
+<!-- ═══ COMPOSE ═══ -->
 <div class="view" id="view-compose">
   <div class="compose-wrap">
     <div>
@@ -384,7 +388,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- INBOX -->
+<!-- ═══ INBOX ═══ -->
 <div class="view" id="view-inbox">
   <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
     <span style="font-size:11px;color:var(--text3)" id="inboxCount">- mensajes</span>
@@ -402,7 +406,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- SUPERVISION -->
+<!-- ═══ SUPERVISION ═══ -->
 <div class="view" id="view-supervision">
   <div class="panel">
     <div class="panel-header">
@@ -418,7 +422,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- MEMORY -->
+<!-- ═══ MEMORY ═══ -->
 <div class="view" id="view-memory">
   <div style="display:flex;gap:10px;margin-bottom:1rem">
     <button class="btn btn-ghost btn-sm" onclick="loadMemory()">Actualizar</button>
@@ -429,7 +433,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- CONTEXTO -->
+<!-- ═══ CONTEXTO ═══ -->
 <div class="view" id="view-context">
   <div class="ctx-block">
     <div class="ctx-title">Identidad y Mision</div>
@@ -451,7 +455,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- ESTILO Y FIRMA -->
+<!-- ═══ ESTILO Y FIRMA ═══ -->
 <div class="view" id="view-estilo">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
     <div>
@@ -520,7 +524,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
           </div>
           <div class="cfg-field full">
             <label>Firma HTML</label>
-            <textarea id="st-sig" rows="4" placeholder="&lt;strong&gt;Nombre&lt;/strong&gt;&lt;br&gt;Cargo | Empresa&lt;br&gt;&lt;a href='https://...'&gt;web&lt;/a&gt;"></textarea>
+            <textarea id="st-sig" rows="4" placeholder="<strong>Nombre</strong><br>Cargo | Empresa<br><a href='https://...'>web</a>"></textarea>
           </div>
         </div>
         <div class="panel-footer">
@@ -536,7 +540,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- SETTINGS -->
+<!-- ═══ SETTINGS ═══ -->
 <div class="view" id="view-settings">
   <div class="section-label">SMTP — Envio</div>
   <div class="panel" style="margin-bottom:1rem">
@@ -575,7 +579,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
 
 
-<!-- MODAL: MULTI DESTINATARIOS -->
+<!-- ═══ MODAL: MULTI DESTINATARIOS ═══ -->
 <div class="modal-backdrop" id="modalMultiRecipient">
   <div class="modal" style="max-width:480px">
     <h2 style="margin-bottom:14px">Agregar destinatarios</h2>
@@ -590,10 +594,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- CAMPANAS IA -->
+<!-- ═══ CAMPANAS IA ═══ -->
 <div class="view" id="view-campaigns">
 
-  <!-- LISTA DE CAMPANAS -->
+  <!-- LISTA -->
   <div id="campaignListView">
     <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
       <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Campanas IA</span>
@@ -616,8 +620,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <div class="section-label">Configuracion</div>
         <div class="panel">
           <div class="field"><span class="field-key">Nombre</span><input type="text" id="camp-name" placeholder="Nombre de la campana..."/></div>
-          <div class="field"><span class="field-key">Inicio</span><input type="date" id="camp-start"/></div>
-          <div class="field"><span class="field-key">Fin</span><input type="date" id="camp-end"/></div>
+          <div class="field"><span class="field-key">Inicio</span><input type="date" id="camp-start" onchange="updateDatePreview()"/></div>
+          <div class="field"><span class="field-key">Fin</span><input type="date" id="camp-end" onchange="updateDatePreview()"/></div>
+          <div class="field">
+            <span class="field-key">Hora envio</span>
+            <input type="time" id="camp-time" value="09:00" style="flex:1;background:transparent;border:none;outline:none;font-family:var(--mono);font-size:13px;color:var(--text);caret-color:var(--green)"/>
+            <span style="font-size:10px;color:var(--text3);margin-left:6px">hora local</span>
+          </div>
           <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
             <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Modo de envio</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -630,13 +639,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
           <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
             <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Tono</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-              <div class="intent-btn" id="tone-informative" onclick="setCampTone('informative')">Informativo</div>
+              <div class="intent-btn active" id="tone-informative" onclick="setCampTone('informative')">Informativo</div>
               <div class="intent-btn" id="tone-aggressive" onclick="setCampTone('aggressive')">Persuasivo</div>
             </div>
           </div>
           <div class="field" style="border-bottom:none">
             <span class="field-key">Intencion</span>
-            <textarea id="camp-intent" rows="3" placeholder="Ej: campana de crowdfunding para proyecto de software, comunicar beneficios de los tiers y urgencia..."></textarea>
+            <textarea id="camp-intent" rows="3" placeholder="Ej: campana de crowdfunding para proyecto de software, comunicar beneficios de los tiers..."></textarea>
           </div>
         </div>
       </div>
@@ -655,7 +664,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <div id="campSelectedTags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px"></div>
         <div style="margin-top:14px">
           <div id="campDatePreview" style="font-size:11px;color:var(--text3);margin-bottom:10px"></div>
-          <button class="btn btn-green" id="btnGenerateCamp" onclick="generateCampaign()" style="width:100%;justify-content:center">
+          <button class="btn btn-green" id="btnGenerateCamp" onclick="startCampaignGeneration()" style="width:100%;justify-content:center">
             <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg>
             Generar campana con IA
           </button>
@@ -664,7 +673,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     </div>
   </div>
 
-  <!-- PREAPROBACION -->
+  <!-- REVISION DE CAMPANA (lista completa post-generacion) -->
   <div id="campaignApprovalView" style="display:none">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="showCampaignList()">&#8592; Campanas</button>
@@ -682,7 +691,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </div><!-- /main -->
 </div><!-- /shell -->
 
-<!-- MODAL: CONFIRM SEND -->
+<!-- ═══ MODAL: CONFIRM SEND ═══ -->
 <div class="modal-backdrop" id="modalSend">
   <div class="modal">
     <h2>Confirmar envio</h2>
@@ -697,7 +706,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- MODAL: VER EMAIL (supervision) -->
+<!-- ═══ MODAL: VER EMAIL (supervision) ═══ -->
 <div class="modal-backdrop" id="modalEmail">
   <div class="modal" style="max-width:720px">
     <h2 id="modalEmailSubject" style="margin-bottom:6px">Email enviado</h2>
@@ -712,7 +721,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- MODAL: PREVIEW HTML COMPOSE -->
+<!-- ═══ MODAL: PREVIEW HTML COMPOSE ═══ -->
 <div class="modal-backdrop" id="modalPreview">
   <div class="modal" style="max-width:720px">
     <h2 style="margin-bottom:14px">Vista previa HTML</h2>
@@ -724,7 +733,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- MODAL: ADD MEMORY -->
+<!-- ═══ MODAL: ADD MEMORY ═══ -->
 <div class="modal-backdrop" id="modalMemory">
   <div class="modal">
     <h2>Agregar nota a la memoria</h2>
@@ -752,7 +761,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </div>
 
 
-<!-- MODAL: CONFIRM BULK SEND -->
+<!-- ═══ MODAL: CONFIRM BULK SEND ═══ -->
 <div class="modal-backdrop" id="modalBulk">
   <div class="modal">
     <h2>Confirmar envio multiple</h2>
@@ -771,6 +780,81 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal('modalBulk')">Cancelar</button>
       <button class="btn btn-green" style="flex:2;justify-content:center" id="btnConfirmBulk" onclick="confirmBulkSend()">Enviar ahora</button>
     </div>
+  </div>
+</div>
+
+
+<!-- ═══ MODAL: GENERACION GALERIA DE CAMPANA ═══ -->
+<div class="modal-backdrop" id="modalCampGen" style="z-index:60">
+  <div class="modal" style="max-width:780px;width:calc(100% - 2rem)">
+
+    <!-- Header del modal -->
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="flex:1">
+        <div style="font-family:var(--serif);font-size:18px;font-weight:400;color:var(--text)" id="campGenTitle">Generando campana...</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px" id="campGenSubtitle"></div>
+      </div>
+      <!-- Progress pills -->
+      <div id="campGenPills" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+    </div>
+
+    <!-- Barra de progreso -->
+    <div style="background:var(--bg3);border-radius:20px;height:3px;overflow:hidden;margin-bottom:16px">
+      <div id="campGenBar" style="background:var(--green);height:100%;width:0%;transition:width .4s ease"></div>
+    </div>
+
+    <!-- Contenido del email actual -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px" id="campGenContent">
+      <!-- Izquierda: borrador editable -->
+      <div>
+        <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Asunto</div>
+        <div id="campGenSubjectDisplay" style="font-size:13px;color:var(--text);font-weight:500;min-height:20px;padding:6px 10px;background:var(--bg3);border-radius:var(--r);margin-bottom:10px;border:1px solid var(--border)"></div>
+        <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Cuerpo</div>
+        <div id="campGenBodyDisplay" contenteditable="false" style="font-family:var(--serif);font-size:13px;font-style:italic;color:var(--text2);line-height:1.8;white-space:pre-wrap;min-height:200px;max-height:320px;overflow-y:auto;padding:10px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);outline:none"></div>
+      </div>
+      <!-- Derecha: preview HTML o edicion -->
+      <div id="campGenRight">
+        <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Vista previa HTML</div>
+        <iframe id="campGenPreview" style="width:100%;height:360px;border:1px solid var(--border);border-radius:var(--r);background:#fff" srcdoc="<html><body style='display:flex;align-items:center;justify-content:center;height:100%;color:#aaa;font-family:sans-serif;font-size:13px'>Generando...</body></html>"></iframe>
+      </div>
+    </div>
+
+    <!-- Campo edicion asunto / feedback -->
+    <div id="campGenEditArea" style="display:none;margin-bottom:12px">
+      <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Editar asunto</div>
+      <input type="text" id="campGenEditSubject" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;margin-bottom:8px"/>
+      <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Editar cuerpo (Markdown)</div>
+      <textarea id="campGenEditBody" rows="6" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:vertical;line-height:1.6"></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn btn-green btn-sm" onclick="saveGenEdit()">Guardar edicion</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelGenEdit()">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- Feedback para reintentar -->
+    <div id="campGenRetryArea" style="display:none;margin-bottom:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px">
+      <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Feedback (opcional)</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="campGenFeedback" placeholder="Ej: mas corto, mas urgente, mencionar el precio..." style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none" onkeydown="if(event.key==='Enter')retryCurrentEmail()"/>
+        <button class="btn btn-amber btn-sm" onclick="retryCurrentEmail()">Regenerar ↺</button>
+      </div>
+    </div>
+
+    <!-- Botones de accion -->
+    <div id="campGenActions" style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost btn-sm" id="btnCampGenEdit" onclick="toggleGenEdit()">Editar</button>
+      <button class="btn btn-ghost btn-sm" id="btnCampGenPreview" onclick="toggleGenPreviewHtml()">Vista HTML</button>
+      <button class="btn btn-amber btn-sm" id="btnCampGenRetry" onclick="toggleGenRetry()">
+        <span id="retryBtnLabel">Reintentar ↺</span>
+      </button>
+      <button class="btn btn-green" id="btnCampGenApprove" onclick="approveCurrentAndNext()">
+        Aprobar y siguiente &#x2192;
+      </button>
+    </div>
+
+    <!-- Estado de generacion -->
+    <div id="campGenStatus" style="margin-top:10px;font-size:11px;color:var(--text3);text-align:right"></div>
   </div>
 </div>
 
@@ -820,6 +904,7 @@ async function doLogout(){
 async function showApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appShell').style.display='flex';
+  // Cargar Groq key desde API
   try{
     const r=await apiFetch('/groq-key');
     if(r.ok){const d=await r.json(); if(d.configured) GROQ_KEY=d.key;}
@@ -849,6 +934,7 @@ async function apiFetch(path,opts={}){
 
 // ── GROQ HELPER ──
 function getGroqKey(){
+  // Prioriza key del campo visible (si el usuario la escribió), luego la de env vars
   const fieldEl=document.getElementById('groqKey');
   const fieldVal=fieldEl?fieldEl.value.trim():'';
   return fieldVal||GROQ_KEY||'';
@@ -1001,7 +1087,8 @@ function toggleMultiContact(email,btn){
 function applyMultiRecipients(){
   extraRecipients=new Set(multiSelectedContacts);
   const extra=document.getElementById('multiExtraEmails').value;
-  extra.split(/[\n,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>extraRecipients.add(e));
+  extra.split(/[
+,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>extraRecipients.add(e));
   renderExtraRecipientTags();
   closeModal('modalMultiRecipient');
 }
@@ -1037,7 +1124,9 @@ async function getEntityContext(){
     if(ctx.entity||ctx.mission||ctx.extra)return `
 
 CONTEXTO DE LA ENTIDAD:
-${ctx.entity?'Entidad: '+ctx.entity+'\n':''}${ctx.mission?'Mision: '+ctx.mission+'\n':''}${ctx.extra?'Instrucciones: '+ctx.extra:''}`;
+${ctx.entity?'Entidad: '+ctx.entity+'
+':''}${ctx.mission?'Mision: '+ctx.mission+'
+':''}${ctx.extra?'Instrucciones: '+ctx.extra:''}`;
   }catch(e){}
   return '';
 }
@@ -1079,7 +1168,8 @@ Contexto: ${c.context||'N/A'}`:'';
           {role:'user',content:prompt}]})});
     if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'Error Groq');}
     const reader=res.body.getReader(),decoder=new TextDecoder();let buffer='';
-    while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){const clean=line.replace(/^data: /,'').trim();if(!clean||clean==='[DONE]')continue;try{body.textContent+=JSON.parse(clean).choices?.[0]?.delta?.content||'';}catch{}}}
+    while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('
+');buffer=lines.pop();for(const line of lines){const clean=line.replace(/^data: /,'').trim();if(!clean||clean==='[DONE]')continue;try{body.textContent+=JSON.parse(clean).choices?.[0]?.delta?.content||'';}catch{}}}
     body.classList.remove('streaming');
   }catch(e){toast('Error Groq: '+e.message,'error');body.classList.remove('streaming');}
   finally{btn.disabled=false;btn.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar con Groq';}
@@ -1161,7 +1251,7 @@ function renderInbox(){
       <div class="ii-date">${formatDate(m.date)}</div>
     </div>`).join('');
 }
-function escId(s){return(s||'').replace(/'/g,"\\'").replace(/"/g,'\\"');}
+function escId(s){return(s||'').replace(/'/g,"\'").replace(/"/g,'\"');}
 async function selectInbox(mid){
   const m=inboxItems.find(x=>(x.message_id||'')==mid);if(!m)return;selectedInboxMsg=m;
   document.querySelectorAll('.inbox-item').forEach(i=>i.classList.remove('selected'));
@@ -1248,12 +1338,24 @@ async function testAPI(){const res=document.getElementById('settingsResult');res
 // ══════════════════════════════════════════════
 // ── CAMPAIGNS ──
 // ══════════════════════════════════════════════
+
+// Estado de generación en curso
+let campGenState = {
+  campaignId: null,
+  totalEmails: 0,
+  currentDay: 1,
+  dates: [],
+  emails: {},        // day_number -> {subject, body, status}
+  generating: false,
+};
+
 function showCampaignList(){
   document.getElementById('campaignListView').style.display='block';
   document.getElementById('campaignFormView').style.display='none';
   document.getElementById('campaignApprovalView').style.display='none';
   loadCampaigns();
 }
+
 function showCampaignForm(){
   document.getElementById('campaignListView').style.display='none';
   document.getElementById('campaignFormView').style.display='block';
@@ -1262,6 +1364,8 @@ function showCampaignForm(){
   document.getElementById('camp-start').value=today;
   const end=new Date();end.setDate(end.getDate()+14);
   document.getElementById('camp-end').value=end.toISOString().split('T')[0];
+  // Tono informative activo por defecto
+  setCampTone('informative');
   initCampContacts();
   updateDatePreview();
 }
@@ -1270,7 +1374,7 @@ function initCampContacts(){
   campSelectedContacts.clear();
   const list=document.getElementById('campContactList');
   list.innerHTML=contacts.map(c=>`
-    <button class="tag" style="cursor:pointer;padding:5px 10px;font-size:10px" onclick="toggleCampContact('${c.email}','${c.name.replace(/'/g,"\\'")}',this)">
+    <button class="tag" style="cursor:pointer;padding:5px 10px;font-size:10px" onclick="toggleCampContact('${c.email}','${(c.name||'').replace(/'/g,"\\'")}',this)">
       ${c.name}
     </button>`).join('');
   document.getElementById('campSelectedTags').innerHTML='';
@@ -1316,7 +1420,7 @@ function updateDatePreview(){
   if(!el)return;
   if(!start||!end){el.textContent='';return;}
   const dates=previewDates(start,end,campMode);
-  el.innerHTML=`<span style="color:var(--green)">${dates.length}</span> emails se generaran (${start} → ${end})`;
+  el.innerHTML=`<span style="color:var(--green);font-size:13px;font-weight:500">${dates.length}</span> <span style="color:var(--text2)">emails se generaran</span> (${start} → ${end})`;
 }
 
 function previewDates(start,end,mode){
@@ -1337,49 +1441,353 @@ function previewDates(start,end,mode){
   return dates;
 }
 
-document.getElementById('camp-start')?.addEventListener('change',updateDatePreview);
-document.getElementById('camp-end')?.addEventListener('change',updateDatePreview);
+// ── INICIO DE GENERACION: crea la campaña y abre el modal galería ──
+async function startCampaignGeneration(){
+  const name  = document.getElementById('camp-name').value.trim();
+  const start = document.getElementById('camp-start').value;
+  const end   = document.getElementById('camp-end').value;
+  const intent= document.getElementById('camp-intent').value.trim();
+  const time  = document.getElementById('camp-time').value || '09:00';
+  const extraEmails = document.getElementById('camp-extra-emails').value;
 
-async function generateCampaign(){
-  const name=document.getElementById('camp-name').value.trim();
-  const start=document.getElementById('camp-start').value;
-  const end=document.getElementById('camp-end').value;
-  const intent=document.getElementById('camp-intent').value.trim();
-  const extraEmails=document.getElementById('camp-extra-emails').value;
-
-  if(!start||!end)return toast('Selecciona fechas de inicio y fin','error');
-  if(!intent)return toast('Ingresa la intencion de la campana','error');
+  if(!start||!end) return toast('Selecciona fechas de inicio y fin','error');
+  if(!intent)      return toast('Ingresa la intencion de la campana','error');
 
   const allContacts=[...campSelectedContacts];
   extraEmails.split(/[\n,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>allContacts.push(e));
-  if(!allContacts.length)return toast('Agrega al menos un contacto','error');
+  if(!allContacts.length) return toast('Agrega al menos un contacto','error');
 
   const dates=previewDates(start,end,campMode);
-  if(!dates.length)return toast('No hay fechas validas con el modo seleccionado','error');
+  if(!dates.length) return toast('No hay fechas validas con el modo seleccionado','error');
 
   const btn=document.getElementById('btnGenerateCamp');
   btn.disabled=true;
-  btn.innerHTML='<span class="spinner spinner-dk"></span> Generando '+dates.length+' emails con IA...';
+  btn.innerHTML='<span class="spinner spinner-dk"></span> Creando campana...';
 
   try{
-    const r=await apiFetch('/campaigns/generate',{method:'POST',body:JSON.stringify({
-      name:name||`Campana ${start}`,
-      contacts:allContacts,
-      start_date:start,
-      end_date:end,
+    // Paso 1: init — crea estructura en DB
+    const r=await apiFetch('/campaigns/init',{method:'POST',body:JSON.stringify({
+      name: name||`Campana ${start}`,
+      contacts: allContacts,
+      start_date: start,
+      end_date: end,
       intent,
-      send_mode:campMode,
-      tone:campTone,
+      send_mode: campMode,
+      tone: campTone,
+      send_time: time,
     })});
     const d=await r.json();
-    if(!r.ok)throw new Error(d.detail||'Error generando campana');
-    toast(`Campana generada: ${d.total_emails} emails listos para revision`,'success');
-    currentCampaignId=d.campaign_id;
-    showApprovalView(d.campaign_id);
-  }catch(e){toast('Error: '+e.message,'error');}
-  finally{btn.disabled=false;btn.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar campana con IA';}
+    if(!r.ok) throw new Error(d.detail||'Error creando campana');
+
+    // Inicializar estado
+    campGenState = {
+      campaignId: d.campaign_id,
+      totalEmails: d.total_emails,
+      currentDay: 1,
+      dates: d.dates,
+      emails: {},
+      generating: false,
+    };
+
+    // Abrir modal galería
+    openCampGenModal(d.campaign_id, d.total_emails, d.dates, name||`Campana ${start}`);
+    // Generar el primer email
+    await generateEmailInModal(1);
+
+  }catch(e){
+    toast('Error: '+e.message,'error');
+  }finally{
+    btn.disabled=false;
+    btn.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar campana con IA';
+  }
 }
 
+function openCampGenModal(campId, total, dates, campName){
+  // Título
+  document.getElementById('campGenTitle').textContent = campName;
+  document.getElementById('campGenSubtitle').textContent = `${total} emails · ${dates[0]} → ${dates[dates.length-1]}`;
+
+  // Pills de progreso
+  const pills = document.getElementById('campGenPills');
+  pills.innerHTML = dates.map((d,i)=>`
+    <div id="pill_${i+1}" style="width:24px;height:24px;border-radius:50%;border:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text3);transition:all .2s;cursor:pointer" onclick="jumpToEmail(${i+1})" title="${d}">${i+1}</div>
+  `).join('');
+
+  // Reset UI
+  document.getElementById('campGenBar').style.width = '0%';
+  document.getElementById('campGenSubjectDisplay').textContent = '';
+  document.getElementById('campGenBodyDisplay').textContent = 'Generando...';
+  document.getElementById('campGenPreview').srcdoc = '<html><body style="display:flex;align-items:center;justify-content:center;height:100%;color:#aaa;font-family:sans-serif;font-size:13px">Generando...</body></html>';
+  document.getElementById('campGenEditArea').style.display = 'none';
+  document.getElementById('campGenRetryArea').style.display = 'none';
+  document.getElementById('campGenStatus').textContent = '';
+  setGenModalButtons('generating');
+
+  openModal('modalCampGen');
+}
+
+function setGenModalButtons(state){
+  // state: generating | ready | done
+  const approve = document.getElementById('btnCampGenApprove');
+  const retry   = document.getElementById('btnCampGenRetry');
+  const edit    = document.getElementById('btnCampGenEdit');
+  const preview = document.getElementById('btnCampGenPreview');
+  if(!approve) return;
+
+  if(state === 'generating'){
+    approve.disabled=true; retry.disabled=true; edit.disabled=true; preview.disabled=true;
+    approve.innerHTML='<span class="spinner spinner-dk"></span> Generando...';
+  } else if(state === 'ready'){
+    approve.disabled=false; retry.disabled=false; edit.disabled=false; preview.disabled=false;
+    const isLast = campGenState.currentDay >= campGenState.totalEmails;
+    approve.innerHTML = isLast ? 'Aprobar y finalizar &#x2713;' : 'Aprobar y siguiente &#x2192;';
+    document.getElementById('retryBtnLabel').textContent = 'Reintentar ↺';
+  } else if(state === 'retrying'){
+    approve.disabled=true; retry.disabled=true; edit.disabled=true; preview.disabled=true;
+    document.getElementById('retryBtnLabel').innerHTML = '<span class="spinner spinner-dk"></span>';
+  }
+}
+
+function updatePill(day, status){
+  const pill = document.getElementById('pill_'+day);
+  if(!pill) return;
+  const colors = {
+    approved: 'background:var(--green);border-color:var(--green);color:#0c0f0a',
+    pending:  'background:var(--bg3);border-color:var(--border);color:var(--text3)',
+    current:  'background:var(--amber);border-color:var(--amber);color:#0c0f0a',
+  };
+  pill.style.cssText = `width:24px;height:24px;border-radius:50%;border:1px solid;display:flex;align-items:center;justify-content:center;font-size:9px;transition:all .2s;cursor:pointer;${colors[status]||colors.pending}`;
+}
+
+async function generateEmailInModal(dayNumber, feedback=''){
+  if(!campGenState.campaignId) return;
+  campGenState.currentDay = dayNumber;
+  campGenState.generating = true;
+
+  updatePill(dayNumber, 'current');
+  document.getElementById('campGenTitle').textContent = `Email ${dayNumber} de ${campGenState.totalEmails}`;
+  document.getElementById('campGenSubtitle').textContent = `Fecha: ${campGenState.dates[dayNumber-1]||''} · ${campGenState.totalEmails} emails en total`;
+  document.getElementById('campGenBar').style.width = `${((dayNumber-1)/campGenState.totalEmails)*100}%`;
+  document.getElementById('campGenSubjectDisplay').textContent = '';
+  document.getElementById('campGenBodyDisplay').textContent = 'Generando con IA...';
+  document.getElementById('campGenBodyDisplay').contentEditable = 'false';
+  document.getElementById('campGenPreview').srcdoc = '<html><body style="display:flex;align-items:center;justify-content:center;height:100%;color:#aaa;font-family:sans-serif;font-size:13px">Generando...</body></html>';
+  document.getElementById('campGenEditArea').style.display = 'none';
+  document.getElementById('campGenRetryArea').style.display = 'none';
+  document.getElementById('campGenStatus').textContent = 'Generando...';
+  setGenModalButtons('generating');
+
+  let fullText = '';
+
+  try{
+    const resp = await fetch(`/campaigns/${campGenState.campaignId}/generate-one`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', ...(SESSION_TOKEN?{'X-Session-Token':SESSION_TOKEN}:{})},
+      credentials: 'include',
+      body: JSON.stringify({day_number: dayNumber, feedback})
+    });
+
+    if(!resp.ok){
+      const err = await resp.json();
+      throw new Error(err.detail||'Error generando email');
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      buffer += decoder.decode(value, {stream:true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for(const line of lines){
+        if(!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        try{
+          const ev = JSON.parse(raw);
+          if(ev.delta){
+            fullText += ev.delta;
+            // Mostrar streaming del JSON
+            document.getElementById('campGenStatus').textContent = `Generando... ${fullText.length} chars`;
+          } else if(ev.done){
+            // Email completo
+            campGenState.emails[dayNumber] = {
+              subject: ev.subject,
+              body: ev.body,
+              status: 'pending'
+            };
+            // Mostrar en UI
+            document.getElementById('campGenSubjectDisplay').textContent = ev.subject;
+            document.getElementById('campGenBodyDisplay').textContent = ev.body;
+            document.getElementById('campGenBar').style.width = `${(dayNumber/campGenState.totalEmails)*100}%`;
+            document.getElementById('campGenStatus').textContent = '';
+            setGenModalButtons('ready');
+            // Generar preview HTML
+            generateGenPreview(ev.body);
+            updatePill(dayNumber, 'pending');
+          } else if(ev.error){
+            throw new Error(ev.error);
+          }
+        }catch(pe){
+          if(pe.message && !pe.message.includes('JSON')){
+            throw pe;
+          }
+        }
+      }
+    }
+  }catch(e){
+    toast('Error generando email: '+e.message,'error');
+    document.getElementById('campGenBodyDisplay').textContent = 'Error: '+e.message;
+    document.getElementById('campGenStatus').textContent = 'Error — usa Reintentar';
+    setGenModalButtons('ready');
+  }finally{
+    campGenState.generating = false;
+  }
+}
+
+async function generateGenPreview(bodyText){
+  try{
+    const r = await apiFetch('/preview-email',{method:'POST',body:JSON.stringify({body:bodyText})});
+    const d = await r.json();
+    document.getElementById('campGenPreview').srcdoc = d.html;
+  }catch(e){}
+}
+
+async function approveCurrentAndNext(){
+  const day = campGenState.currentDay;
+  const em  = campGenState.emails[day];
+  if(!em) return toast('Sin contenido para aprobar','error');
+
+  // Aprobar en DB
+  try{
+    await apiFetch(`/campaigns/${campGenState.campaignId}/approve-email`,{
+      method:'POST',
+      body: JSON.stringify({email_id: null, day_number: day, action:'approved'})
+    });
+  }catch(e){
+    // Si falla por email_id null, intentar sin ella — el backend puede manejar day_number
+  }
+
+  campGenState.emails[day].status = 'approved';
+  updatePill(day, 'approved');
+
+  const next = day + 1;
+  if(next > campGenState.totalEmails){
+    // Todos aprobados — cerrar modal y mostrar vista de aprobación
+    const bar = document.getElementById('campGenBar');
+    bar.style.width = '100%';
+    document.getElementById('campGenStatus').textContent = '¡Campana completa! Todos los emails aprobados.';
+    document.getElementById('btnCampGenApprove').style.display='none';
+    document.getElementById('btnCampGenRetry').style.display='none';
+    document.getElementById('btnCampGenEdit').style.display='none';
+
+    setTimeout(async ()=>{
+      closeModal('modalCampGen');
+      toast('Todos los emails aprobados. Revisa la campana.','success');
+      await showApprovalView(campGenState.campaignId);
+      document.getElementById('campaignFormView').style.display='none';
+      document.getElementById('campaignListView').style.display='none';
+      document.getElementById('campaignApprovalView').style.display='block';
+    }, 1200);
+  } else {
+    // Generar el siguiente
+    await generateEmailInModal(next);
+  }
+}
+
+async function retryCurrentEmail(){
+  const day = campGenState.currentDay;
+  const feedback = document.getElementById('campGenFeedback')?.value.trim()||'';
+  document.getElementById('campGenRetryArea').style.display='none';
+  document.getElementById('campGenFeedback').value='';
+  setGenModalButtons('retrying');
+  await generateEmailInModal(day, feedback);
+}
+
+function toggleGenRetry(){
+  const area = document.getElementById('campGenRetryArea');
+  if(!area) return;
+  area.style.display = area.style.display==='none' ? 'block' : 'none';
+  if(area.style.display==='block') document.getElementById('campGenFeedback')?.focus();
+}
+
+// El botón Reintentar usa onclick directo en el HTML
+
+function toggleGenEdit(){
+  const area = document.getElementById('campGenEditArea');
+  if(!area) return;
+  const isOpen = area.style.display !== 'none';
+  area.style.display = isOpen ? 'none' : 'block';
+  if(!isOpen){
+    const em = campGenState.emails[campGenState.currentDay];
+    if(em){
+      document.getElementById('campGenEditSubject').value = em.subject||'';
+      document.getElementById('campGenEditBody').value    = em.body||'';
+    }
+  }
+}
+
+function saveGenEdit(){
+  const subject = document.getElementById('campGenEditSubject').value.trim();
+  const body    = document.getElementById('campGenEditBody').value.trim();
+  if(!subject||!body) return toast('Asunto y cuerpo son requeridos','error');
+  const day = campGenState.currentDay;
+  campGenState.emails[day] = {subject, body, status:'pending'};
+  document.getElementById('campGenSubjectDisplay').textContent = subject;
+  document.getElementById('campGenBodyDisplay').textContent = body;
+  document.getElementById('campGenEditArea').style.display = 'none';
+  generateGenPreview(body);
+  // Actualizar en DB via reintentar silenciosamente (el backend acepta feedback vacío = solo actualizar)
+  apiFetch(`/campaigns/${campGenState.campaignId}/retry-email`,{
+    method:'POST',
+    body: JSON.stringify({email_id_by_day: day, feedback:`EDIT:${subject}|||${body}`})
+  }).catch(()=>{});
+  toast('Cambios guardados','success');
+}
+
+function cancelGenEdit(){
+  document.getElementById('campGenEditArea').style.display = 'none';
+}
+
+let genPreviewMode = false;
+function toggleGenPreviewHtml(){
+  genPreviewMode = !genPreviewMode;
+  const preview = document.getElementById('campGenPreview');
+  const bodyDisplay = document.getElementById('campGenBodyDisplay');
+  const right = document.getElementById('campGenRight');
+  if(genPreviewMode){
+    preview.style.height = '360px';
+    document.getElementById('btnCampGenPreview').textContent = 'Ver Markdown';
+  } else {
+    document.getElementById('btnCampGenPreview').textContent = 'Vista HTML';
+  }
+}
+
+async function jumpToEmail(day){
+  if(campGenState.generating) return toast('Espera a que termine la generacion actual','error');
+  const em = campGenState.emails[day];
+  if(!em || !em.subject) {
+    // No generado aún — generar
+    await generateEmailInModal(day);
+  } else {
+    // Ya generado — mostrar
+    campGenState.currentDay = day;
+    document.getElementById('campGenTitle').textContent = `Email ${day} de ${campGenState.totalEmails}`;
+    document.getElementById('campGenSubtitle').textContent = `Fecha: ${campGenState.dates[day-1]||''}`;
+    document.getElementById('campGenSubjectDisplay').textContent = em.subject;
+    document.getElementById('campGenBodyDisplay').textContent = em.body;
+    document.getElementById('campGenBar').style.width = `${(day/campGenState.totalEmails)*100}%`;
+    generateGenPreview(em.body);
+    setGenModalButtons(em.status==='approved'?'ready':'ready');
+    const isLast = day >= campGenState.totalEmails;
+    document.getElementById('btnCampGenApprove').innerHTML = isLast ? 'Aprobar y finalizar &#x2713;' : 'Aprobar y siguiente &#x2192;';
+  }
+}
+
+// ── LISTA Y APROBACIÓN POSTERIOR ──
 async function loadCampaigns(){
   const el=document.getElementById('campaignCards');
   el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Cargando...</div>';
@@ -1393,7 +1801,7 @@ async function loadCampaigns(){
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
           <div>
             <div style="font-family:var(--serif);font-size:15px;color:var(--text);margin-bottom:4px">${c.name}</div>
-            <div style="font-size:11px;color:var(--text3)">${c.start_date} → ${c.end_date} · ${c.send_mode} · ${c.tone}</div>
+            <div style="font-size:11px;color:var(--text3)">${c.start_date} → ${c.end_date} · ${c.send_mode||''} · ${c.tone||''}</div>
             <div style="font-size:11px;color:var(--text2);margin-top:4px">${(c.intent||'').substring(0,80)}${(c.intent||'').length>80?'...':''}</div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
@@ -1427,47 +1835,72 @@ async function showApprovalView(campId){
     const btnFinal=document.getElementById('btnFinalizeCamp');
     btnFinal.style.display=(approved===total&&total>0)?'inline-flex':'none';
 
-    loadingEl.innerHTML=emails.map((em,i)=>{
+    if(!emails.length){
+      loadingEl.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">No hay emails generados aun.</div>';
+      return;
+    }
+
+    loadingEl.innerHTML=emails.map((em)=>{
       const isApproved=em.status==='approved';
       const isRejected=em.status==='rejected';
+      const isPending=em.status==='pending';
+      const isEmpty=!em.subject&&!em.body;
       return `
-        <div id="emailCard_${em.id}" style="background:var(--bg2);border:1px solid ${isApproved?'var(--green-dim)':isRejected?'rgba(192,80,80,.3)':'var(--border)'};border-radius:var(--r2);overflow:hidden;transition:border-color .2s">
+        <div id="emailCard_${em.id}" style="background:var(--bg2);border:1px solid ${isApproved?'var(--green-dim)':isRejected?'rgba(192,80,80,.3)':'var(--border)'};border-radius:var(--r2);overflow:hidden">
           <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
             <div>
               <span style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Email ${em.day_number} de ${total}</span>
               <span style="margin-left:10px;font-size:10px;color:var(--text3)">${em.scheduled_at||''}</span>
-              ${em.regenerated_count>0?`<span style="margin-left:8px;font-size:9px;color:var(--amber)">v${em.version} (regenerado ${em.regenerated_count}x)</span>`:''}
+              ${(em.regenerated_count||0)>0?`<span style="margin-left:8px;font-size:9px;color:var(--amber)">v${em.version||1} (regenerado ${em.regenerated_count}x)</span>`:''}
             </div>
-            <div style="display:flex;gap:6px;align-items:center">
-              ${isApproved
-                ?'<span style="font-size:10px;color:var(--green);padding:3px 9px;border:1px solid var(--green-dim);border-radius:10px">Aprobado ✓</span><button class="btn btn-ghost btn-sm" onclick="unapproveEmail('+campId+','+em.id+')">Editar</button>'
-                :`<button class="btn btn-green btn-sm" onclick="approveEmail(${campId},${em.id})">Aprobar ✓</button>
-                  <button class="btn btn-ghost btn-sm" onclick="toggleEmailEdit(${em.id})">Editar</button>
-                  <button class="btn btn-amber btn-sm" onclick="retryEmail(${campId},${em.id})" id="retryBtn_${em.id}">Reintentar ↺</button>`
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              ${isEmpty
+                ?'<span style="font-size:10px;color:var(--text3)">Sin generar</span><button class="btn btn-ghost btn-sm" onclick="regenFromApproval('+campId+','+em.day_number+')">Generar ↺</button>'
+                :isApproved
+                  ?'<span style="font-size:10px;color:var(--green);padding:3px 9px;border:1px solid var(--green-dim);border-radius:10px">Aprobado ✓</span><button class="btn btn-ghost btn-sm" onclick="unapproveEmail('+campId+','+em.id+')">Quitar aprobacion</button>'
+                  :`<button class="btn btn-green btn-sm" onclick="approveEmailById(${campId},${em.id})">Aprobar ✓</button>
+                    <button class="btn btn-ghost btn-sm" onclick="toggleEmailEdit(${em.id})">Editar</button>
+                    <button class="btn btn-amber btn-sm" onclick="retryEmail(${campId},${em.id})" id="retryBtn_${em.id}">Reintentar ↺</button>`
               }
             </div>
           </div>
-          <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
-            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:4px">Asunto</div>
-            <div id="subject_${em.id}" style="font-size:13px;color:var(--text);font-weight:500">${em.subject}</div>
+          ${!isEmpty?`
+          <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Asunto</div>
+            <div id="subject_${em.id}" style="font-size:13px;color:var(--text);font-weight:500">${em.subject||''}</div>
           </div>
-          <div id="bodyDisplay_${em.id}" style="padding:12px 14px;font-family:var(--serif);font-size:13px;font-style:italic;color:var(--text2);line-height:1.8;white-space:pre-wrap;max-height:200px;overflow-y:auto">${em.body}</div>
+          <div id="bodyDisplay_${em.id}" style="padding:12px 14px;font-family:var(--serif);font-size:13px;font-style:italic;color:var(--text2);line-height:1.8;white-space:pre-wrap;max-height:160px;overflow-y:auto">${em.body||''}</div>
           <div id="editArea_${em.id}" style="display:none;padding:12px 14px;border-top:1px solid var(--border)">
-            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Asunto</div>
             <input type="text" id="editSubject_${em.id}" value="${(em.subject||'').replace(/"/g,'&quot;')}" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;margin-bottom:8px"/>
-            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Cuerpo (Markdown)</div>
-            <textarea id="editBody_${em.id}" rows="6" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:vertical;line-height:1.6">${em.body||''}</textarea>
+            <textarea id="editBody_${em.id}" rows="5" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:vertical;line-height:1.6">${em.body||''}</textarea>
             <div style="display:flex;gap:6px;margin-top:8px">
-              <button class="btn btn-green btn-sm" onclick="saveEmailEdit(${campId},${em.id})">Guardar cambios</button>
+              <button class="btn btn-green btn-sm" onclick="saveEmailEdit(${campId},${em.id})">Guardar</button>
               <button class="btn btn-ghost btn-sm" onclick="toggleEmailEdit(${em.id})">Cancelar</button>
             </div>
-            <div style="margin-top:8px">
-              <input type="text" id="retryFeedback_${em.id}" placeholder="Feedback para regenerar (opcional)..." style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;font-family:var(--mono);font-size:11px;color:var(--text);outline:none"/>
-            </div>
-          </div>
+          </div>`:'<div style="padding:14px;color:var(--text3);font-size:11px">Email pendiente de generacion.</div>'}
         </div>`;
     }).join('');
   }catch(e){loadingEl.innerHTML='<div style="color:var(--red);font-size:11px;padding:1rem">Error: '+e.message+'</div>';}
+}
+
+async function regenFromApproval(campId, dayNumber){
+  // Abrir modal galería en ese día
+  const r = await apiFetch('/campaigns/'+campId);
+  const camp = await r.json();
+  campGenState = {
+    campaignId: campId,
+    totalEmails: (camp.emails||[]).length,
+    currentDay: dayNumber,
+    dates: (camp.emails||[]).map(e=>e.scheduled_at||''),
+    emails: {},
+    generating: false,
+  };
+  // Cargar emails ya aprobados en el estado
+  (camp.emails||[]).forEach(e=>{
+    if(e.subject) campGenState.emails[e.day_number] = {subject:e.subject, body:e.body, status:e.status};
+  });
+  openCampGenModal(campId, campGenState.totalEmails, campGenState.dates, camp.name||'Campana');
+  await generateEmailInModal(dayNumber);
 }
 
 function toggleEmailEdit(emailId){
@@ -1475,7 +1908,7 @@ function toggleEmailEdit(emailId){
   if(area)area.style.display=area.style.display==='none'?'block':'none';
 }
 
-async function approveEmail(campId,emailId){
+async function approveEmailById(campId,emailId){
   try{
     await apiFetch('/campaigns/'+campId+'/approve-email',{method:'POST',body:JSON.stringify({email_id:emailId,action:'approved'})});
     toast('Email aprobado','success');
@@ -1499,7 +1932,7 @@ async function saveEmailEdit(campId,emailId){
   toggleEmailEdit(emailId);
   try{
     await apiFetch('/campaigns/'+campId+'/approve-email',{method:'POST',body:JSON.stringify({email_id:emailId,action:'pending'})});
-    toast('Guardado. Ahora aprueba el email.','success');
+    toast('Guardado. Aprueba el email para confirmar.','success');
     showApprovalView(campId);
   }catch(e){toast('Error guardando','error');}
 }
@@ -1529,7 +1962,7 @@ async function finalizeCampaign(){
     toast('Campana programada exitosamente','success');
     showCampaignList();
   }catch(e){toast('Error: '+e.message,'error');}
-  finally{btn.disabled=false;btn.innerHTML='Confirmar campana ✓';}
+  finally{btn.disabled=false;btn.innerHTML='Confirmar campana &#x2713;';}
 }
 
 async function deleteCampaign(campId){
@@ -1540,6 +1973,7 @@ async function deleteCampaign(campId){
     loadCampaigns();
   }catch(e){toast('Error eliminando','error');}
 }
+
 
 // ── COLOR SYNC ──
 ['primary','link','bg','text','header-bg','header-fc'].forEach(id=>syncColor('st-'+id,'st-'+id+'-hex'));

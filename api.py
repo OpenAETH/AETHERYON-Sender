@@ -1103,6 +1103,202 @@ def delete_campaign(cid: int, _: str = Depends(require_auth)):
     finally:
         db.close()
 
+
+@app.post("/campaigns/init")
+async def init_campaign(request: Request, _: str = Depends(require_auth)):
+    """Crea la estructura de la campaña con placeholders vacíos. El frontend genera emails de a uno."""
+    data = await request.json()
+    contacts_list = data.get("contacts", [])
+    start_date    = data.get("start_date", "")
+    end_date      = data.get("end_date", "")
+    intent        = data.get("intent", "").strip()
+    send_mode     = data.get("send_mode", "daily")
+    tone          = data.get("tone", "informative")
+    send_time     = data.get("send_time", "09:00")
+    campaign_name = data.get("name", f"Campana {start_date}")
+
+    if not contacts_list: raise HTTPException(400, "Se requiere al menos un contacto")
+    if not start_date or not end_date: raise HTTPException(400, "Fechas requeridas")
+    if not intent: raise HTTPException(400, "Intencion requerida")
+
+    dates = _get_campaign_dates(start_date, end_date, send_mode)
+    if not dates:
+        raise HTTPException(400, f"No hay fechas validas con modo '{send_mode}'")
+
+    n = len(dates)
+    db = get_db()
+    try:
+        result = db.execute(text("""
+            INSERT INTO campaigns (name, intent, start_date, end_date, send_mode, tone, status)
+            VALUES (:name,:intent,:start_date,:end_date,:send_mode,:tone,'draft')
+            RETURNING id
+        """), {"name": campaign_name, "intent": intent, "start_date": start_date,
+               "end_date": end_date, "send_mode": send_mode, "tone": tone})
+        camp_id = result.fetchone()[0]
+
+        for i in range(n):
+            db.execute(text("""
+                INSERT INTO campaign_emails (campaign_id, day_number, subject, body, status, scheduled_at, version, regenerated_count)
+                VALUES (:cid,:day,'','','pending',:scheduled_at,1,0)
+            """), {"cid": camp_id, "day": i+1, "scheduled_at": f"{dates[i]} {send_time}"})
+
+        for email_addr in contacts_list:
+            email_addr = email_addr.strip()
+            if email_addr:
+                db.execute(text("INSERT INTO campaign_contacts (campaign_id, email) VALUES (:cid,:email)"),
+                           {"cid": camp_id, "email": email_addr})
+        db.commit()
+        return {"success": True, "campaign_id": camp_id, "total_emails": n, "dates": dates}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/{cid}/generate-one")
+async def generate_one_email(cid: int, request: Request, _: str = Depends(require_auth)):
+    """Genera UN email de la secuencia usando SSE streaming. El frontend llama de a uno."""
+    import httpx
+    from fastapi.responses import StreamingResponse
+    data = await request.json()
+    day_number = data.get("day_number", 1)
+    feedback   = data.get("feedback", "")
+
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key:
+        raise HTTPException(500, "GROQ_API_KEY no configurada")
+
+    db = get_db()
+    try:
+        camp = dict_from_row(db.execute(text("SELECT * FROM campaigns WHERE id=:id"), {"id": cid}).fetchone())
+        if not camp: raise HTTPException(404, "Campana no encontrada")
+        total = dict_from_row(db.execute(text(
+            "SELECT COUNT(*) as n FROM campaign_emails WHERE campaign_id=:id"), {"id": cid}).fetchone())["n"]
+        prev_emails = rows_to_list(db.execute(text("""
+            SELECT day_number, subject, body FROM campaign_emails
+            WHERE campaign_id=:id AND day_number < :day AND subject != ''
+            ORDER BY day_number
+        """), {"id": cid, "day": day_number}).fetchall())
+        em = dict_from_row(db.execute(text("""
+            SELECT * FROM campaign_emails WHERE campaign_id=:id AND day_number=:day
+        """), {"id": cid, "day": day_number}).fetchone())
+    finally:
+        db.close()
+
+    tone_desc = {
+        "aggressive": "tono persuasivo y directo, CTA fuerte, urgencia, beneficios concretos",
+        "informative": "tono educativo, informativo, construccion de confianza",
+    }.get(camp.get("tone","informative"), "tono profesional")
+
+    entity_ctx = ""
+    db2 = get_db()
+    try:
+        r1 = dict_from_row(db2.execute(text("SELECT value FROM settings WHERE key='ctx_entity'")).fetchone())
+        r2 = dict_from_row(db2.execute(text("SELECT value FROM settings WHERE key='ctx_mission'")).fetchone())
+        if r1: entity_ctx += f"\nEntidad: {r1['value']}"
+        if r2: entity_ctx += f"\nMision: {r2['value']}"
+    except Exception: pass
+    finally: db2.close()
+
+    prev_context = ""
+    if prev_emails:
+        prev_context = "\n\nEMAILS ANTERIORES (para coherencia):\n"
+        prev_context += "\n".join([f"- Email {e['day_number']}: [{e['subject']}]" for e in prev_emails[-3:]])
+
+    scheduled = em['scheduled_at'] if em else ''
+
+    system_prompt = f"""Eres experto en email marketing. Genera el email #{day_number} de {total} de una campana.
+
+INTENCION: {camp['intent']}
+TONO: {tone_desc}
+FECHA PROGRAMADA: {scheduled}
+{entity_ctx}
+{prev_context}
+{"FEEDBACK A INCORPORAR: " + feedback if feedback else ""}
+
+REGLAS:
+- Email numero {day_number} de {total}: posicionarlo narrativamente en la secuencia
+- {"Primer email: presentacion, gancho inicial, presentar propuesta" if day_number == 1 else ""}
+- {"Ultimo email: cierre, urgencia maxima, CTA final definitivo" if day_number == total else ""}
+- Formato Markdown: **negrita**, *italica*, ## titulos, listas con -
+- NO incluir Para/De/Asunto en el cuerpo
+- Cuerpo completo y elaborado (minimo 150 palabras)
+
+Responde UNICAMENTE con JSON valido (sin texto extra, sin backticks):
+{{"subject": "Asunto del email", "body": "Cuerpo completo en Markdown..."}}"""
+
+    async def stream_email():
+        full_content = ""
+        try:
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                async with client.stream(
+                    "POST",
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": "llama-3.3-70b-versatile",
+                        "stream": True,
+                        "temperature": 0.85,
+                        "max_tokens": 2000,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": f"Genera el email #{day_number}."}
+                        ]
+                    }
+                ) as resp:
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            chunk = line[6:]
+                            if chunk == "[DONE]":
+                                break
+                            try:
+                                delta = json.loads(chunk)["choices"][0]["delta"].get("content","")
+                                if delta:
+                                    full_content += delta
+                                    yield f"data: {json.dumps({'delta': delta})}\n\n"
+                            except Exception:
+                                pass
+
+            # Parsear JSON del contenido completo
+            clean = re.sub(r'^```(?:json)?\s*', '', full_content.strip())
+            clean = re.sub(r'\s*```$', '', clean)
+            # Intentar extraer JSON si hay texto alrededor
+            json_match = re.search(r'\{[\s\S]*"subject"[\s\S]*"body"[\s\S]*\}', clean)
+            if json_match:
+                clean = json_match.group(0)
+            parsed = json.loads(clean)
+            subject = parsed.get("subject","")
+            body    = parsed.get("body","")
+
+            db3 = get_db()
+            try:
+                db3.execute(text("""
+                    UPDATE campaign_emails
+                    SET subject=:subject, body=:body,
+                        regenerated_count=CASE WHEN subject!='' AND subject IS NOT NULL THEN regenerated_count+1 ELSE regenerated_count END
+                    WHERE campaign_id=:cid AND day_number=:day
+                """), {"subject": subject, "body": body, "cid": cid, "day": day_number})
+                db3.commit()
+            finally:
+                db3.close()
+
+            yield f"data: {json.dumps({'done': True, 'subject': subject, 'body': body})}\n\n"
+
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse error en generate-one: {e} | content: {full_content[:200]}")
+            yield f"data: {json.dumps({'error': f'Error parseando respuesta de IA: {e}'})}\n\n"
+        except Exception as e:
+            logger.error(f"Stream error en generate-one: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        stream_email(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"}
+    )
+
+
 @app.post("/campaigns/generate")
 async def generate_campaign(request: Request, _: str = Depends(require_auth)):
     """
@@ -1264,13 +1460,20 @@ Responde ÚNICAMENTE con JSON válido con esta estructura exacta (sin texto extr
 
 @app.post("/campaigns/{cid}/approve-email")
 async def approve_email(cid: int, request: Request, _: str = Depends(require_auth)):
-    data   = await request.json()
+    data     = await request.json()
     email_id = data.get("email_id")
-    action   = data.get("action", "approved")  # approved | rejected
+    day_num  = data.get("day_number")
+    action   = data.get("action", "approved")
     db = get_db()
     try:
-        db.execute(text("UPDATE campaign_emails SET status=:status WHERE id=:id AND campaign_id=:cid"),
-                   {"status": action, "id": email_id, "cid": cid})
+        if email_id:
+            db.execute(text("UPDATE campaign_emails SET status=:status WHERE id=:id AND campaign_id=:cid"),
+                       {"status": action, "id": email_id, "cid": cid})
+        elif day_num:
+            db.execute(text("UPDATE campaign_emails SET status=:status WHERE day_number=:day AND campaign_id=:cid"),
+                       {"status": action, "day": day_num, "cid": cid})
+        else:
+            raise HTTPException(400, "Se requiere email_id o day_number")
         db.commit()
         return {"success": True}
     finally:
@@ -1324,6 +1527,19 @@ Cuerpo: {em['body']}
 
 Genera un nuevo email mejorado para esta posición. Responde SOLO con JSON:
 {{"subject": "Nuevo asunto", "body": "Nuevo cuerpo en Markdown"}}"""
+
+        # Edicion manual: feedback con formato "EDIT:subject|||body"
+        if feedback.startswith("EDIT:") and "|||" in feedback:
+            parts = feedback[5:].split("|||", 1)
+            subj_edit, body_edit = parts[0], parts[1]
+            db_e = get_db()
+            try:
+                db_e.execute(text("UPDATE campaign_emails SET subject=:s,body=:b WHERE id=:id"),
+                    {"s": subj_edit, "b": body_edit, "id": email_id})
+                db_e.commit()
+            finally:
+                db_e.close()
+            return {"success": True, "subject": subj_edit, "body": body_edit}
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
