@@ -1220,6 +1220,139 @@ def list_campaigns(_: str = Depends(require_auth)):
     finally:
         db.close()
 
+@app.get("/campaigns/schedule")
+def get_campaign_schedule(_: str = Depends(require_auth)):
+    """
+    Retorna la agenda de envío de todas las campañas programadas o enviadas.
+    Cada item incluye el estado: 'sent', 'scheduled', 'delayed'.
+    DEBE estar declarada ANTES de /campaigns/{cid} para evitar conflicto de rutas.
+    """
+    db = get_db()
+    now_dt = datetime.utcnow()
+    now_str = now_dt.strftime("%Y-%m-%d %H:%M")
+    try:
+        rows = rows_to_list(db.execute(text("""
+            SELECT
+                ce.id, ce.campaign_id, ce.day_number, ce.subject,
+                ce.scheduled_at, ce.sent_at, ce.send_status,
+                ce.status as approval_status,
+                c.name as camp_name, c.status as camp_status
+            FROM campaign_emails ce
+            JOIN campaigns c ON c.id = ce.campaign_id
+            WHERE c.status IN ('scheduled', 'sent')
+              AND ce.status = 'approved'
+            ORDER BY ce.scheduled_at ASC
+        """)).fetchall())
+
+        items = []
+        for r in rows:
+            sched = r.get("scheduled_at") or ""
+            sent_at = r.get("sent_at")
+            send_status = r.get("send_status") or ""
+
+            if sent_at or send_status == "sent":
+                state = "sent"
+            elif sched and sched <= now_str:
+                state = "delayed"
+            else:
+                state = "scheduled"
+
+            items.append({
+                "id": r["id"],
+                "campaign_id": r["campaign_id"],
+                "camp_name": r["camp_name"],
+                "camp_status": r["camp_status"],
+                "day_number": r["day_number"],
+                "subject": r["subject"],
+                "scheduled_at": sched,
+                "sent_at": str(sent_at) if sent_at else None,
+                "send_status": send_status,
+                "state": state,
+            })
+
+        return items
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/process-scheduled")
+async def api_process_scheduled(request: Request, _: str = Depends(require_auth)):
+    """
+    Dispara manualmente el procesamiento de emails programados vencidos.
+    Acepta body JSON opcional: {"email_ids": [1,2,3]} para enviar IDs específicos.
+    DEBE estar declarada ANTES de /campaigns/{cid} para evitar conflicto de rutas.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    email_ids = body.get("email_ids", [])
+
+    if email_ids:
+        db = get_db()
+        results = {"sent": 0, "failed": 0, "details": []}
+        now_dt = datetime.utcnow()
+        style_cfg = _build_style()
+        try:
+            for eid in email_ids:
+                em = dict_from_row(db.execute(text("""
+                    SELECT ce.*, c.name as camp_name, c.status as camp_status
+                    FROM campaign_emails ce
+                    JOIN campaigns c ON c.id = ce.campaign_id
+                    WHERE ce.id = :id AND ce.status = 'approved'
+                """), {"id": eid}).fetchone())
+                if not em:
+                    continue
+
+                contacts_rows = rows_to_list(db.execute(text(
+                    "SELECT email FROM campaign_contacts WHERE campaign_id=:cid"
+                ), {"cid": em["campaign_id"]}).fetchall())
+                contact_emails = [r["email"] for r in contacts_rows]
+
+                body_html = build_html_email(em["body"], style_cfg)
+                ok_count = 0
+                for to in contact_emails:
+                    try:
+                        send_resend(to, em["subject"], em["body"], body_html)
+                        ok_count += 1
+                        results["sent"] += 1
+                        results["details"].append({"id": eid, "to": to, "ok": True})
+                    except Exception as e:
+                        results["failed"] += 1
+                        results["details"].append({"id": eid, "to": to, "ok": False, "error": str(e)})
+
+                if ok_count > 0:
+                    db.execute(text("UPDATE campaign_emails SET sent_at=:now, send_status='sent' WHERE id=:id"),
+                               {"now": now_dt.isoformat(), "id": eid})
+
+            db.commit()
+
+            camp_ids = set()
+            for eid in email_ids:
+                row = db.execute(text("SELECT campaign_id FROM campaign_emails WHERE id=:id"), {"id": eid}).fetchone()
+                if row:
+                    camp_ids.add(dict_from_row(row)["campaign_id"])
+            for cid in camp_ids:
+                pending = dict_from_row(db.execute(text("""
+                    SELECT COUNT(*) as n FROM campaign_emails
+                    WHERE campaign_id=:cid AND status='approved' AND sent_at IS NULL
+                """), {"cid": cid}).fetchone())
+                if pending and pending["n"] == 0:
+                    db.execute(text("UPDATE campaigns SET status='sent' WHERE id=:id"), {"id": cid})
+            db.commit()
+
+            return {"success": True, **results}
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(500, str(e))
+        finally:
+            db.close()
+    else:
+        result = process_scheduled_emails()
+        return {"success": True, **result}
+
+
 @app.get("/campaigns/{cid}")
 def get_campaign(cid: int, _: str = Depends(require_auth)):
     db = get_db()
@@ -1786,142 +1919,6 @@ async def send_campaign_now(cid: int, _: str = Depends(require_auth)):
         return {"success": True, "sent": sent_ok, "failed": len(results)-sent_ok, "results": results}
     finally:
         db.close()
-
-@app.get("/campaigns/schedule")
-def get_campaign_schedule(_: str = Depends(require_auth)):
-    """
-    Retorna la agenda de envío de todas las campañas programadas o enviadas.
-    Cada item incluye el estado: 'sent', 'scheduled', 'delayed'.
-    """
-    db = get_db()
-    now_dt = datetime.utcnow()
-    now_str = now_dt.strftime("%Y-%m-%d %H:%M")
-    try:
-        rows = rows_to_list(db.execute(text("""
-            SELECT
-                ce.id, ce.campaign_id, ce.day_number, ce.subject,
-                ce.scheduled_at, ce.sent_at, ce.send_status,
-                ce.status as approval_status,
-                c.name as camp_name, c.status as camp_status
-            FROM campaign_emails ce
-            JOIN campaigns c ON c.id = ce.campaign_id
-            WHERE c.status IN ('scheduled', 'sent')
-              AND ce.status = 'approved'
-            ORDER BY ce.scheduled_at ASC
-        """)).fetchall())
-
-        items = []
-        for r in rows:
-            sched = r.get("scheduled_at") or ""
-            sent_at = r.get("sent_at")
-            send_status = r.get("send_status") or ""
-
-            # Determinar estado visual
-            if sent_at or send_status == "sent":
-                state = "sent"
-            elif sched and sched <= now_str:
-                state = "delayed"
-            else:
-                state = "scheduled"
-
-            items.append({
-                "id": r["id"],
-                "campaign_id": r["campaign_id"],
-                "camp_name": r["camp_name"],
-                "camp_status": r["camp_status"],
-                "day_number": r["day_number"],
-                "subject": r["subject"],
-                "scheduled_at": sched,
-                "sent_at": str(sent_at) if sent_at else None,
-                "send_status": send_status,
-                "state": state,
-            })
-
-        return items
-    finally:
-        db.close()
-
-
-@app.post("/campaigns/process-scheduled")
-async def api_process_scheduled(request: Request, _: str = Depends(require_auth)):
-    """
-    Dispara manualmente el procesamiento de emails programados vencidos.
-    Acepta body JSON opcional: {"email_ids": [1,2,3]} para enviar IDs específicos.
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-
-    email_ids = body.get("email_ids", [])
-
-    if email_ids:
-        # Envío selectivo de emails específicos (para "Enviar demorados")
-        db = get_db()
-        results = {"sent": 0, "failed": 0, "details": []}
-        now_dt = datetime.utcnow()
-        style_cfg = _build_style()
-        try:
-            for eid in email_ids:
-                em = dict_from_row(db.execute(text("""
-                    SELECT ce.*, c.name as camp_name, c.status as camp_status
-                    FROM campaign_emails ce
-                    JOIN campaigns c ON c.id = ce.campaign_id
-                    WHERE ce.id = :id AND ce.status = 'approved'
-                """), {"id": eid}).fetchone())
-                if not em:
-                    continue
-
-                contacts_rows = rows_to_list(db.execute(text(
-                    "SELECT email FROM campaign_contacts WHERE campaign_id=:cid"
-                ), {"cid": em["campaign_id"]}).fetchall())
-                contact_emails = [r["email"] for r in contacts_rows]
-
-                body_html = build_html_email(em["body"], style_cfg)
-                ok_count = 0
-                for to in contact_emails:
-                    try:
-                        send_resend(to, em["subject"], em["body"], body_html)
-                        ok_count += 1
-                        results["sent"] += 1
-                        results["details"].append({"id": eid, "to": to, "ok": True})
-                    except Exception as e:
-                        results["failed"] += 1
-                        results["details"].append({"id": eid, "to": to, "ok": False, "error": str(e)})
-
-                if ok_count > 0:
-                    db.execute(text("UPDATE campaign_emails SET sent_at=:now, send_status='sent' WHERE id=:id"),
-                               {"now": now_dt.isoformat(), "id": eid})
-
-            db.commit()
-
-            # Verificar campañas completadas
-            if email_ids:
-                camp_ids = set()
-                for eid in email_ids:
-                    row = db.execute(text("SELECT campaign_id FROM campaign_emails WHERE id=:id"), {"id": eid}).fetchone()
-                    if row:
-                        camp_ids.add(dict_from_row(row)["campaign_id"])
-                for cid in camp_ids:
-                    pending = dict_from_row(db.execute(text("""
-                        SELECT COUNT(*) as n FROM campaign_emails
-                        WHERE campaign_id=:cid AND status='approved' AND sent_at IS NULL
-                    """), {"cid": cid}).fetchone())
-                    if pending and pending["n"] == 0:
-                        db.execute(text("UPDATE campaigns SET status='sent' WHERE id=:id"), {"id": cid})
-                db.commit()
-
-            return {"success": True, **results}
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(500, str(e))
-        finally:
-            db.close()
-    else:
-        # Procesamiento general
-        result = process_scheduled_emails()
-        return {"success": True, **result}
-
 
 # ─────────────────────────────────────────────
 # ROUTES — FRONTEND SPA
