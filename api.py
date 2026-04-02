@@ -19,6 +19,7 @@ import psycopg2.extras
 from email.header import decode_header
 from datetime import datetime, timedelta
 import uvicorn, logging, re, secrets, hashlib, hmac, json, time
+import asyncio
 import resend
 
 logging.basicConfig(level=logging.INFO)
@@ -492,7 +493,148 @@ def fetch_inbox_sync(limit=60):
         return {"added":0,"deleted":0,"error":str(e)}
 
 # ─────────────────────────────────────────────
-# APP LIFESPAN
+# SCHEDULED EMAIL PROCESSOR
+# ─────────────────────────────────────────────
+def _build_style() -> dict:
+    """Lee los estilos desde settings para construir emails HTML."""
+    c = cfg()
+    return {
+        "primary_color":  get_setting("style_primary_color",  "#7ec850"),
+        "bg_color":       get_setting("style_bg_color",       "#ffffff"),
+        "text_color":     get_setting("style_text_color",     "#1a1a1a"),
+        "font_family":    get_setting("style_font_family",    "Georgia,'Times New Roman',serif"),
+        "font_size":      get_setting("style_font_size",      "16px"),
+        "link_color":     get_setting("style_link_color",     "#2563eb"),
+        "header_bg":      get_setting("style_header_bg",      "#0c0f0a"),
+        "header_color":   get_setting("style_header_color",   "#7ec850"),
+        "sender_name":    c["sender_name"],
+        "signature_html": get_setting("signature_html",       ""),
+    }
+
+def process_scheduled_emails(now_dt: datetime = None) -> dict:
+    """
+    Procesa y envía todos los emails de campaña cuya scheduled_at ya venció.
+    Retorna un resumen de lo procesado.
+    Marca cada email_contact con sent/failed en campaign_email_sends.
+    """
+    if now_dt is None:
+        now_dt = datetime.utcnow()
+
+    now_str = now_dt.strftime("%Y-%m-%d %H:%M")
+    logger.info(f"[scheduler] Procesando emails programados — ahora UTC: {now_str}")
+
+    db = get_db()
+    results = {"sent": 0, "failed": 0, "skipped": 0, "details": []}
+    try:
+        # Obtener emails de campañas 'scheduled' cuya hora ya pasó y no fueron enviados aún
+        due_emails = rows_to_list(db.execute(text("""
+            SELECT ce.id, ce.campaign_id, ce.day_number, ce.subject, ce.body,
+                   ce.scheduled_at, ce.status as email_status,
+                   c.status as camp_status, c.name as camp_name
+            FROM campaign_emails ce
+            JOIN campaigns c ON c.id = ce.campaign_id
+            WHERE c.status = 'scheduled'
+              AND ce.status = 'approved'
+              AND ce.sent_at IS NULL
+              AND ce.scheduled_at IS NOT NULL
+              AND ce.scheduled_at <= :now
+            ORDER BY ce.scheduled_at ASC
+        """), {"now": now_str}).fetchall())
+
+        if not due_emails:
+            logger.info("[scheduler] No hay emails vencidos para enviar.")
+            return results
+
+        style_cfg = _build_style()
+
+        for em in due_emails:
+            contacts_rows = rows_to_list(db.execute(text(
+                "SELECT email FROM campaign_contacts WHERE campaign_id=:cid"
+            ), {"cid": em["campaign_id"]}).fetchall())
+            contact_emails = [r["email"] for r in contacts_rows]
+
+            if not contact_emails:
+                logger.warning(f"[scheduler] Email id={em['id']} sin contactos — omitido.")
+                results["skipped"] += 1
+                continue
+
+            body_html = build_html_email(em["body"], style_cfg)
+            ok_count = 0
+            fail_count = 0
+
+            for to in contact_emails:
+                try:
+                    send_resend(to, em["subject"], em["body"], body_html)
+                    ok_count += 1
+                    results["sent"] += 1
+                    results["details"].append({
+                        "camp_name": em["camp_name"],
+                        "day": em["day_number"],
+                        "to": to,
+                        "ok": True,
+                        "scheduled_at": em["scheduled_at"],
+                    })
+                except Exception as e:
+                    fail_count += 1
+                    results["failed"] += 1
+                    results["details"].append({
+                        "camp_name": em["camp_name"],
+                        "day": em["day_number"],
+                        "to": to,
+                        "ok": False,
+                        "error": str(e),
+                        "scheduled_at": em["scheduled_at"],
+                    })
+                    logger.error(f"[scheduler] Error enviando a {to}: {e}")
+
+            # Marcar el email como enviado si al menos uno salió bien
+            if ok_count > 0:
+                db.execute(text("""
+                    UPDATE campaign_emails
+                    SET sent_at = :now, send_status = 'sent'
+                    WHERE id = :id
+                """), {"now": now_dt.isoformat(), "id": em["id"]})
+                logger.info(f"[scheduler] Email id={em['id']} enviado → {ok_count} ok, {fail_count} errores")
+            elif fail_count > 0:
+                db.execute(text("""
+                    UPDATE campaign_emails
+                    SET send_status = 'failed'
+                    WHERE id = :id
+                """), {"id": em["id"]})
+
+        db.commit()
+
+        # Si todos los emails de una campaña fueron enviados, marcarla como 'sent'
+        campaigns_done = set(em["campaign_id"] for em in due_emails)
+        for cid in campaigns_done:
+            pending = dict_from_row(db.execute(text("""
+                SELECT COUNT(*) as n FROM campaign_emails
+                WHERE campaign_id=:cid AND status='approved' AND sent_at IS NULL
+            """), {"cid": cid}).fetchone())
+            if pending and pending["n"] == 0:
+                db.execute(text("UPDATE campaigns SET status='sent' WHERE id=:id"), {"id": cid})
+        db.commit()
+
+    except Exception as e:
+        logger.error(f"[scheduler] Error en process_scheduled_emails: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+    logger.info(f"[scheduler] Resultado: {results['sent']} enviados, {results['failed']} fallidos, {results['skipped']} omitidos")
+    return results
+
+
+async def _scheduler_loop():
+    """Loop de background: cada 60 segundos procesa emails programados."""
+    await asyncio.sleep(5)  # Pequeño delay al inicio para que la DB esté lista
+    while True:
+        try:
+            process_scheduled_emails()
+        except Exception as e:
+            logger.error(f"[scheduler_loop] Error inesperado: {e}")
+        await asyncio.sleep(60)
+
 
 # ─────────────────────────────────────────────
 # APP LIFESPAN
@@ -502,9 +644,25 @@ async def lifespan(app):
     try:
         init_db()
         logger.info("Aplicación iniciada correctamente")
+        # Procesar emails vencidos al iniciar (manejo de downtime)
+        try:
+            result = process_scheduled_emails()
+            if result["sent"] > 0 or result["failed"] > 0:
+                logger.info(f"[startup] Emails demorados procesados al iniciar: {result}")
+        except Exception as e:
+            logger.warning(f"[startup] No se pudieron procesar emails demorados: {e}")
+        # Iniciar loop de scheduler en background
+        task = asyncio.create_task(_scheduler_loop())
     except Exception as e:
         logger.error(f"Error al iniciar la aplicación: {e}")
+        task = None
     yield
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     logger.info("Aplicación cerrada")
 
 app = FastAPI(title="Asistente Ejecutivo API", lifespan=lifespan)
@@ -543,7 +701,8 @@ if os.path.exists(static_dir) and os.listdir(static_dir):
 
 API_PATHS = ["auth","contacts","inbox","send-email","settings","context",
              "preview-email","logs","memory","supervision","stats",
-             "smtp-test","config","api","campaigns","groq-key"]
+             "smtp-test","config","api","campaigns","groq-key",
+             "schedule","process-scheduled"]
 
 @app.post("/auth/login")
 async def login(request: Request):
@@ -750,20 +909,7 @@ def delete_contact(cid: int, _: str = Depends(require_auth)):
 # ─────────────────────────────────────────────
 # ROUTES — SEND (simple + multiple)
 # ─────────────────────────────────────────────
-def _build_style():
-    c = cfg()
-    return {
-        "primary_color":  get_setting("style_primary_color","#7ec850"),
-        "bg_color":       get_setting("style_bg_color","#ffffff"),
-        "text_color":     get_setting("style_text_color","#1a1a1a"),
-        "font_family":    get_setting("style_font_family","Georgia,'Times New Roman',serif"),
-        "font_size":      get_setting("style_font_size","16px"),
-        "link_color":     get_setting("style_link_color","#2563eb"),
-        "header_bg":      get_setting("style_header_bg","#0c0f0a"),
-        "header_color":   get_setting("style_header_color","#7ec850"),
-        "sender_name":    c["sender_name"],
-        "signature_html": get_setting("signature_html",""),
-    }
+
 
 def _log_sent(db, to, subject, body, body_html, intent, campaign_id):
     result = db.execute(text("SELECT name FROM contacts WHERE email=:email"), {"email": to})
@@ -1619,14 +1765,20 @@ async def send_campaign_now(cid: int, _: str = Depends(require_auth)):
         style_cfg = _build_style()
         results = []
 
+        now_dt = datetime.utcnow()
         for em in emails:
             body_html = build_html_email(em["body"], style_cfg)
+            email_ok = False
             for to in contact_emails:
                 try:
                     send_resend(to, em["subject"], em["body"], body_html)
                     results.append({"email_day": em["day_number"], "to": to, "ok": True})
+                    email_ok = True
                 except Exception as e:
                     results.append({"email_day": em["day_number"], "to": to, "ok": False, "error": str(e)})
+            if email_ok:
+                db.execute(text("UPDATE campaign_emails SET sent_at=:now, send_status='sent' WHERE id=:id"),
+                           {"now": now_dt.isoformat(), "id": em["id"]})
 
         db.execute(text("UPDATE campaigns SET status='sent' WHERE id=:id"), {"id": cid})
         db.commit()
@@ -1634,6 +1786,142 @@ async def send_campaign_now(cid: int, _: str = Depends(require_auth)):
         return {"success": True, "sent": sent_ok, "failed": len(results)-sent_ok, "results": results}
     finally:
         db.close()
+
+@app.get("/campaigns/schedule")
+def get_campaign_schedule(_: str = Depends(require_auth)):
+    """
+    Retorna la agenda de envío de todas las campañas programadas o enviadas.
+    Cada item incluye el estado: 'sent', 'scheduled', 'delayed'.
+    """
+    db = get_db()
+    now_dt = datetime.utcnow()
+    now_str = now_dt.strftime("%Y-%m-%d %H:%M")
+    try:
+        rows = rows_to_list(db.execute(text("""
+            SELECT
+                ce.id, ce.campaign_id, ce.day_number, ce.subject,
+                ce.scheduled_at, ce.sent_at, ce.send_status,
+                ce.status as approval_status,
+                c.name as camp_name, c.status as camp_status
+            FROM campaign_emails ce
+            JOIN campaigns c ON c.id = ce.campaign_id
+            WHERE c.status IN ('scheduled', 'sent')
+              AND ce.status = 'approved'
+            ORDER BY ce.scheduled_at ASC
+        """)).fetchall())
+
+        items = []
+        for r in rows:
+            sched = r.get("scheduled_at") or ""
+            sent_at = r.get("sent_at")
+            send_status = r.get("send_status") or ""
+
+            # Determinar estado visual
+            if sent_at or send_status == "sent":
+                state = "sent"
+            elif sched and sched <= now_str:
+                state = "delayed"
+            else:
+                state = "scheduled"
+
+            items.append({
+                "id": r["id"],
+                "campaign_id": r["campaign_id"],
+                "camp_name": r["camp_name"],
+                "camp_status": r["camp_status"],
+                "day_number": r["day_number"],
+                "subject": r["subject"],
+                "scheduled_at": sched,
+                "sent_at": str(sent_at) if sent_at else None,
+                "send_status": send_status,
+                "state": state,
+            })
+
+        return items
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/process-scheduled")
+async def api_process_scheduled(request: Request, _: str = Depends(require_auth)):
+    """
+    Dispara manualmente el procesamiento de emails programados vencidos.
+    Acepta body JSON opcional: {"email_ids": [1,2,3]} para enviar IDs específicos.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    email_ids = body.get("email_ids", [])
+
+    if email_ids:
+        # Envío selectivo de emails específicos (para "Enviar demorados")
+        db = get_db()
+        results = {"sent": 0, "failed": 0, "details": []}
+        now_dt = datetime.utcnow()
+        style_cfg = _build_style()
+        try:
+            for eid in email_ids:
+                em = dict_from_row(db.execute(text("""
+                    SELECT ce.*, c.name as camp_name, c.status as camp_status
+                    FROM campaign_emails ce
+                    JOIN campaigns c ON c.id = ce.campaign_id
+                    WHERE ce.id = :id AND ce.status = 'approved'
+                """), {"id": eid}).fetchone())
+                if not em:
+                    continue
+
+                contacts_rows = rows_to_list(db.execute(text(
+                    "SELECT email FROM campaign_contacts WHERE campaign_id=:cid"
+                ), {"cid": em["campaign_id"]}).fetchall())
+                contact_emails = [r["email"] for r in contacts_rows]
+
+                body_html = build_html_email(em["body"], style_cfg)
+                ok_count = 0
+                for to in contact_emails:
+                    try:
+                        send_resend(to, em["subject"], em["body"], body_html)
+                        ok_count += 1
+                        results["sent"] += 1
+                        results["details"].append({"id": eid, "to": to, "ok": True})
+                    except Exception as e:
+                        results["failed"] += 1
+                        results["details"].append({"id": eid, "to": to, "ok": False, "error": str(e)})
+
+                if ok_count > 0:
+                    db.execute(text("UPDATE campaign_emails SET sent_at=:now, send_status='sent' WHERE id=:id"),
+                               {"now": now_dt.isoformat(), "id": eid})
+
+            db.commit()
+
+            # Verificar campañas completadas
+            if email_ids:
+                camp_ids = set()
+                for eid in email_ids:
+                    row = db.execute(text("SELECT campaign_id FROM campaign_emails WHERE id=:id"), {"id": eid}).fetchone()
+                    if row:
+                        camp_ids.add(dict_from_row(row)["campaign_id"])
+                for cid in camp_ids:
+                    pending = dict_from_row(db.execute(text("""
+                        SELECT COUNT(*) as n FROM campaign_emails
+                        WHERE campaign_id=:cid AND status='approved' AND sent_at IS NULL
+                    """), {"cid": cid}).fetchone())
+                    if pending and pending["n"] == 0:
+                        db.execute(text("UPDATE campaigns SET status='sent' WHERE id=:id"), {"id": cid})
+                db.commit()
+
+            return {"success": True, **results}
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(500, str(e))
+        finally:
+            db.close()
+    else:
+        # Procesamiento general
+        result = process_scheduled_emails()
+        return {"success": True, **result}
+
 
 # ─────────────────────────────────────────────
 # ROUTES — FRONTEND SPA

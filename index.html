@@ -146,6 +146,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .spinner{display:inline-block;width:11px;height:11px;border:1.5px solid rgba(255,255,255,.2);border-top-color:currentColor;border-radius:50%;animation:spin .6s linear infinite}
 .spinner-dk{border-color:rgba(12,15,10,.2);border-top-color:#0c0f0a}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Agenda de envío ─────────────────────── */
+.sched-row{display:grid;grid-template-columns:140px 60px 1fr 140px 120px 110px;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);align-items:center;font-size:11px;transition:background .12s}
+.sched-row:hover{background:var(--bg3)}
+.sched-header{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);background:var(--bg3);border-radius:var(--r) var(--r) 0 0}
+.sched-state-sent{color:var(--green)}
+.sched-state-scheduled{color:var(--text2)}
+.sched-state-delayed{color:var(--amber)}
+.sched-delayed-banner{background:rgba(200,148,58,.08);border:1px solid rgba(200,148,58,.25);border-radius:var(--r2);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
 </style>
 </head>
 <body>
@@ -593,6 +603,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 <!-- CAMPANAS IA -->
 <div class="view" id="view-campaigns">
 
+  <!-- TABS DE CAMPANAS -->
+  <div style="display:flex;gap:6px;margin-bottom:1rem;border-bottom:1px solid var(--border);padding-bottom:0">
+    <button id="campTab-list" onclick="switchCampTab('list')"
+      style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:6px 14px;background:transparent;border:none;border-bottom:2px solid var(--green);color:var(--green);cursor:pointer;transition:all .15s">
+      Campañas
+    </button>
+    <button id="campTab-schedule" onclick="switchCampTab('schedule')"
+      style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:6px 14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text3);cursor:pointer;transition:all .15s">
+      Agenda de Envío
+    </button>
+  </div>
+
   <!-- LISTA -->
   <div id="campaignListView">
     <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
@@ -679,6 +701,49 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <button class="btn btn-green btn-sm" id="btnFinalizeCamp" onclick="finalizeCampaign()" style="display:none">Confirmar campana &#x2713;</button>
     </div>
     <div id="approvalEmailList" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+
+  <!-- AGENDA DE ENVÍO -->
+  <div id="campaignScheduleView" style="display:none">
+    <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center;flex-wrap:wrap">
+      <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Agenda de Envío</span>
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost btn-sm" onclick="loadSchedule()">⟳ Actualizar</button>
+    </div>
+
+    <!-- Banner demorados -->
+    <div id="schedDelayedBanner" style="display:none" class="sched-delayed-banner">
+      <div>
+        <div style="font-size:12px;color:var(--amber);font-weight:500;margin-bottom:3px">⚠ Emails demorados detectados</div>
+        <div style="font-size:11px;color:var(--text3)" id="schedDelayedDesc">La app estuvo inactiva. Estos emails no se enviaron en su horario original.</div>
+      </div>
+      <button class="btn btn-amber btn-sm" id="btnSendDelayed" onclick="sendDelayedEmails()">
+        Enviar demorados ahora
+      </button>
+    </div>
+
+    <div class="panel" style="overflow:hidden">
+      <div id="schedFilterBar" style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Filtrar:</span>
+        <button onclick="filterSchedule('all')" id="sf-all" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px;border-color:var(--green);color:var(--green)">Todos</button>
+        <button onclick="filterSchedule('delayed')" id="sf-delayed" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Demorados</button>
+        <button onclick="filterSchedule('scheduled')" id="sf-scheduled" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Agendados</button>
+        <button onclick="filterSchedule('sent')" id="sf-sent" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Enviados</button>
+        <div style="flex:1"></div>
+        <span id="schedCount" style="font-size:10px;color:var(--text3)"></span>
+      </div>
+      <div class="sched-row sched-header">
+        <span>Campaña</span>
+        <span>Email #</span>
+        <span>Asunto</span>
+        <span>Programado</span>
+        <span>Estado</span>
+        <span></span>
+      </div>
+      <div id="scheduleList">
+        <div style="padding:2rem;color:var(--text3);font-size:11px;text-align:center">Cargando agenda...</div>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -889,6 +954,17 @@ async function showApp(){
   }catch(e){}
   loadDashboard(); loadContacts(); checkStatus();
   setInterval(checkStatus,30000); setInterval(loadStats,60000);
+  // Verificar emails demorados al abrir la app
+  try {
+    const sr = await apiFetch('/campaigns/schedule');
+    if(sr.ok){
+      const items = await sr.json();
+      const delayed = items.filter(i=>i.state==='delayed');
+      if(delayed.length > 0){
+        toast(`⚠ ${delayed.length} email${delayed.length>1?'s':''} de campaña demorado${delayed.length>1?'s':''}. Ve a Campañas → Agenda de Envío.`,'');
+      }
+    }
+  }catch(e){}
 }
 
 async function checkAuth(){
@@ -946,7 +1022,7 @@ function go(view){
   if(view==='context')    loadContext();
   if(view==='estilo')     loadStyle();
   if(view==='dashboard')  loadDashboard();
-  if(view==='campaigns')  loadCampaigns();
+  if(view==='campaigns')  showCampaignList();
 }
 
 async function checkStatus(){
@@ -1304,10 +1380,172 @@ let campGenState = {
   generating: false,
 };
 
+// ── Tab switcher ───────────────────────────
+function switchCampTab(tab){
+  const tabs = ['list','schedule'];
+  tabs.forEach(t=>{
+    const btn = document.getElementById('campTab-'+t);
+    if(btn){
+      btn.style.borderBottomColor = t===tab ? 'var(--green)' : 'transparent';
+      btn.style.color = t===tab ? 'var(--green)' : 'var(--text3)';
+    }
+  });
+  // Ocultar todas las sub-vistas de campañas
+  document.getElementById('campaignListView').style.display = 'none';
+  document.getElementById('campaignFormView').style.display = 'none';
+  document.getElementById('campaignApprovalView').style.display = 'none';
+  document.getElementById('campaignScheduleView').style.display = 'none';
+
+  if(tab === 'list'){
+    document.getElementById('campaignListView').style.display = 'block';
+    loadCampaigns();
+  } else if(tab === 'schedule'){
+    document.getElementById('campaignScheduleView').style.display = 'block';
+    loadSchedule();
+  }
+}
+
+// ── Agenda de envío ───────────────────────
+let scheduleData = [];
+let scheduleFilter = 'all';
+
+async function loadSchedule(){
+  const el = document.getElementById('scheduleList');
+  el.innerHTML = '<div style="padding:2rem;color:var(--text3);font-size:11px;text-align:center"><span class="spinner"></span> Cargando...</div>';
+  document.getElementById('schedDelayedBanner').style.display = 'none';
+  try{
+    const r = await apiFetch('/campaigns/schedule');
+    if(!r.ok) throw new Error('Error');
+    scheduleData = await r.json();
+    renderSchedule();
+
+    // Detectar demorados
+    const delayed = scheduleData.filter(i => i.state === 'delayed');
+    if(delayed.length > 0){
+      document.getElementById('schedDelayedBanner').style.display = 'flex';
+      document.getElementById('schedDelayedDesc').textContent =
+        `${delayed.length} email${delayed.length>1?'s':''} no se enviaron en su horario. La app estuvo inactiva.`;
+    }
+  }catch(e){
+    el.innerHTML = '<div style="padding:2rem;color:var(--red);font-size:11px;text-align:center">Error cargando agenda.</div>';
+  }
+}
+
+function filterSchedule(f){
+  scheduleFilter = f;
+  ['all','delayed','scheduled','sent'].forEach(id=>{
+    const btn = document.getElementById('sf-'+id);
+    if(!btn) return;
+    const active = id===f;
+    btn.style.borderColor = active ? 'var(--green)' : 'var(--border)';
+    btn.style.color = active ? 'var(--green)' : 'var(--text3)';
+  });
+  renderSchedule();
+}
+
+function renderSchedule(){
+  const el = document.getElementById('scheduleList');
+  const countEl = document.getElementById('schedCount');
+  let items = scheduleData;
+  if(scheduleFilter !== 'all') items = items.filter(i => i.state === scheduleFilter);
+  countEl.textContent = `${items.length} registro${items.length!==1?'s':''}`;
+
+  if(!items.length){
+    const msgs = {
+      all: 'No hay campañas programadas o enviadas.',
+      delayed: 'No hay emails demorados. ✓',
+      scheduled: 'No hay emails pendientes de envío.',
+      sent: 'No hay emails enviados aún.',
+    };
+    el.innerHTML = `<div style="padding:2rem;color:var(--text3);font-size:11px;text-align:center">${msgs[scheduleFilter]||'Sin datos.'}</div>`;
+    return;
+  }
+
+  el.innerHTML = items.map(item => {
+    const stateMap = {
+      sent:      {icon:'✓', label:'Enviado',   cls:'sched-state-sent'},
+      scheduled: {icon:'◷', label:'Agendado',  cls:'sched-state-scheduled'},
+      delayed:   {icon:'⚠', label:'Demorado',  cls:'sched-state-delayed'},
+    };
+    const st = stateMap[item.state] || stateMap.scheduled;
+    const sentInfo = item.sent_at ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">env: ${formatSchedDate(item.sent_at)}</div>` : '';
+    const actionBtn = item.state === 'delayed'
+      ? `<button class="btn btn-amber btn-sm" style="font-size:9px;padding:3px 9px" onclick="sendSingleDelayed(${item.id})">Enviar ahora</button>`
+      : '';
+
+    return `<div class="sched-row">
+      <span style="color:var(--text2);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.camp_name}">${item.camp_name}</span>
+      <span style="color:var(--text3);text-align:center">#${item.day_number}</span>
+      <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.subject||''}">${item.subject||'<em style="color:var(--text3)">sin asunto</em>'}</span>
+      <div>
+        <div style="font-size:11px;color:var(--text2)">${formatSchedDate(item.scheduled_at)}</div>
+        ${sentInfo}
+      </div>
+      <span class="${st.cls}" style="font-weight:500">${st.icon} ${st.label}</span>
+      <div style="display:flex;justify-content:flex-end">${actionBtn}</div>
+    </div>`;
+  }).join('');
+}
+
+function formatSchedDate(d){
+  if(!d) return '—';
+  try{
+    const dt = new Date(d.length <= 16 ? d + ':00' : d);
+    return dt.toLocaleDateString('es', {day:'2-digit',month:'short',year:'2-digit'}) +
+           ' ' + dt.toLocaleTimeString('es', {hour:'2-digit',minute:'2-digit'});
+  }catch(e){ return d; }
+}
+
+async function sendDelayedEmails(){
+  const delayed = scheduleData.filter(i => i.state === 'delayed');
+  if(!delayed.length) return;
+  const btn = document.getElementById('btnSendDelayed');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner spinner-dk"></span> Enviando...';
+  try{
+    const ids = delayed.map(i => i.id);
+    const r = await apiFetch('/campaigns/process-scheduled', {
+      method: 'POST',
+      body: JSON.stringify({email_ids: ids})
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.detail||'Error');
+    toast(`Enviados: ${d.sent} ✓  Errores: ${d.failed}`, d.failed > 0 ? '' : 'success');
+    await loadSchedule();
+  }catch(e){
+    toast('Error enviando: '+e.message, 'error');
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = 'Enviar demorados ahora';
+  }
+}
+
+async function sendSingleDelayed(emailId){
+  try{
+    const r = await apiFetch('/campaigns/process-scheduled', {
+      method: 'POST',
+      body: JSON.stringify({email_ids: [emailId]})
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.detail||'Error');
+    toast(d.sent > 0 ? 'Email enviado ✓' : 'Error al enviar', d.sent > 0 ? 'success' : 'error');
+    await loadSchedule();
+  }catch(e){
+    toast('Error: '+e.message, 'error');
+  }
+}
+// ─────────────────────────────────────────
+
 function showCampaignList(){
   document.getElementById('campaignListView').style.display='block';
   document.getElementById('campaignFormView').style.display='none';
   document.getElementById('campaignApprovalView').style.display='none';
+  document.getElementById('campaignScheduleView').style.display='none';
+  // Resync tab indicator
+  ['list','schedule'].forEach(t=>{
+    const btn=document.getElementById('campTab-'+t);
+    if(btn){btn.style.borderBottomColor=t==='list'?'var(--green)':'transparent';btn.style.color=t==='list'?'var(--green)':'var(--text3)';}
+  });
   loadCampaigns();
 }
 
@@ -1315,6 +1553,7 @@ function showCampaignForm(){
   document.getElementById('campaignListView').style.display='none';
   document.getElementById('campaignFormView').style.display='block';
   document.getElementById('campaignApprovalView').style.display='none';
+  document.getElementById('campaignScheduleView').style.display='none';
   const today=new Date().toISOString().split('T')[0];
   document.getElementById('camp-start').value=today;
   const end=new Date();end.setDate(end.getDate()+14);
@@ -1748,6 +1987,7 @@ async function showApprovalView(campId){
   document.getElementById('campaignListView').style.display='none';
   document.getElementById('campaignFormView').style.display='none';
   document.getElementById('campaignApprovalView').style.display='block';
+  document.getElementById('campaignScheduleView').style.display='none';
 
   const loadingEl=document.getElementById('approvalEmailList');
   loadingEl.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Cargando emails...</div>';
@@ -1885,8 +2125,8 @@ async function finalizeCampaign(){
     const r=await apiFetch('/campaigns/'+currentCampaignId+'/finalize',{method:'POST'});
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||'Error');
-    toast('Campana programada exitosamente','success');
-    showCampaignList();
+    toast('Campaña programada exitosamente — revisa la Agenda de Envío','success');
+    switchCampTab('schedule');
   }catch(e){toast('Error: '+e.message,'error');}
   finally{btn.disabled=false;btn.innerHTML='Confirmar campana ✓';}
 }
