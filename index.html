@@ -729,6 +729,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <button onclick="filterSchedule('delayed')" id="sf-delayed" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Demorados</button>
         <button onclick="filterSchedule('scheduled')" id="sf-scheduled" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Agendados</button>
         <button onclick="filterSchedule('sent')" id="sf-sent" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Enviados</button>
+        <button onclick="filterSchedule('cancelled')" id="sf-cancelled" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Cancelados</button>
         <div style="flex:1"></div>
         <span id="schedCount" style="font-size:10px;color:var(--text3)"></span>
       </div>
@@ -899,6 +900,44 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       </button>
     </div>
     <div id="campGenStatus" style="margin-top:10px;font-size:11px;color:var(--text3);text-align:right"></div>
+  </div>
+</div>
+
+<!-- MODAL: REPROGRAMAR EMAIL DE AGENDA -->
+<div class="modal-backdrop" id="modalReschedule">
+  <div class="modal" style="max-width:400px">
+    <h2 style="margin-bottom:14px">Reprogramar envío</h2>
+    <input type="hidden" id="reschedEmailId"/>
+    <div style="margin-bottom:12px">
+      <label style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);display:block;margin-bottom:6px">Nueva fecha</label>
+      <input type="date" id="reschedDate"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;caret-color:var(--green)"/>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);display:block;margin-bottom:6px">Hora de envío</label>
+      <input type="time" id="reschedTime" value="09:00"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;caret-color:var(--green)"/>
+    </div>
+    <div id="reschedError" style="font-size:11px;color:var(--red);min-height:16px;margin-bottom:8px"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal('modalReschedule')">Cancelar</button>
+      <button class="btn btn-green" style="flex:2;justify-content:center" id="btnConfirmReschedule" onclick="confirmReschedule()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: DETALLE EMAIL DE AGENDA -->
+<div class="modal-backdrop" id="modalSchedEmail">
+  <div class="modal" style="max-width:720px">
+    <h2 id="schedEmailModalSubject" style="margin-bottom:6px">Email</h2>
+    <div id="schedEmailModalMeta" class="info" style="margin-bottom:14px;line-height:1.8"></div>
+    <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Cuerpo (Markdown)</div>
+    <div id="schedEmailModalBody" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:14px;font-size:12px;color:var(--text2);line-height:1.7;white-space:pre-wrap;max-height:180px;overflow-y:auto;margin-bottom:14px"></div>
+    <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Vista HTML renderizada</div>
+    <iframe id="schedEmailPreview" style="width:100%;height:320px;border:1px solid var(--border);border-radius:var(--r);background:#fff"></iframe>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalSchedEmail')">Cerrar</button>
+    </div>
   </div>
 </div>
 
@@ -1433,7 +1472,7 @@ async function loadSchedule(){
 
 function filterSchedule(f){
   scheduleFilter = f;
-  ['all','delayed','scheduled','sent'].forEach(id=>{
+  ['all','delayed','scheduled','sent','cancelled'].forEach(id=>{
     const btn = document.getElementById('sf-'+id);
     if(!btn) return;
     const active = id===f;
@@ -1452,10 +1491,11 @@ function renderSchedule(){
 
   if(!items.length){
     const msgs = {
-      all: 'No hay campañas programadas o enviadas.',
-      delayed: 'No hay emails demorados. ✓',
+      all:       'No hay campañas programadas o enviadas.',
+      delayed:   '✓ No hay emails demorados.',
       scheduled: 'No hay emails pendientes de envío.',
-      sent: 'No hay emails enviados aún.',
+      sent:      'No hay emails enviados aún.',
+      cancelled: 'No hay emails cancelados.',
     };
     el.innerHTML = `<div style="padding:2rem;color:var(--text3);font-size:11px;text-align:center">${msgs[scheduleFilter]||'Sin datos.'}</div>`;
     return;
@@ -1466,34 +1506,56 @@ function renderSchedule(){
       sent:      {icon:'✓', label:'Enviado',   cls:'sched-state-sent'},
       scheduled: {icon:'◷', label:'Agendado',  cls:'sched-state-scheduled'},
       delayed:   {icon:'⚠', label:'Demorado',  cls:'sched-state-delayed'},
+      cancelled: {icon:'✕', label:'Cancelado', cls:'', style:'color:var(--text3)'},
     };
     const st = stateMap[item.state] || stateMap.scheduled;
-    const sentInfo = item.sent_at ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">env: ${formatSchedDate(item.sent_at)}</div>` : '';
-    const actionBtn = item.state === 'delayed'
-      ? `<button class="btn btn-amber btn-sm" style="font-size:9px;padding:3px 9px" onclick="sendSingleDelayed(${item.id})">Enviar ahora</button>`
+    const sentInfo = item.sent_at
+      ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">env: ${formatSchedDate(item.sent_at)}</div>`
       : '';
 
+    let actions = '';
+    if(item.state === 'delayed'){
+      actions = `
+        <button class="btn btn-amber btn-sm" style="font-size:9px;padding:3px 9px" onclick="sendSingleDelayed(${item.id})">Enviar ahora</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openRescheduleModal(${item.id},'${item.scheduled_at}')">Reprogramar</button>
+        <button class="btn btn-red btn-sm" style="font-size:9px;padding:3px 9px" onclick="cancelScheduledEmail(${item.id})">Cancelar</button>`;
+    } else if(item.state === 'scheduled'){
+      actions = `
+        <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openRescheduleModal(${item.id},'${item.scheduled_at}')">Reprogramar</button>
+        <button class="btn btn-red btn-sm" style="font-size:9px;padding:3px 9px" onclick="cancelScheduledEmail(${item.id})">Cancelar</button>`;
+    } else if(item.state === 'sent'){
+      actions = `<button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openSchedEmailModal(${item.id})">Ver email</button>`;
+    }
+
     return `<div class="sched-row">
-      <span style="color:var(--text2);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.camp_name}">${item.camp_name}</span>
+      <span style="color:var(--text2);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${item.camp_name}" onclick="openSchedEmailModal(${item.id})">${item.camp_name}</span>
       <span style="color:var(--text3);text-align:center">#${item.day_number}</span>
-      <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.subject||''}">${item.subject||'<em style="color:var(--text3)">sin asunto</em>'}</span>
+      <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${item.subject||''}" onclick="openSchedEmailModal(${item.id})">${item.subject||'<em style="color:var(--text3)">sin asunto</em>'}</span>
       <div>
         <div style="font-size:11px;color:var(--text2)">${formatSchedDate(item.scheduled_at)}</div>
         ${sentInfo}
       </div>
-      <span class="${st.cls}" style="font-weight:500">${st.icon} ${st.label}</span>
-      <div style="display:flex;justify-content:flex-end">${actionBtn}</div>
+      <span class="${st.cls}" style="font-weight:500${st.style?';'+st.style:''}">${st.icon} ${st.label}</span>
+      <div style="display:flex;justify-content:flex-end;gap:4px;flex-wrap:wrap">${actions}</div>
     </div>`;
   }).join('');
 }
 
 function formatSchedDate(d){
-  if(!d) return '—';
+  if(!d || d==='None' || d==='' ) return '—';
   try{
-    const dt = new Date(d.length <= 16 ? d + ':00' : d);
+    // Normalizar: "2026-03-31" → "2026-03-31T09:00:00"
+    // "2026-03-31 09:00" → "2026-03-31T09:00:00"
+    // "2026-03-31T09:00:00.000000" → already ISO
+    let s = String(d).trim();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s)) s = s + 'T09:00:00';
+    else if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(s)) s = s.replace(' ','T') + ':00';
+    else if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) s = s.replace(' ','T');
+    const dt = new Date(s);
+    if(isNaN(dt.getTime())) return d;
     return dt.toLocaleDateString('es', {day:'2-digit',month:'short',year:'2-digit'}) +
            ' ' + dt.toLocaleTimeString('es', {hour:'2-digit',minute:'2-digit'});
-  }catch(e){ return d; }
+  }catch(e){ return String(d); }
 }
 
 async function sendDelayedEmails(){
@@ -1532,6 +1594,90 @@ async function sendSingleDelayed(emailId){
     await loadSchedule();
   }catch(e){
     toast('Error: '+e.message, 'error');
+  }
+}
+async function cancelScheduledEmail(emailId){
+  if(!confirm('¿Cancelar este envío programado? El email no se enviará.')) return;
+  try{
+    const r = await apiFetch(`/campaigns/schedule-email/${emailId}/cancel`, {method:'POST'});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.detail||'Error');
+    toast('Envío cancelado','success');
+    await loadSchedule();
+  }catch(e){
+    toast('Error: '+e.message,'error');
+  }
+}
+
+function openRescheduleModal(emailId, currentSched){
+  document.getElementById('reschedEmailId').value = emailId;
+  // Pre-llenar con fecha/hora actual del email
+  let dateVal = '', timeVal = '09:00';
+  if(currentSched && currentSched !== 'None'){
+    const parts = currentSched.trim().split(/[ T]/);
+    dateVal = parts[0] || '';
+    timeVal = (parts[1] || '09:00').substring(0,5);
+  }
+  document.getElementById('reschedDate').value = dateVal;
+  document.getElementById('reschedTime').value = timeVal;
+  document.getElementById('reschedError').textContent = '';
+  openModal('modalReschedule');
+}
+
+async function confirmReschedule(){
+  const emailId = document.getElementById('reschedEmailId').value;
+  const date    = document.getElementById('reschedDate').value;
+  const time    = document.getElementById('reschedTime').value || '09:00';
+  if(!date){ document.getElementById('reschedError').textContent='Selecciona una fecha'; return; }
+  const newSched = `${date} ${time}`;
+  const btn = document.getElementById('btnConfirmReschedule');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-dk"></span>';
+  try{
+    const r = await apiFetch(`/campaigns/schedule-email/${emailId}/reschedule`, {
+      method:'POST', body: JSON.stringify({scheduled_at: newSched})
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.detail||'Error');
+    closeModal('modalReschedule');
+    toast(`Email reprogramado para ${formatSchedDate(newSched)}`,'success');
+    await loadSchedule();
+  }catch(e){
+    document.getElementById('reschedError').textContent = e.message;
+  }finally{
+    btn.disabled=false; btn.innerHTML='Confirmar';
+  }
+}
+
+async function openSchedEmailModal(emailId){
+  openModal('modalSchedEmail');
+  const body = document.getElementById('schedEmailModalBody');
+  body.innerHTML = '<div style="padding:2rem;text-align:center"><span class="spinner"></span> Cargando...</div>';
+  document.getElementById('schedEmailModalSubject').textContent = '';
+  document.getElementById('schedEmailModalMeta').innerHTML = '';
+  document.getElementById('schedEmailPreview').srcdoc = '';
+  try{
+    const r = await apiFetch(`/campaigns/schedule-email/${emailId}`);
+    if(!r.ok) throw new Error('Error cargando email');
+    const em = await r.json();
+
+    document.getElementById('schedEmailModalSubject').textContent = em.subject || '(sin asunto)';
+    const stateLbl = em.sent_at ? `<span style="color:var(--green)">✓ Enviado ${formatSchedDate(em.sent_at)}</span>` :
+                     em.send_status==='cancelled' ? `<span style="color:var(--text3)">✕ Cancelado</span>` :
+                     `<span style="color:var(--amber)">◷ Programado ${formatSchedDate(em.scheduled_at)}</span>`;
+    document.getElementById('schedEmailModalMeta').innerHTML =
+      `<b>${em.camp_name}</b> · Email #${em.day_number} · ${stateLbl}<br>` +
+      `<span style="font-size:10px;color:var(--text3)">Destinatarios: ${(em.contacts||[]).join(', ')}</span>`;
+
+    body.textContent = em.body || '';
+
+    // Preview HTML
+    try{
+      const pr = await apiFetch('/preview-email',{method:'POST',body:JSON.stringify({body: em.body||''})});
+      const pd = await pr.json();
+      document.getElementById('schedEmailPreview').srcdoc = pd.html;
+    }catch(e){}
+  }catch(e){
+    body.innerHTML = `<div style="color:var(--red);font-size:11px">Error: ${e.message}</div>`;
   }
 }
 // ─────────────────────────────────────────

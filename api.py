@@ -641,21 +641,34 @@ async def _scheduler_loop():
 # ─────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app):
+    task = None
     try:
         init_db()
         logger.info("Aplicación iniciada correctamente")
-        # Procesar emails vencidos al iniciar (manejo de downtime)
+        # Al arrancar: solo loguear cuántos emails están demorados, NO enviarlos.
+        # El usuario decide desde la Agenda de Envío.
         try:
-            result = process_scheduled_emails()
-            if result["sent"] > 0 or result["failed"] > 0:
-                logger.info(f"[startup] Emails demorados procesados al iniciar: {result}")
+            db = get_db()
+            try:
+                now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+                delayed = db.execute(text("""
+                    SELECT COUNT(*) as n FROM campaign_emails ce
+                    JOIN campaigns c ON c.id = ce.campaign_id
+                    WHERE c.status = 'scheduled' AND ce.status = 'approved'
+                      AND ce.sent_at IS NULL AND ce.scheduled_at IS NOT NULL
+                      AND ce.scheduled_at <= :now
+                """), {"now": now_str}).fetchone()
+                n = dict_from_row(delayed)["n"] if delayed else 0
+                if n > 0:
+                    logger.warning(f"[startup] {n} email(s) demorados detectados. El usuario debe enviarlos desde la Agenda.")
+            finally:
+                db.close()
         except Exception as e:
-            logger.warning(f"[startup] No se pudieron procesar emails demorados: {e}")
-        # Iniciar loop de scheduler en background
+            logger.warning(f"[startup] No se pudo verificar emails demorados: {e}")
+        # Iniciar loop de scheduler en background (solo envía en horario, no los demorados)
         task = asyncio.create_task(_scheduler_loop())
     except Exception as e:
         logger.error(f"Error al iniciar la aplicación: {e}")
-        task = None
     yield
     if task:
         task.cancel()
@@ -1224,7 +1237,7 @@ def list_campaigns(_: str = Depends(require_auth)):
 def get_campaign_schedule(_: str = Depends(require_auth)):
     """
     Retorna la agenda de envío de todas las campañas programadas o enviadas.
-    Cada item incluye el estado: 'sent', 'scheduled', 'delayed'.
+    Cada item incluye el estado: 'sent', 'scheduled', 'delayed', 'cancelled'.
     DEBE estar declarada ANTES de /campaigns/{cid} para evitar conflicto de rutas.
     """
     db = get_db()
@@ -1233,26 +1246,35 @@ def get_campaign_schedule(_: str = Depends(require_auth)):
     try:
         rows = rows_to_list(db.execute(text("""
             SELECT
-                ce.id, ce.campaign_id, ce.day_number, ce.subject,
-                ce.scheduled_at, ce.sent_at, ce.send_status,
-                ce.status as approval_status,
+                ce.id, ce.campaign_id, ce.day_number, ce.subject, ce.body,
+                ce.scheduled_at, ce.sent_at, ce.send_status, ce.status as approval_status,
                 c.name as camp_name, c.status as camp_status
             FROM campaign_emails ce
             JOIN campaigns c ON c.id = ce.campaign_id
             WHERE c.status IN ('scheduled', 'sent')
-              AND ce.status = 'approved'
-            ORDER BY ce.scheduled_at ASC
+              AND ce.status IN ('approved', 'rejected')
+            ORDER BY ce.scheduled_at ASC NULLS LAST
         """)).fetchall())
 
         items = []
         for r in rows:
-            sched = r.get("scheduled_at") or ""
+            # Normalizar scheduled_at: puede venir como "2026-03-31", "2026-03-31 09:00", o timestamp
+            raw_sched = r.get("scheduled_at") or ""
+            sched = str(raw_sched).strip() if raw_sched else ""
+            # Asegurar formato comparable YYYY-MM-DD HH:MM
+            if sched and len(sched) == 10:  # solo fecha sin hora
+                sched = sched + " 09:00"
+
             sent_at = r.get("sent_at")
             send_status = r.get("send_status") or ""
+            approval_status = r.get("approval_status") or ""
 
-            if sent_at or send_status == "sent":
+            # Determinar estado visual
+            if send_status == "cancelled" or approval_status == "rejected":
+                state = "cancelled"
+            elif sent_at or send_status == "sent":
                 state = "sent"
-            elif sched and sched <= now_str:
+            elif sched and sched[:16] <= now_str:
                 state = "delayed"
             else:
                 state = "scheduled"
@@ -1263,7 +1285,7 @@ def get_campaign_schedule(_: str = Depends(require_auth)):
                 "camp_name": r["camp_name"],
                 "camp_status": r["camp_status"],
                 "day_number": r["day_number"],
-                "subject": r["subject"],
+                "subject": r["subject"] or "",
                 "scheduled_at": sched,
                 "sent_at": str(sent_at) if sent_at else None,
                 "send_status": send_status,
@@ -1351,6 +1373,89 @@ async def api_process_scheduled(request: Request, _: str = Depends(require_auth)
     else:
         result = process_scheduled_emails()
         return {"success": True, **result}
+
+
+@app.get("/campaigns/schedule-email/{email_id}")
+def get_schedule_email_detail(email_id: int, _: str = Depends(require_auth)):
+    """Retorna detalle completo de un email de campaña para el modal de agenda."""
+    db = get_db()
+    try:
+        row = dict_from_row(db.execute(text("""
+            SELECT ce.*, c.name as camp_name, c.intent as camp_intent
+            FROM campaign_emails ce
+            JOIN campaigns c ON c.id = ce.campaign_id
+            WHERE ce.id = :id
+        """), {"id": email_id}).fetchone())
+        if not row:
+            raise HTTPException(404, "Email no encontrado")
+        # Contactos de la campaña
+        contacts = rows_to_list(db.execute(text(
+            "SELECT email FROM campaign_contacts WHERE campaign_id=:cid"
+        ), {"cid": row["campaign_id"]}).fetchall())
+        row["contacts"] = [c["email"] for c in contacts]
+        return row
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/schedule-email/{email_id}/reschedule")
+async def reschedule_email(email_id: int, request: Request, _: str = Depends(require_auth)):
+    """Reprograma un email de campaña a una nueva fecha/hora."""
+    data = await request.json()
+    new_date = data.get("scheduled_at", "").strip()
+    if not new_date:
+        raise HTTPException(400, "scheduled_at es requerido (formato: YYYY-MM-DD HH:MM)")
+    db = get_db()
+    try:
+        em = dict_from_row(db.execute(text(
+            "SELECT id, sent_at FROM campaign_emails WHERE id=:id"
+        ), {"id": email_id}).fetchone())
+        if not em:
+            raise HTTPException(404, "Email no encontrado")
+        if em.get("sent_at"):
+            raise HTTPException(400, "No se puede reprogramar un email ya enviado")
+        db.execute(text("""
+            UPDATE campaign_emails
+            SET scheduled_at = :sched, send_status = 'pending', sent_at = NULL
+            WHERE id = :id
+        """), {"sched": new_date, "id": email_id})
+        db.commit()
+        return {"success": True, "scheduled_at": new_date}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/schedule-email/{email_id}/cancel")
+async def cancel_scheduled_email(email_id: int, _: str = Depends(require_auth)):
+    """Cancela el envío programado de un email (lo marca como rejected)."""
+    db = get_db()
+    try:
+        em = dict_from_row(db.execute(text(
+            "SELECT id, sent_at FROM campaign_emails WHERE id=:id"
+        ), {"id": email_id}).fetchone())
+        if not em:
+            raise HTTPException(404, "Email no encontrado")
+        if em.get("sent_at"):
+            raise HTTPException(400, "No se puede cancelar un email ya enviado")
+        db.execute(text("""
+            UPDATE campaign_emails
+            SET status = 'rejected', send_status = 'cancelled'
+            WHERE id = :id
+        """), {"id": email_id})
+        db.commit()
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
 
 
 @app.get("/campaigns/{cid}")
@@ -1593,6 +1698,7 @@ async def generate_campaign(request: Request, _: str = Depends(require_auth)):
     intent        = data.get("intent", "").strip()
     send_mode     = data.get("send_mode", "daily")
     tone          = data.get("tone", "informative")
+    send_time     = data.get("send_time", "09:00")
     campaign_name = data.get("name", f"Campaña {start_date}")
 
     if not contacts_list: raise HTTPException(400, "Se requiere al menos un contacto")
@@ -1718,7 +1824,7 @@ Responde ÚNICAMENTE con JSON válido con esta estructura exacta (sin texto extr
                 "day": em.get("day_number", i+1),
                 "subject": em.get("subject",""),
                 "body": em.get("body",""),
-                "scheduled_at": dates[i] if i < len(dates) else dates[-1],
+                "scheduled_at": f"{dates[i] if i < len(dates) else dates[-1]} {send_time}",
             })
 
         for email_addr in contacts_list:
