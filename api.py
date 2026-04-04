@@ -255,32 +255,146 @@ def set_setting(key: str, value: str):
 # MARKDOWN → HTML
 # ─────────────────────────────────────────────
 def md_to_html(text: str) -> str:
+    # Escape HTML special chars
     text = text.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+
+    # ── Tablas Markdown ──────────────────────────────────────────────────────
+    # Detecta bloques de tabla: líneas que empiezan y terminan con | o tienen | interno
+    def render_table(block: str) -> str:
+        lines = [l.strip() for l in block.strip().split('\n') if l.strip()]
+        if len(lines) < 2:
+            return block
+        # Separar encabezado, separador y filas de datos
+        header_line = lines[0]
+        sep_line    = lines[1] if len(lines) > 1 else ''
+        data_lines  = lines[2:] if len(lines) > 2 else []
+
+        # Validar que línea 1 sea separador (---)
+        if not re.match(r'^[\|\s\-:]+$', sep_line):
+            return block
+
+        def parse_row(line):
+            line = line.strip().strip('|')
+            return [c.strip() for c in line.split('|')]
+
+        # Detectar alineación desde la línea separadora
+        sep_cells = parse_row(sep_line)
+        aligns = []
+        for cell in sep_cells:
+            cell = cell.strip()
+            if cell.startswith(':') and cell.endswith(':'):
+                aligns.append('center')
+            elif cell.endswith(':'):
+                aligns.append('right')
+            else:
+                aligns.append('left')
+
+        th_cells = parse_row(header_line)
+        td_style_base = 'padding:9px 14px;border-bottom:1px solid #e8e8e8;font-size:14px;line-height:1.5;'
+        th_style_base = 'padding:10px 14px;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;border-bottom:2px solid PRIMARY_COLOR;background:#f9fafb;'
+
+        # Header row
+        ths = ''.join(
+            f'<th style="{th_style_base}text-align:{aligns[i] if i < len(aligns) else "left"}">{c}</th>'
+            for i, c in enumerate(th_cells)
+        )
+
+        # Data rows (alternating bg)
+        rows_html = ''
+        for ri, row_line in enumerate(data_lines):
+            cells = parse_row(row_line)
+            bg = '#ffffff' if ri % 2 == 0 else '#f7f7f7'
+            tds = ''.join(
+                f'<td style="{td_style_base}text-align:{aligns[i] if i < len(aligns) else "left"};background:{bg}">{c}</td>'
+                for i, c in enumerate(cells)
+            )
+            rows_html += f'<tr>{tds}</tr>'
+
+        return (
+            '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
+            'style="width:100%;border-collapse:collapse;margin:16px 0;border:1px solid #e8e8e8;border-radius:6px;overflow:hidden">'
+            f'<thead><tr>{ths}</tr></thead>'
+            f'<tbody>{rows_html}</tbody>'
+            '</table>'
+        )
+
+    # Extraer y convertir bloques de tabla antes del resto del procesado
+    # Un bloque de tabla: 2+ líneas consecutivas que contienen |
+    def process_tables(txt: str) -> str:
+        output_parts = []
+        lines = txt.split('\n')
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            # Comienza un bloque de tabla si la línea tiene |
+            if '|' in line:
+                table_lines = []
+                while i < len(lines) and ('|' in lines[i] or lines[i].strip() == ''):
+                    if '|' in lines[i]:
+                        table_lines.append(lines[i])
+                    else:
+                        break
+                    i += 1
+                if len(table_lines) >= 2:
+                    output_parts.append(render_table('\n'.join(table_lines)))
+                else:
+                    output_parts.extend(table_lines)
+            else:
+                output_parts.append(line)
+                i += 1
+        return '\n'.join(output_parts)
+
+    text = process_tables(text)
+
+    # ── Encabezados ──────────────────────────────────────────────────────────
     text = re.sub(r'^### (.+)$', r'<h3 style="margin:16px 0 8px;font-size:1.1em">\1</h3>', text, flags=re.MULTILINE)
     text = re.sub(r'^## (.+)$',  r'<h2 style="margin:20px 0 10px;font-size:1.3em">\1</h2>', text, flags=re.MULTILINE)
     text = re.sub(r'^# (.+)$',   r'<h1 style="margin:24px 0 12px;font-size:1.5em">\1</h1>', text, flags=re.MULTILINE)
+
+    # ── Énfasis ───────────────────────────────────────────────────────────────
     text = re.sub(r'\*\*\*(.+?)\*\*\*', r'<strong><em>\1</em></strong>', text)
     text = re.sub(r'\*\*(.+?)\*\*',     r'<strong>\1</strong>', text)
     text = re.sub(r'\*(.+?)\*',         r'<em>\1</em>', text)
     text = re.sub(r'__(.+?)__',         r'<strong>\1</strong>', text)
     text = re.sub(r'_(.+?)_',           r'<em>\1</em>', text)
+
+    # ── Links ─────────────────────────────────────────────────────────────────
     text = re.sub(r'\[(.+?)\]\((.+?)\)', r'<a href="\2" style="color:LINKCOLOR;text-decoration:underline">\1</a>', text)
-    lines = text.split('\n'); result, in_ul = [], False
+
+    # ── Separadores horizontales ──────────────────────────────────────────────
+    text = re.sub(r'^\s*[-*_]{3,}\s*$', '<hr style="border:none;border-top:1px solid #e4e4e4;margin:20px 0"/>', text, flags=re.MULTILINE)
+
+    # ── Listas (ul y ol) ──────────────────────────────────────────────────────
+    lines = text.split('\n')
+    result, in_ul, in_ol = [], False, False
     for line in lines:
-        if re.match(r'^[-*•] (.+)', line):
-            if not in_ul: result.append('<ul style="margin:10px 0;padding-left:24px">'); in_ul=True
-            result.append(f'<li style="margin:5px 0">{re.sub(r"^[-*•] ","",line)}</li>')
+        ul_match = re.match(r'^[-*•] (.+)', line)
+        ol_match = re.match(r'^\d+\. (.+)', line)
+        if ul_match:
+            if in_ol: result.append('</ol>'); in_ol = False
+            if not in_ul: result.append('<ul style="margin:10px 0;padding-left:24px">'); in_ul = True
+            result.append(f'<li style="margin:5px 0">{ul_match.group(1)}</li>')
+        elif ol_match:
+            if in_ul: result.append('</ul>'); in_ul = False
+            if not in_ol: result.append('<ol style="margin:10px 0;padding-left:24px">'); in_ol = True
+            result.append(f'<li style="margin:5px 0">{ol_match.group(1)}</li>')
         else:
-            if in_ul: result.append('</ul>'); in_ul=False
+            if in_ul: result.append('</ul>'); in_ul = False
+            if in_ol: result.append('</ol>'); in_ol = False
             result.append(line)
     if in_ul: result.append('</ul>')
+    if in_ol: result.append('</ol>')
     text = '\n'.join(result)
+
+    # ── Párrafos ──────────────────────────────────────────────────────────────
     paragraphs = re.split(r'\n\n+', text)
     wrapped = []
     for p in paragraphs:
         p = p.strip()
-        if not p: continue
-        if p.startswith('<h') or p.startswith('<ul') or p.startswith('<li'):
+        if not p:
+            continue
+        if (p.startswith('<h') or p.startswith('<ul') or p.startswith('<ol')
+                or p.startswith('<li') or p.startswith('<table') or p.startswith('<hr')):
             wrapped.append(p)
         else:
             wrapped.append(f'<p style="margin:0 0 14px;line-height:1.7">{p.replace(chr(10),"<br>")}</p>')
@@ -301,7 +415,7 @@ def build_html_email(body_text: str, style_cfg: dict = None) -> str:
     header_fc = s.get("header_color",   "#7ec850")
     sname     = s.get("sender_name",    cfg()["sender_name"])
     sig_html  = s.get("signature_html", get_setting("signature_html", ""))
-    body_html = md_to_html(body_text).replace("LINKCOLOR", link_col)
+    body_html = md_to_html(body_text).replace("LINKCOLOR", link_col).replace("PRIMARY_COLOR", primary)
 
     sig_block = ""
     if sig_html:
@@ -1655,7 +1769,7 @@ Responde UNICAMENTE con JSON valido (sin texto extra, sin backticks):
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
                     json={
-                        "model": "groq/compound",
+                        "model": "llama-3.3-70b-versatile",
                         "stream": True,
                         "temperature": 0.85,
                         "max_tokens": 2000,
@@ -1808,7 +1922,7 @@ Responde ÚNICAMENTE con JSON válido con esta estructura exacta (sin texto extr
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "groq/compound",
+                    "model": "llama-3.3-70b-versatile",
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"Genera la secuencia de {n} emails para la campaña. Responde solo con el JSON."}
@@ -1964,7 +2078,7 @@ Genera un nuevo email mejorado para esta posición. Responde SOLO con JSON:
             resp = await client.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json={"model": "groq/compound",
+                json={"model": "llama-3.3-70b-versatile",
                       "messages": [{"role": "user", "content": prompt}],
                       "temperature": 0.9, "max_tokens": 2000}
             )
