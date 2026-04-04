@@ -1040,6 +1040,40 @@ async def mark_replied(request: Request, _: str = Depends(require_auth)):
         db.close()
     return {"success": True}
 
+@app.delete("/inbox/{message_id:path}")
+async def delete_inbox_message(message_id: str, _: str = Depends(require_auth)):
+    """Elimina un mensaje de inbox_cache (solo vista frontend, no borra del servidor IMAP)."""
+    db = get_db()
+    try:
+        db.execute(text("DELETE FROM inbox_cache WHERE message_id=:mid"), {"mid": message_id})
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
+@app.get("/contacts/{contact_id}/sent-history")
+def get_contact_sent_history(contact_id: int, _: str = Depends(require_auth)):
+    """Retorna los últimos emails enviados a un contacto para contexto del agente."""
+    db = get_db()
+    try:
+        contact = dict_from_row(db.execute(
+            text("SELECT email FROM contacts WHERE id=:id"), {"id": contact_id}
+        ).fetchone())
+        if not contact:
+            raise HTTPException(404, "Contacto no encontrado")
+        rows = rows_to_list(db.execute(text("""
+            SELECT subject, body, sent_at, intent
+            FROM email_logs
+            WHERE contact_email=:email AND direction='out'
+            ORDER BY sent_at DESC LIMIT 5
+        """), {"email": contact["email"]}).fetchall())
+        return rows
+    finally:
+        db.close()
+
 @app.post("/inbox/save-suggestion")
 async def save_suggestion(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
@@ -1621,7 +1655,7 @@ Responde UNICAMENTE con JSON valido (sin texto extra, sin backticks):
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
                     json={
-                        "model": "llama-3.3-70b-versatile",
+                        "model": "groq/compound",
                         "stream": True,
                         "temperature": 0.85,
                         "max_tokens": 2000,
@@ -1774,7 +1808,7 @@ Responde ÚNICAMENTE con JSON válido con esta estructura exacta (sin texto extr
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "llama-3.3-70b-versatile",
+                    "model": "groq/compound",
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"Genera la secuencia de {n} emails para la campaña. Responde solo con el JSON."}
@@ -1930,7 +1964,7 @@ Genera un nuevo email mejorado para esta posición. Responde SOLO con JSON:
             resp = await client.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json={"model": "llama-3.3-70b-versatile",
+                json={"model": "groq/compound",
                       "messages": [{"role": "user", "content": prompt}],
                       "temperature": 0.9, "max_tokens": 2000}
             )

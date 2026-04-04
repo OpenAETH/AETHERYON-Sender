@@ -338,8 +338,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <div class="panel">
         <div class="field">
           <span class="field-key">Para</span>
-          <input type="email" id="c-to" placeholder="destinatario@empresa.com" oninput="matchContact()" style="flex:1"/>
-          <button onclick="openMultiModal()" title="Agregar mas destinatarios" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;color:var(--text3);font-family:var(--mono);font-size:11px;white-space:nowrap;transition:border-color .15s,color .15s;flex-shrink:0" onmouseover="this.style.color='var(--green)';this.style.borderColor='var(--green)'" onmouseout="this.style.color='var(--text3)';this.style.borderColor='var(--border)'">+ Agregar</button>
+          <input type="email" id="c-to" placeholder="destinatario@empresa.com" oninput="matchContact();updateToTag()" style="flex:1"/>
+          <button onclick="clearRecipient()" id="btnClearRecipient" title="Cambiar destinatario"
+            style="display:none;background:transparent;border:none;cursor:pointer;color:var(--text3);font-size:14px;padding:2px 5px;transition:color .15s"
+            onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">✕</button>
+          <button onclick="openMultiModal()" title="Agregar más destinatarios" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;color:var(--text3);font-family:var(--mono);font-size:11px;white-space:nowrap;transition:border-color .15s,color .15s;flex-shrink:0" onmouseover="this.style.color='var(--green)';this.style.borderColor='var(--green)'" onmouseout="this.style.color='var(--text3)';this.style.borderColor='var(--border)'">+ Agregar</button>
         </div>
         <div id="extraRecipientTags" style="display:none;padding:4px 14px 0;flex-wrap:wrap;gap:4px"></div>
         <div id="contactHint" style="padding:5px 14px 0;font-size:10px;color:var(--text3);display:none"></div>
@@ -357,7 +360,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         </div>
         <div class="field" style="border-bottom:none">
           <span class="field-key">Instruccion</span>
-          <textarea id="c-prompt" rows="5" placeholder="Describe el email. El agente incorporara contexto del contacto, de la entidad y la mision actual."></textarea>
+          <textarea id="c-prompt" rows="5" placeholder="Describe el email. El agente incorporara contexto del contacto, historial de enviados, entidad y mision actual."></textarea>
         </div>
         <div class="panel-footer">
           <span style="font-size:10px;color:var(--text3)"><span id="promptCount">0</span> chars</span>
@@ -371,9 +374,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <div class="section-label">Contexto del contacto</div>
         <div class="panel" style="padding:12px 14px"><div id="contactContextContent" style="font-size:12px;color:var(--text2);line-height:1.7"></div></div>
       </div>
+      <div id="sentHistoryBox" style="display:none;margin-top:8px">
+        <div class="section-label">Historial de enviados a este contacto</div>
+        <div class="panel" style="max-height:160px;overflow-y:auto" id="sentHistoryContent"></div>
+      </div>
     </div>
     <div>
-      <div class="section-label">Email generado <span style="color:var(--text3);font-size:9px">(editable)</span></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div class="section-label" style="margin:0">Email generado <span style="color:var(--text3);font-size:9px">(editable)</span></div>
+        <button class="btn btn-ghost btn-sm" onclick="openLoadEmailModal()" style="font-size:10px">↑ Cargar email existente</button>
+      </div>
       <div class="panel">
         <div class="panel-header">
           <span class="panel-title">Borrador — formato Markdown</span>
@@ -396,9 +406,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
 <!-- INBOX -->
 <div class="view" id="view-inbox">
-  <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
-    <span style="font-size:11px;color:var(--text3)" id="inboxCount">- mensajes</span>
+  <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center;flex-wrap:wrap">
+    <input id="inboxSearch" type="text" placeholder="Buscar por remitente, asunto..."
+      style="flex:1;min-width:160px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:6px 11px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"
+      oninput="renderInbox()"/>
+    <span style="font-size:11px;color:var(--text3)" id="inboxCount">— mensajes</span>
     <button class="btn btn-ghost btn-sm" id="btnRefresh" onclick="refreshInbox()">Actualizar IMAP</button>
+    <button class="btn btn-red btn-sm" onclick="clearHiddenInbox()" title="Restaurar mensajes ocultos" style="font-size:10px;padding:4px 9px">⟳ Restaurar ocultos</button>
   </div>
   <div style="display:grid;grid-template-columns:290px 1fr;gap:12px;align-items:start">
     <div class="panel" style="overflow:hidden">
@@ -731,6 +745,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <button onclick="filterSchedule('sent')" id="sf-sent" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Enviados</button>
         <button onclick="filterSchedule('cancelled')" id="sf-cancelled" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Cancelados</button>
         <div style="flex:1"></div>
+        <input id="schedSearchEmail" type="text" placeholder="Buscar campaña/asunto..."
+          style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:3px 9px;font-family:var(--mono);font-size:11px;color:var(--text);outline:none;width:170px"
+          oninput="renderSchedule()"/>
+        <input id="schedSearchDate" type="date"
+          style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:3px 9px;font-family:var(--mono);font-size:11px;color:var(--text);outline:none"
+          onchange="renderSchedule()"/>
+        <button onclick="clearSchedSearch()" title="Limpiar búsqueda"
+          style="background:transparent;border:none;cursor:pointer;color:var(--text3);font-size:13px;padding:2px 4px;transition:color .15s"
+          onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">✕</button>
         <span id="schedCount" style="font-size:10px;color:var(--text3)"></span>
       </div>
       <div class="sched-row sched-header">
@@ -900,6 +923,28 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       </button>
     </div>
     <div id="campGenStatus" style="margin-top:10px;font-size:11px;color:var(--text3);text-align:right"></div>
+  </div>
+</div>
+
+<!-- MODAL: CARGAR EMAIL EXISTENTE EN REDACTAR -->
+<div class="modal-backdrop" id="modalLoadEmail">
+  <div class="modal" style="max-width:580px">
+    <h2 style="margin-bottom:6px">Cargar email existente</h2>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Pegá el texto del email en Markdown, o buscá uno enviado anteriormente.</div>
+    <div style="margin-bottom:10px">
+      <label style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);display:block;margin-bottom:6px">Pegar texto / Markdown</label>
+      <textarea id="loadEmailText" rows="7"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:vertical;line-height:1.6;caret-color:var(--green)"
+        placeholder="Pega aquí el cuerpo del email en Markdown, o selecciona uno de los enviados abajo..."></textarea>
+    </div>
+    <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">— o seleccionar de enviados recientes —</div>
+    <div id="loadEmailSentList" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);background:var(--bg3)">
+      <div style="padding:12px;font-size:11px;color:var(--text3)">Cargando...</div>
+    </div>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal('modalLoadEmail')">Cancelar</button>
+      <button class="btn btn-green" style="flex:2;justify-content:center" onclick="applyLoadedEmail()">Cargar en editor ↓</button>
+    </div>
   </div>
 </div>
 
@@ -1146,7 +1191,7 @@ async function saveContact(){
   finally{btn.disabled=false;btn.textContent='Guardar';}
 }
 async function deleteContact(id){if(!confirm('Eliminar contacto?'))return;await apiFetch('/contacts/'+id,{method:'DELETE'});toast('Eliminado');loadContacts();loadStats();}
-function composeToContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;document.getElementById('c-to').value=c.email;matchContact();go('compose');}
+function composeToContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;document.getElementById('c-to').value=c.email;matchContact();updateToTag();go('compose');}
 
 function openMultiModal(){
   multiSelectedContacts=new Set(extraRecipients);
@@ -1194,12 +1239,58 @@ function removeExtraRecipient(email){
 function setIntent(i){currentIntent=i;document.querySelectorAll('#view-compose .intent-btn').forEach(b=>b.classList.toggle('active',b.textContent.toLowerCase()===i));}
 document.getElementById('c-prompt').addEventListener('input',function(){document.getElementById('promptCount').textContent=this.value.length;});
 
-function matchContact(){
-  const email=document.getElementById('c-to').value.trim().toLowerCase();
-  const c=contacts.find(x=>x.email.toLowerCase()===email);
-  const hint=document.getElementById('contactHint'),ctxBox=document.getElementById('contactContextBox');
-  if(c){hint.style.display='block';hint.innerHTML=`Contacto: <b style="color:var(--text2)">${c.name}</b>${c.company?' · '+c.company:''}`;if(c.context){ctxBox.style.display='block';document.getElementById('contactContextContent').textContent=c.context;}else ctxBox.style.display='none';}
-  else{hint.style.display='none';ctxBox.style.display='none';}
+function updateToTag(){
+  const val = document.getElementById('c-to').value.trim();
+  const btn = document.getElementById('btnClearRecipient');
+  if(btn) btn.style.display = val ? 'inline-block' : 'none';
+}
+
+function clearRecipient(){
+  document.getElementById('c-to').value = '';
+  document.getElementById('btnClearRecipient').style.display = 'none';
+  document.getElementById('contactHint').style.display = 'none';
+  document.getElementById('contactContextBox').style.display = 'none';
+  document.getElementById('sentHistoryBox').style.display = 'none';
+  extraRecipients.clear(); renderExtraRecipientTags();
+  document.getElementById('c-to').focus();
+}
+
+async function matchContact(){
+  const email = document.getElementById('c-to').value.trim().toLowerCase();
+  const c = contacts.find(x => x.email.toLowerCase() === email);
+  const hint = document.getElementById('contactHint');
+  const ctxBox = document.getElementById('contactContextBox');
+  const histBox = document.getElementById('sentHistoryBox');
+
+  if(c){
+    hint.style.display = 'block';
+    hint.innerHTML = `Contacto: <b style="color:var(--text2)">${c.name}</b>${c.company?' · '+c.company:''}`;
+    if(c.context){ ctxBox.style.display='block'; document.getElementById('contactContextContent').textContent=c.context; }
+    else ctxBox.style.display = 'none';
+    // Cargar historial enviados
+    try{
+      const r = await apiFetch(`/contacts/${c.id}/sent-history`);
+      const hist = await r.json();
+      if(hist.length){
+        histBox.style.display = 'block';
+        document.getElementById('sentHistoryContent').innerHTML = hist.map(h=>`
+          <div style="padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="loadHistoryEmail('${(h.subject||'').replace(/'/g,"\\'")}','${(h.body||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}')" title="Clic para cargar en editor">
+            <div style="font-size:11px;color:var(--text);font-weight:500">${h.subject||'(sin asunto)'}</div>
+            <div style="font-size:10px;color:var(--text3);">${formatDate(h.sent_at)} · ${h.intent||''}</div>
+          </div>`).join('');
+      } else histBox.style.display = 'none';
+    }catch(e){ histBox.style.display = 'none'; }
+  } else {
+    hint.style.display = 'none';
+    ctxBox.style.display = 'none';
+    histBox.style.display = 'none';
+  }
+}
+
+function loadHistoryEmail(subject, body){
+  if(subject) document.getElementById('c-subject').value = subject;
+  document.getElementById('composedBody').textContent = body.replace(/\\n/g,'\n');
+  toast('Email cargado en editor. Podés editarlo y enviar.','success');
 }
 
 async function getEntityContext(){
@@ -1230,22 +1321,31 @@ async function composeEmail(){
   if(!to)return toast('Ingresa el destinatario','error');
   if(!subject)return toast('Ingresa el asunto','error');
   if(!prompt)return toast('Describe el email','error');
-  const c=contacts.find(x=>x.email.toLowerCase()===to.toLowerCase());
-  let contactInfo=c?`
 
-CONTACTO:
-Nombre: ${c.name}
-Empresa: ${c.company||'N/A'}
-Rol: ${c.role||'N/A'}
-Contexto: ${c.context||'N/A'}`:'';
+  const c=contacts.find(x=>x.email.toLowerCase()===to.toLowerCase());
+  let contactInfo=c?`\n\nCONTACTO:\nNombre: ${c.name}\nEmpresa: ${c.company||'N/A'}\nRol: ${c.role||'N/A'}\nContexto: ${c.context||'N/A'}`:'';
+
+  // Historial de emails enviados a este contacto
+  let sentHistory='';
+  if(c){
+    try{
+      const hr=await apiFetch(`/contacts/${c.id}/sent-history`);
+      const hist=await hr.json();
+      if(hist.length){
+        sentHistory=`\n\nHISTORIAL DE EMAILS ENVIADOS A ESTE CONTACTO (usar para no repetir temas, mantener coherencia y continuidad):\n`;
+        sentHistory+=hist.map((h,i)=>`Email ${i+1} (${(h.sent_at||'').substring(0,10)}) — Asunto: ${h.subject}\n${(h.body||'').substring(0,300)}...`).join('\n---\n');
+      }
+    }catch(e){}
+  }
+
   const entityInfo=await getEntityContext();
   const btn=document.getElementById('btnCompose');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Generando...';
   const body=document.getElementById('composedBody');body.textContent='';body.classList.add('streaming');
   try{
     const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-      body:JSON.stringify({model:'llama-3.3-70b-versatile',stream:true,
-        messages:[{role:'system',content:`Eres asistente ejecutivo experto en comunicaciones en espanol. Escribe el cuerpo del email en Markdown (**negrita**, *italica*, listas, ##titulos). NO incluyas encabezados Para/De/Asunto. Usa ${intentPrompts[currentIntent]||'tono profesional'}. Destinatario: ${to}. Asunto: ${subject}.${contactInfo}${entityInfo}`},
+      body:JSON.stringify({model:'groq/compound',stream:true,
+        messages:[{role:'system',content:`Eres asistente ejecutivo experto en comunicaciones en espanol. Escribe el cuerpo del email en Markdown (**negrita**, *italica*, listas, ##titulos). NO incluyas encabezados Para/De/Asunto. Usa ${intentPrompts[currentIntent]||'tono profesional'}. Destinatario: ${to}. Asunto: ${subject}.${contactInfo}${sentHistory}${entityInfo}`},
           {role:'user',content:prompt}]})});
     if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'Error Groq');}
     const reader=res.body.getReader(),decoder=new TextDecoder();let buffer='';
@@ -1256,6 +1356,52 @@ Contexto: ${c.context||'N/A'}`:'';
 }
 
 function clearCompose(){document.getElementById('composedBody').innerHTML='<span style="color:var(--text3);font-style:normal;font-family:var(--mono);font-size:11px">El email generado aparecera aqui.</span>';}
+
+async function openLoadEmailModal(){
+  openModal('modalLoadEmail');
+  document.getElementById('loadEmailText').value='';
+  const list=document.getElementById('loadEmailSentList');
+  list.innerHTML='<div style="padding:12px;font-size:11px;color:var(--text3)">Cargando enviados recientes...</div>';
+  try{
+    const r=await apiFetch('/logs?limit=30');
+    const logs=await r.json();
+    if(!logs.length){list.innerHTML='<div style="padding:12px;font-size:11px;color:var(--text3)">Sin emails enviados aún.</div>';return;}
+    list.innerHTML=logs.map((l,i)=>`
+      <div style="padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s"
+        onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''"
+        onclick="selectLoadEmail(${i})">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div style="font-size:11px;color:var(--text);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.subject||'(sin asunto)'}</div>
+          <div style="font-size:10px;color:var(--text3);white-space:nowrap">${formatDate(l.sent_at||l.created_at)}</div>
+        </div>
+        <div style="font-size:10px;color:var(--text3)">Para: ${l.contact_email||''} · ${l.intent||''}</div>
+      </div>`).join('');
+    // Guardar logs para acceso por índice
+    window._loadEmailLogs=logs;
+  }catch(e){list.innerHTML='<div style="padding:12px;font-size:11px;color:var(--red)">Error cargando.</div>';}
+}
+
+function selectLoadEmail(idx){
+  const log=(window._loadEmailLogs||[])[idx];
+  if(!log)return;
+  document.getElementById('loadEmailText').value=log.body||'';
+  // Pre-llenar asunto y destinatario si están vacíos
+  if(!document.getElementById('c-subject').value.trim() && log.subject)
+    document.getElementById('c-subject').value=log.subject;
+  if(!document.getElementById('c-to').value.trim() && log.contact_email){
+    document.getElementById('c-to').value=log.contact_email;
+    matchContact(); updateToTag();
+  }
+  toast('Email seleccionado. Presiona "Cargar en editor".','');
+}
+
+function applyLoadedEmail(){
+  const text=document.getElementById('loadEmailText').value.trim();
+  if(!text)return toast('Pega o selecciona un email primero','error');
+  document.getElementById('composedBody').textContent=text;
+  closeModal('modalLoadEmail');
+  toast('Email cargado. Podés editarlo y enviar.','success');
+}
 
 async function previewEmail(){
   const bodyText=document.getElementById('composedBody').textContent.trim();
@@ -1294,6 +1440,10 @@ async function confirmSend(){
     clearCompose();
     document.getElementById('c-to').value='';document.getElementById('c-subject').value='';
     document.getElementById('c-prompt').value='';document.getElementById('promptCount').textContent='0';
+    document.getElementById('contactHint').style.display='none';
+    document.getElementById('contactContextBox').style.display='none';
+    document.getElementById('sentHistoryBox').style.display='none';
+    const clrBtn=document.getElementById('btnClearRecipient');if(clrBtn)clrBtn.style.display='none';
     extraRecipients.clear();renderExtraRecipientTags();
     loadStats();
   }catch(e){toast('Error: '+e.message,'error');}
@@ -1316,19 +1466,60 @@ async function refreshInbox(){
   }catch(e){toast('Error IMAP: '+e.message,'error');}
   finally{btn.disabled=false;btn.textContent='Actualizar IMAP';}
 }
+let hiddenInboxIds = new Set(JSON.parse(localStorage.getItem('hiddenInboxIds')||'[]'));
+function saveHiddenInbox(){ try{localStorage.setItem('hiddenInboxIds', JSON.stringify([...hiddenInboxIds]));}catch(e){} }
+function clearHiddenInbox(){ hiddenInboxIds.clear(); saveHiddenInbox(); renderInbox(); toast('Mensajes restaurados'); }
+
 function renderInbox(){
-  const list=document.getElementById('inboxList');
-  document.getElementById('inboxCount').textContent=inboxItems.length+' mensajes';
-  if(!inboxItems.length){list.innerHTML='<div style="padding:14px;color:var(--text3);font-size:11px">Bandeja vacia.</div>';return;}
-  list.innerHTML=inboxItems.map(m=>`
-    <div class="inbox-item" onclick="selectInbox('${escId(m.message_id)}')">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div class="ii-from">${m.from_name||m.from_email}</div>
-        ${m.replied?'<span class="ii-badge">Respondido</span>':''}
+  const list = document.getElementById('inboxList');
+  const q = (document.getElementById('inboxSearch')?.value||'').toLowerCase().trim();
+
+  // Ordenar fecha descendente
+  const sorted = [...inboxItems].sort((a,b)=>{
+    const da = a.date ? new Date(a.date) : new Date(0);
+    const db2 = b.date ? new Date(b.date) : new Date(0);
+    return db2 - da;
+  });
+
+  // Filtrar: ocultos + búsqueda
+  const visible = sorted.filter(m => {
+    if(hiddenInboxIds.has(m.message_id)) return false;
+    if(!q) return true;
+    const hay = ((m.from_name||'')+(m.from_email||'')+(m.subject||'')).toLowerCase();
+    return hay.includes(q);
+  });
+
+  document.getElementById('inboxCount').textContent = `${visible.length} de ${inboxItems.length} mensajes`;
+
+  if(!visible.length){
+    list.innerHTML = '<div style="padding:14px;color:var(--text3);font-size:11px">' +
+      (inboxItems.length ? 'Sin resultados para la búsqueda.' : 'Bandeja vacía.') + '</div>';
+    return;
+  }
+
+  list.innerHTML = visible.map(m => `
+    <div class="inbox-item" id="iitem_${CSS.escape(m.message_id)}" onclick="selectInbox('${escId(m.message_id)}')">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+        <div class="ii-from" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${m.from_name||m.from_email}</div>
+        <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+          ${m.replied ? '<span class="ii-badge">Respondido</span>' : ''}
+          <button onclick="event.stopPropagation();hideInboxMessage('${escId(m.message_id)}')"
+            title="Ocultar mensaje"
+            style="background:transparent;border:none;cursor:pointer;color:var(--text3);font-size:13px;line-height:1;padding:1px 3px;border-radius:3px;transition:color .15s"
+            onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">✕</button>
+        </div>
       </div>
       <div class="ii-subject">${m.subject||'(sin asunto)'}</div>
       <div class="ii-date">${formatDate(m.date)}</div>
     </div>`).join('');
+}
+
+async function hideInboxMessage(mid){
+  hiddenInboxIds.add(mid);
+  saveHiddenInbox();
+  renderInbox();
+  // También eliminar del backend
+  try{ await apiFetch('/inbox/'+encodeURIComponent(mid), {method:'DELETE'}); }catch(e){}
 }
 function escId(s){return(s||'').replace(/'/g,"\\'").replace(/"/g,'\\"');}
 async function selectInbox(mid){
@@ -1349,7 +1540,7 @@ async function generateReply(){
     const entityInfo=await getEntityContext();
     const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-      body:JSON.stringify({model:'llama-3.3-70b-versatile',stream:false,
+      body:JSON.stringify({model:'groq/compound',stream:false,
         messages:[{role:'system',content:`Eres asistente ejecutivo. Genera respuesta profesional breve en espanol, en Markdown. Solo el cuerpo.${entityInfo}`},
           {role:'user',content:`Email recibido:
 De: ${m.from_name} <${m.from_email}>
@@ -1364,7 +1555,7 @@ Redacta una respuesta.`}]})});
     m.ai_suggestion=suggestion;toast('Propuesta generada','success');
   }catch(e){sugDiv.textContent='Error: '+e.message;}
 }
-function replyWith(){const m=selectedInboxMsg;if(!m||!m.ai_suggestion)return toast('Genera una propuesta primero','error');document.getElementById('c-to').value=m.from_email;document.getElementById('c-subject').value='Re: '+(m.subject||'');document.getElementById('composedBody').textContent=m.ai_suggestion;go('compose');}
+function replyWith(){const m=selectedInboxMsg;if(!m||!m.ai_suggestion)return toast('Genera una propuesta primero','error');document.getElementById('c-to').value=m.from_email;document.getElementById('c-subject').value='Re: '+(m.subject||'');document.getElementById('composedBody').textContent=m.ai_suggestion;matchContact();updateToTag();go('compose');}
 async function markReplied(mid){await apiFetch('/inbox/mark-replied',{method:'POST',body:JSON.stringify({message_id:mid})});toast('Marcado como respondido');loadInbox();}
 
 async function loadSupervision(){
@@ -1482,11 +1673,38 @@ function filterSchedule(f){
   renderSchedule();
 }
 
+function clearSchedSearch(){
+  const si = document.getElementById('schedSearchEmail');
+  const sd = document.getElementById('schedSearchDate');
+  if(si) si.value = '';
+  if(sd) sd.value = '';
+  renderSchedule();
+}
+
+let hiddenSchedIds = new Set(JSON.parse(localStorage.getItem('hiddenSchedIds')||'[]'));
+function saveHiddenSched(){ try{localStorage.setItem('hiddenSchedIds', JSON.stringify([...hiddenSchedIds]));}catch(e){} }
+
 function renderSchedule(){
   const el = document.getElementById('scheduleList');
   const countEl = document.getElementById('schedCount');
-  let items = scheduleData;
+  const qText = (document.getElementById('schedSearchEmail')?.value||'').toLowerCase().trim();
+  const qDate = (document.getElementById('schedSearchDate')?.value||'').trim(); // YYYY-MM-DD
+
+  let items = scheduleData.filter(i => !hiddenSchedIds.has(i.id));
+
+  // Estado
   if(scheduleFilter !== 'all') items = items.filter(i => i.state === scheduleFilter);
+
+  // Búsqueda texto
+  if(qText) items = items.filter(i =>
+    ((i.camp_name||'')+(i.subject||'')).toLowerCase().includes(qText)
+  );
+
+  // Búsqueda fecha
+  if(qDate) items = items.filter(i =>
+    (i.scheduled_at||'').startsWith(qDate) || (i.sent_at||'').startsWith(qDate)
+  );
+
   countEl.textContent = `${items.length} registro${items.length!==1?'s':''}`;
 
   if(!items.length){
@@ -1513,6 +1731,13 @@ function renderSchedule(){
       ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">env: ${formatSchedDate(item.sent_at)}</div>`
       : '';
 
+    // Botón ocultar solo para enviados/cancelados
+    const hideBtn = (item.state === 'sent' || item.state === 'cancelled')
+      ? `<button onclick="hideSchedItem(${item.id})" title="Ocultar de la vista"
+           style="background:transparent;border:none;cursor:pointer;color:var(--text3);font-size:12px;padding:1px 4px;transition:color .15s"
+           onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">✕</button>`
+      : '';
+
     let actions = '';
     if(item.state === 'delayed'){
       actions = `
@@ -1527,7 +1752,7 @@ function renderSchedule(){
       actions = `<button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openSchedEmailModal(${item.id})">Ver email</button>`;
     }
 
-    return `<div class="sched-row">
+    return `<div class="sched-row" id="srow_${item.id}">
       <span style="color:var(--text2);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${item.camp_name}" onclick="openSchedEmailModal(${item.id})">${item.camp_name}</span>
       <span style="color:var(--text3);text-align:center">#${item.day_number}</span>
       <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${item.subject||''}" onclick="openSchedEmailModal(${item.id})">${item.subject||'<em style="color:var(--text3)">sin asunto</em>'}</span>
@@ -1536,9 +1761,15 @@ function renderSchedule(){
         ${sentInfo}
       </div>
       <span class="${st.cls}" style="font-weight:500${st.style?';'+st.style:''}">${st.icon} ${st.label}</span>
-      <div style="display:flex;justify-content:flex-end;gap:4px;flex-wrap:wrap">${actions}</div>
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:4px;flex-wrap:wrap">${actions}${hideBtn}</div>
     </div>`;
   }).join('');
+}
+
+function hideSchedItem(id){
+  hiddenSchedIds.add(id);
+  saveHiddenSched();
+  renderSchedule();
 }
 
 function formatSchedDate(d){
