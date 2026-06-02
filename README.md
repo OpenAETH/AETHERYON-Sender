@@ -93,12 +93,25 @@ Crear las siguientes tablas en Supabase antes del primer deploy. El código no c
 
 ```sql
 CREATE TABLE contacts (
+    id            SERIAL PRIMARY KEY,
+    name          TEXT NOT NULL,
+    email         TEXT NOT NULL UNIQUE,
+    company       TEXT, role TEXT, phone TEXT, context TEXT, tags TEXT,
+    -- Campos del módulo CRM (pipeline por estados)
+    status        TEXT DEFAULT 'nuevo',     -- nuevo | contactado | en conversacion | interesado | cerrado
+    tipo          TEXT DEFAULT 'prensa',    -- prensa | partner | cliente
+    medio         TEXT,
+    last_contact  TEXT, next_followup TEXT, notes TEXT,
+    created_at    TIMESTAMPTZ DEFAULT now(),
+    updated_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- Historial de interacciones del CRM (se borra en cascada con el contacto)
+CREATE TABLE contact_interactions (
     id         SERIAL PRIMARY KEY,
-    name       TEXT NOT NULL,
-    email      TEXT NOT NULL UNIQUE,
-    company    TEXT, role TEXT, phone TEXT, context TEXT, tags TEXT,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
+    contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    type       TEXT, note TEXT,
+    date       TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE email_logs (
@@ -172,9 +185,15 @@ CREATE TABLE campaign_contacts (
 );
 ```
 
+> **Despliegues existentes:** para añadir el módulo CRM a una base de datos ya creada, ejecutar `migrations.sql` (ALTER idempotentes) en lugar de recrear `contacts`.
+
 ---
 
 ## Funcionalidades
+
+### CRM — pipeline de contactos
+
+El módulo CRM reutiliza la tabla `contacts`: cada contacto es a la vez destinatario de email y lead del pipeline comercial. La vista **CRM** del frontend muestra un tablero kanban con cinco estados (`nuevo → contactado → en conversacion → interesado → cerrado`); el botón ▶ de cada tarjeta avanza al siguiente estado vía `PATCH /contacts/{id}/status`. El campo `email` no es editable desde la UI (restricción `UNIQUE`).
 
 ### Envío de email individual
 
@@ -264,10 +283,13 @@ Flujo completo con revisión humana antes del envío:
 ### Contactos
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/contacts` | Lista todos los contactos |
+| GET | `/contacts` | Lista todos los contactos (incluye campos CRM) |
 | POST | `/contacts` | Crear contacto (`name` y `email` requeridos) |
-| PUT | `/contacts/{id}` | Actualizar contacto |
-| DELETE | `/contacts/{id}` | Eliminar contacto |
+| PUT | `/contacts/{id}` | Actualizar contacto (no modifica `email`) |
+| DELETE | `/contacts/{id}` | Eliminar contacto (cascada sobre interacciones) |
+| PATCH | `/contacts/{id}/status` | Actualiza solo el estado del pipeline CRM |
+| GET | `/contacts/{id}/interactions` | Lista interacciones del CRM |
+| POST | `/contacts/{id}/interactions` | Registra una interacción (`type`, `note`) |
 
 ### Campañas
 | Método | Ruta | Descripción |

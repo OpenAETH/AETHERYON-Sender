@@ -92,6 +92,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .cc-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
 .tag{font-size:9px;padding:2px 7px;border-radius:20px;border:1px solid var(--border2);color:var(--text3);letter-spacing:.06em}
 
+.kanban-col{flex:0 0 260px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);display:flex;flex-direction:column;max-height:calc(100vh - 180px)}
+.kanban-col-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em}
+.kanban-col-head .k-count{font-family:var(--mono);font-size:10px;color:var(--text3);background:var(--bg3);border-radius:20px;padding:1px 8px}
+.kanban-cards{display:flex;flex-direction:column;gap:8px;padding:10px;overflow-y:auto}
+.kanban-cards:empty::after{content:'Sin contactos';color:var(--text3);font-size:10px;padding:6px 2px}
+.k-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px 11px;cursor:pointer;transition:border-color .15s,background .15s;position:relative}
+.k-card:hover{border-color:var(--border2);background:var(--bg3)}
+.k-adv{position:absolute;top:8px;right:8px;background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:12px;line-height:1;padding:2px;opacity:0;transition:opacity .15s,color .15s}
+.k-card:hover .k-adv{opacity:1}
+.k-adv:hover{color:var(--green)}
+
 .inbox-item{padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
 .inbox-item:hover{background:var(--bg3)}
 .inbox-item.selected{background:var(--bg3);border-left:2px solid var(--green)}
@@ -214,6 +225,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="3" stroke="currentColor" stroke-width="1.2"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     Agenda
   </div>
+  <div class="nav-item" onclick="go('crm')">
+    <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="3" height="12" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="6.5" y="2" width="3" height="8" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="11" y="2" width="3" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>
+    CRM
+  </div>
   <div class="nav-item" onclick="go('compose')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M2 12L4 10l7-7 2 2-7 7-2 2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M9 3l2 2" stroke="currentColor" stroke-width="1.2"/></svg>
     Redactar
@@ -322,12 +337,28 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <div class="field"><span class="field-key">Telefono</span><input type="text" id="cf-phone" placeholder="+54 9 11..."/></div>
       <div class="field"><span class="field-key">Contexto</span><textarea id="cf-context" rows="3" placeholder="Historial, intereses, notas relevantes..."></textarea></div>
       <div class="field"><span class="field-key">Tags</span><input type="text" id="cf-tags" placeholder="cliente, inversor, proveedor..."/></div>
+      <div class="field"><span class="field-key">Estado</span><select id="cf-status"><option value="nuevo">Nuevo</option><option value="contactado">Contactado</option><option value="en conversacion">En conversacion</option><option value="interesado">Interesado</option><option value="cerrado">Cerrado</option></select></div>
+      <div class="field"><span class="field-key">Tipo</span><select id="cf-tipo"><option value="prensa">Prensa</option><option value="partner">Partner</option><option value="cliente">Cliente</option></select></div>
+      <div class="field"><span class="field-key">Medio</span><input type="text" id="cf-medio" placeholder="Canal o medio de contacto"/></div>
+      <div class="field"><span class="field-key">Seguimiento</span><input type="date" id="cf-next_followup"/></div>
+      <div class="field"><span class="field-key">Notas CRM</span><textarea id="cf-notes" rows="2" placeholder="Notas del pipeline..."></textarea></div>
       <div class="panel-footer">
         <button class="btn btn-ghost btn-sm" onclick="cancelContact()">Cancelar</button>
         <button class="btn btn-green btn-sm" onclick="saveContact()" id="btnSaveContact">Guardar</button>
       </div>
     </div>
   </div>
+</div>
+
+<!-- CRM -->
+<div class="view" id="view-crm">
+  <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
+    <input id="crm-search" type="text" placeholder="Buscar por nombre, empresa, medio o notas..."
+      style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:7px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"
+      oninput="filterCRM()"/>
+    <button class="btn btn-green" onclick="openNewContact();go('agenda')">+ Nuevo</button>
+  </div>
+  <div id="crm-kanban" style="display:flex;gap:12px;overflow-x:auto;align-items:flex-start;padding-bottom:8px"></div>
 </div>
 
 <!-- COMPOSE -->
@@ -992,6 +1023,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 const API = '';
 let contacts=[], inboxItems=[], currentIntent='profesional';
 let editingContactId=null, selectedInboxMsg=null;
+let crmSearch='';
+const CRM_COLS=[
+  {key:'nuevo',label:'Nuevo',color:'#4e6880'},
+  {key:'contactado',label:'Contactado',color:'var(--amber)'},
+  {key:'en conversacion',label:'En conversacion',color:'#c87a3a'},
+  {key:'interesado',label:'Interesado',color:'var(--blue)'},
+  {key:'cerrado',label:'Cerrado',color:'var(--green)'},
+];
 let extraRecipients = new Set();
 let multiSelectedContacts = new Set();
 let campMode='daily', campTone='informative', campSelectedContacts=new Set();
@@ -1084,7 +1123,7 @@ function toast(msg,type=''){
 function closeModal(id){document.getElementById(id)?.classList.remove('visible');}
 function openModal(id){document.getElementById(id)?.classList.add('visible');}
 
-const pageMap={dashboard:'Dashboard',agenda:'Agenda',compose:'Redactar',inbox:'Bandeja',
+const pageMap={dashboard:'Dashboard',agenda:'Agenda',crm:'CRM',compose:'Redactar',inbox:'Bandeja',
   supervision:'Supervision',memory:'Memoria',context:'Contexto',estilo:'Estilo',
   settings:'SMTP / IMAP',campaigns:'Campanas'};
 
@@ -1099,6 +1138,7 @@ function go(view){
   });
   document.getElementById('pageTitle').textContent=pageMap[view]||view;
   if(view==='agenda')     loadContacts();
+  if(view==='crm')        loadCRM();
   if(view==='inbox')      loadInbox();
   if(view==='supervision')loadSupervision();
   if(view==='memory')     loadMemory();
@@ -1175,23 +1215,75 @@ function filterContacts(){
   const q=document.getElementById('searchContact').value.toLowerCase();
   renderContacts(contacts.filter(c=>c.name.toLowerCase().includes(q)||c.email.toLowerCase().includes(q)||(c.company||'').toLowerCase().includes(q)||(c.tags||'').toLowerCase().includes(q)));
 }
-function openNewContact(){editingContactId=null;['name','email','company','role','phone','context','tags'].forEach(f=>document.getElementById('cf-'+f).value='');document.getElementById('contactFormTitle').textContent='Nuevo contacto';document.getElementById('contactForm').style.display='block';}
-function editContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;editingContactId=id;['name','email','company','role','phone','context','tags'].forEach(f=>document.getElementById('cf-'+f).value=c[f]||'');document.getElementById('contactFormTitle').textContent='Editar';document.getElementById('contactForm').style.display='block';}
+const CONTACT_FIELDS=['name','email','company','role','phone','context','tags','medio','next_followup','notes'];
+function openNewContact(){editingContactId=null;CONTACT_FIELDS.forEach(f=>document.getElementById('cf-'+f).value='');document.getElementById('cf-status').value='nuevo';document.getElementById('cf-tipo').value='prensa';document.getElementById('contactFormTitle').textContent='Nuevo contacto';document.getElementById('contactForm').style.display='block';}
+function editContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;editingContactId=id;CONTACT_FIELDS.forEach(f=>document.getElementById('cf-'+f).value=c[f]||'');document.getElementById('cf-status').value=c.status||'nuevo';document.getElementById('cf-tipo').value=c.tipo||'prensa';document.getElementById('contactFormTitle').textContent='Editar';document.getElementById('contactForm').style.display='block';}
 function cancelContact(){document.getElementById('contactForm').style.display='none';editingContactId=null;}
 async function saveContact(){
-  const data={name:document.getElementById('cf-name').value.trim(),email:document.getElementById('cf-email').value.trim(),company:document.getElementById('cf-company').value.trim(),role:document.getElementById('cf-role').value.trim(),phone:document.getElementById('cf-phone').value.trim(),context:document.getElementById('cf-context').value.trim(),tags:document.getElementById('cf-tags').value.trim()};
+  const data={name:document.getElementById('cf-name').value.trim(),email:document.getElementById('cf-email').value.trim(),company:document.getElementById('cf-company').value.trim(),role:document.getElementById('cf-role').value.trim(),phone:document.getElementById('cf-phone').value.trim(),context:document.getElementById('cf-context').value.trim(),tags:document.getElementById('cf-tags').value.trim(),status:document.getElementById('cf-status').value,tipo:document.getElementById('cf-tipo').value,medio:document.getElementById('cf-medio').value.trim(),next_followup:document.getElementById('cf-next_followup').value,notes:document.getElementById('cf-notes').value.trim()};
   if(!data.name||!data.email)return toast('Nombre y email requeridos','error');
   const btn=document.getElementById('btnSaveContact');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span>';
   try{
     const url='/contacts'+(editingContactId?'/'+editingContactId:''),method=editingContactId?'PUT':'POST';
     const r=await apiFetch(url,{method,body:JSON.stringify(data)});
     if(!r.ok){const e=await r.json();throw new Error(e.detail||'Error');}
-    toast(editingContactId?'Actualizado':'Guardado','success');cancelContact();loadContacts();loadStats();
+    toast(editingContactId?'Actualizado':'Guardado','success');cancelContact();await loadContacts();loadStats();
+    if(document.getElementById('view-crm').classList.contains('active'))renderCRM();
   }catch(e){toast('Error: '+e.message,'error');}
   finally{btn.disabled=false;btn.textContent='Guardar';}
 }
 async function deleteContact(id){if(!confirm('Eliminar contacto?'))return;await apiFetch('/contacts/'+id,{method:'DELETE'});toast('Eliminado');loadContacts();loadStats();}
 function composeToContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;document.getElementById('c-to').value=c.email;matchContact();updateToTag();go('compose');}
+
+// ── CRM (kanban por estados) ──────────────────────────────
+async function loadCRM(){
+  try{
+    if(!contacts.length)contacts=await(await apiFetch('/contacts')).json();
+    renderCRM();
+  }catch(e){toast('Error cargando CRM','error');}
+}
+function filterCRM(){crmSearch=document.getElementById('crm-search').value.toLowerCase();renderCRM();}
+function crmStatusKey(c){const k=(c.status||'nuevo');return CRM_COLS.some(x=>x.key===k)?k:'nuevo';}
+function renderCRM(){
+  const q=crmSearch;
+  const list=contacts.filter(c=>!q||c.name.toLowerCase().includes(q)||(c.company||'').toLowerCase().includes(q)||(c.medio||'').toLowerCase().includes(q)||(c.notes||'').toLowerCase().includes(q));
+  const board=document.getElementById('crm-kanban');
+  board.innerHTML=CRM_COLS.map(col=>{
+    const cards=list.filter(c=>crmStatusKey(c)===col.key);
+    return `<div class="kanban-col">
+      <div class="kanban-col-head" style="color:${col.color}">
+        <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${col.color};margin-right:6px"></span>${col.label}</span>
+        <span class="k-count">${cards.length}</span>
+      </div>
+      <div class="kanban-cards">${cards.map(crmCardHTML).join('')}</div>
+    </div>`;
+  }).join('');
+}
+function crmCardHTML(c){
+  const meta=[c.medio,c.company].filter(Boolean).join(' · ');
+  const last=crmStatusKey(c)==='cerrado';
+  return `<div class="k-card" onclick="crmEdit(${c.id})">
+    ${last?'':`<button class="k-adv" title="Avanzar estado" onclick="event.stopPropagation();advanceStatus(${c.id})">&#9654;</button>`}
+    <div class="cc-name" style="font-size:13px;margin-bottom:2px">${c.name}</div>
+    ${meta?`<div class="cc-meta">${meta}</div>`:''}
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:7px;align-items:center">
+      ${c.tipo?`<span class="tag">${c.tipo}</span>`:''}
+      ${c.next_followup?`<span class="tag" style="border-color:var(--border)">&#128197; ${c.next_followup}</span>`:''}
+    </div>
+    ${c.notes?`<div style="margin-top:7px;font-size:10px;color:var(--text3);line-height:1.5">${c.notes.substring(0,75)}${c.notes.length>75?'...':''}</div>`:''}
+  </div>`;
+}
+function crmEdit(id){editContact(id);go('agenda');}
+async function advanceStatus(id){
+  const c=contacts.find(x=>x.id===id);if(!c)return;
+  const keys=CRM_COLS.map(x=>x.key);
+  const next=keys[(keys.indexOf(crmStatusKey(c))+1)%keys.length];
+  try{
+    const r=await apiFetch('/contacts/'+id+'/status',{method:'PATCH',body:JSON.stringify({status:next})});
+    if(!r.ok)throw new Error('Error');
+    c.status=next;renderCRM();toast(`${c.name} → ${next}`,'success');
+  }catch(e){toast('Error: '+e.message,'error');}
+}
 
 function openMultiModal(){
   multiSelectedContacts=new Set(extraRecipients);

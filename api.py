@@ -983,11 +983,17 @@ async def create_contact(request: Request, _: str = Depends(require_auth)):
     db = get_db()
     try:
         result = db.execute(
-            text("""INSERT INTO contacts (name,email,company,role,phone,context,tags)
-                    VALUES (:name,:email,:company,:role,:phone,:context,:tags) RETURNING id"""),
+            text("""INSERT INTO contacts
+                    (name,email,company,role,phone,context,tags,
+                     status,tipo,medio,last_contact,next_followup,notes)
+                    VALUES (:name,:email,:company,:role,:phone,:context,:tags,
+                            :status,:tipo,:medio,:last_contact,:next_followup,:notes) RETURNING id"""),
             {"name": data["name"], "email": data["email"], "company": data.get("company",""),
              "role": data.get("role",""), "phone": data.get("phone",""),
-             "context": data.get("context",""), "tags": data.get("tags","")}
+             "context": data.get("context",""), "tags": data.get("tags",""),
+             "status": data.get("status","nuevo"), "tipo": data.get("tipo","prensa"),
+             "medio": data.get("medio",""), "last_contact": data.get("last_contact",""),
+             "next_followup": data.get("next_followup",""), "notes": data.get("notes","")}
         )
         # FIX: usar dict_from_row para acceso por nombre de columna
         cid = dict_from_row(result.fetchone())["id"]
@@ -1012,11 +1018,22 @@ async def update_contact(cid: int, request: Request, _: str = Depends(require_au
     db = get_db()
     try:
         db.execute(
-            text("""UPDATE contacts SET name=:name,company=:company,role=:role,phone=:phone,
-                    context=:context,tags=:tags,updated_at=NOW() WHERE id=:cid"""),
+            text("""UPDATE contacts SET
+                    name=:name,company=:company,role=:role,phone=:phone,
+                    context=:context,tags=:tags,
+                    status=COALESCE(:status,status),
+                    tipo=COALESCE(:tipo,tipo),
+                    medio=COALESCE(:medio,medio),
+                    last_contact=COALESCE(:last_contact,last_contact),
+                    next_followup=COALESCE(:next_followup,next_followup),
+                    notes=COALESCE(:notes,notes),
+                    updated_at=NOW() WHERE id=:cid"""),
             {"name": data.get("name"), "company": data.get("company",""), "role": data.get("role",""),
              "phone": data.get("phone",""), "context": data.get("context",""),
-             "tags": data.get("tags",""), "cid": cid}
+             "tags": data.get("tags",""),
+             "status": data.get("status"), "tipo": data.get("tipo"), "medio": data.get("medio"),
+             "last_contact": data.get("last_contact"), "next_followup": data.get("next_followup"),
+             "notes": data.get("notes"), "cid": cid}
         )
         db.commit()
     finally:
@@ -1028,6 +1045,55 @@ def delete_contact(cid: int, _: str = Depends(require_auth)):
     db = get_db()
     try:
         db.execute(text("DELETE FROM contacts WHERE id=:cid"), {"cid": cid})
+        db.commit()
+    finally:
+        db.close()
+    return {"success": True}
+
+# ─────────────────────────────────────────────
+# ROUTES — CRM (pipeline de estados + interacciones)
+# ─────────────────────────────────────────────
+@app.patch("/contacts/{cid}/status")
+async def update_contact_status(cid: int, request: Request, _: str = Depends(require_auth)):
+    """Mueve un contacto entre columnas del pipeline CRM."""
+    data = await request.json()
+    status = (data.get("status") or "").strip()
+    if not status:
+        raise HTTPException(400, "status es obligatorio")
+    db = get_db()
+    try:
+        db.execute(text("UPDATE contacts SET status=:status,updated_at=NOW() WHERE id=:cid"),
+                   {"status": status, "cid": cid})
+        db.commit()
+    finally:
+        db.close()
+    return {"success": True}
+
+@app.get("/contacts/{cid}/interactions")
+def list_interactions(cid: int, _: str = Depends(require_auth)):
+    db = get_db()
+    try:
+        rows = db.execute(
+            text("SELECT * FROM contact_interactions WHERE contact_id=:cid ORDER BY date DESC"),
+            {"cid": cid}
+        ).fetchall()
+        return rows_to_list(rows)
+    finally:
+        db.close()
+
+@app.post("/contacts/{cid}/interactions")
+async def create_interaction(cid: int, request: Request, _: str = Depends(require_auth)):
+    data = await request.json()
+    db = get_db()
+    try:
+        db.execute(
+            text("""INSERT INTO contact_interactions (contact_id,type,note)
+                    VALUES (:cid,:type,:note)"""),
+            {"cid": cid, "type": data.get("type",""), "note": data.get("note","")}
+        )
+        # Registrar el último contacto en el lead
+        db.execute(text("UPDATE contacts SET last_contact=NOW()::date::text,updated_at=NOW() WHERE id=:cid"),
+                   {"cid": cid})
         db.commit()
     finally:
         db.close()
