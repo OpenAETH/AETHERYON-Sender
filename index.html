@@ -101,11 +101,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .k-caret{display:none;margin-right:6px;font-size:10px;transition:transform .2s}
 .kanban-cards{display:flex;flex-direction:column;gap:8px;padding:10px}
 .kanban-cards:empty::after{content:'Sin contactos';color:var(--text3);font-size:10px;padding:6px 2px}
-.k-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px 11px;cursor:pointer;transition:border-color .15s,background .15s;position:relative}
+.k-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px 11px;cursor:grab;transition:border-color .15s,background .15s;position:relative}
 .k-card:hover{border-color:var(--border2);background:var(--bg3)}
-.k-adv{position:absolute;top:8px;right:8px;background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:12px;line-height:1;padding:2px;opacity:0;transition:opacity .15s,color .15s}
-.k-card:hover .k-adv{opacity:1}
-.k-adv:hover{color:var(--green)}
+.k-card:active{cursor:grabbing}
+.k-actions{position:absolute;top:7px;right:7px;display:flex;gap:2px;opacity:0;transition:opacity .15s}
+.k-card:hover .k-actions{opacity:1}
+.k-act{background:var(--bg2);border:1px solid var(--border);border-radius:5px;color:var(--text3);cursor:pointer;font-size:11px;line-height:1;padding:3px 5px;transition:color .15s,border-color .15s}
+.k-act:hover{color:var(--green);border-color:var(--border2)}
+.k-act.k-arch:hover{color:var(--red);border-color:rgba(192,80,80,.3)}
+.camp-badge{font-size:9px;padding:2px 7px;border-radius:20px;letter-spacing:.04em;border:1px solid;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.camp-badge.cs-sent{color:var(--green);border-color:var(--green-dim);background:rgba(126,200,80,.08)}
+.camp-badge.cs-scheduled{color:var(--blue);border-color:rgba(80,144,200,.3);background:rgba(80,144,200,.08)}
+.camp-badge.cs-delayed{color:var(--amber);border-color:rgba(200,148,58,.3);background:rgba(200,148,58,.08)}
+.camp-badge.cs-cancelled{color:var(--text3);border-color:var(--border2)}
+.kanban-cards.drag-over{outline:2px dashed var(--border3);outline-offset:-4px;background:var(--green-glow);border-radius:var(--r)}
 
 .inbox-item{padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
 .inbox-item:hover{background:var(--bg3)}
@@ -1079,6 +1088,8 @@ const API = '';
 let contacts=[], inboxItems=[], currentIntent='profesional';
 let editingContactId=null, selectedInboxMsg=null;
 let crmSearch='';
+let crmCampaigns={};
+let crmDragId=null;
 const CRM_COLS=[
   {key:'nuevo',label:'Nuevo',color:'#4e6880'},
   {key:'contactado',label:'Contactado',color:'var(--amber)'},
@@ -1297,6 +1308,8 @@ function composeToContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;d
 async function loadCRM(){
   try{
     if(!contacts.length)contacts=await(await apiFetch('/contacts')).json();
+    try{crmCampaigns=await(await apiFetch('/contacts/campaign-status')).json();}
+    catch(e){crmCampaigns={};}
     renderCRM();
   }catch(e){toast('Error cargando CRM','error');}
 }
@@ -1304,7 +1317,7 @@ function filterCRM(){crmSearch=document.getElementById('crm-search').value.toLow
 function crmStatusKey(c){const k=(c.status||'nuevo');return CRM_COLS.some(x=>x.key===k)?k:'nuevo';}
 function renderCRM(){
   const q=crmSearch;
-  const list=contacts.filter(c=>!q||c.name.toLowerCase().includes(q)||(c.company||'').toLowerCase().includes(q)||(c.medio||'').toLowerCase().includes(q)||(c.notes||'').toLowerCase().includes(q));
+  const list=contacts.filter(c=>(c.status||'')!=='archivado' && (!q||c.name.toLowerCase().includes(q)||(c.company||'').toLowerCase().includes(q)||(c.medio||'').toLowerCase().includes(q)||(c.notes||'').toLowerCase().includes(q)));
   const board=document.getElementById('crm-kanban');
   board.innerHTML=CRM_COLS.map(col=>{
     const cards=list.filter(c=>crmStatusKey(c)===col.key);
@@ -1313,17 +1326,33 @@ function renderCRM(){
         <span><span class="k-caret">&#9662;</span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${col.color};margin-right:6px"></span>${col.label}</span>
         <span class="k-count">${cards.length}</span>
       </div>
-      <div class="kanban-cards">${cards.map(crmCardHTML).join('')}</div>
+      <div class="kanban-cards" data-col="${col.key}" ondragover="crmDragOver(event)" ondragleave="crmDragLeave(event)" ondrop="crmDrop(event,'${col.key}')">${cards.map(crmCardHTML).join('')}</div>
     </div>`;
+  }).join('');
+}
+const CAMP_STATE_LABEL={sent:'Enviada',scheduled:'Programada',delayed:'Demorada',cancelled:'Cancelada'};
+function campBadgesHTML(c){
+  const camps=crmCampaigns[c.email];
+  if(!camps||!camps.length)return '';
+  return camps.map(cp=>{
+    const lbl=CAMP_STATE_LABEL[cp.state]||cp.state;
+    return `<span class="camp-badge cs-${cp.state}" title="Campana: ${cp.name} — ${lbl}">&#128226; ${cp.name}</span>`;
   }).join('');
 }
 function crmCardHTML(c){
   const meta=[c.medio,c.company].filter(Boolean).join(' · ');
-  const last=crmStatusKey(c)==='cerrado';
-  return `<div class="k-card" onclick="crmEdit(${c.id})">
-    ${last?'':`<button class="k-adv" title="Avanzar estado" onclick="event.stopPropagation();advanceStatus(${c.id})">&#9654;</button>`}
+  const idx=CRM_COLS.findIndex(x=>x.key===crmStatusKey(c));
+  const first=idx<=0, last=idx>=CRM_COLS.length-1;
+  const camps=campBadgesHTML(c);
+  return `<div class="k-card" draggable="true" ondragstart="crmDragStart(event,${c.id})" ondragend="crmDragEnd(event)" onclick="crmEdit(${c.id})">
+    <div class="k-actions">
+      ${first?'':`<button class="k-act" title="Retroceder estado" onclick="event.stopPropagation();retreatStatus(${c.id})">&#9664;</button>`}
+      ${last?'':`<button class="k-act" title="Avanzar estado" onclick="event.stopPropagation();advanceStatus(${c.id})">&#9654;</button>`}
+      <button class="k-act k-arch" title="Archivar" onclick="event.stopPropagation();archiveContact(${c.id})">&#8856;</button>
+    </div>
     <div class="cc-name" style="font-size:13px;margin-bottom:2px">${c.name}</div>
     ${meta?`<div class="cc-meta">${meta}</div>`:''}
+    ${camps?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:7px">${camps}</div>`:''}
     <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:7px;align-items:center">
       ${c.tipo?`<span class="tag">${c.tipo}</span>`:''}
       ${c.next_followup?`<span class="tag" style="border-color:var(--border)">&#128197; ${c.next_followup}</span>`:''}
@@ -1332,15 +1361,45 @@ function crmCardHTML(c){
   </div>`;
 }
 function crmEdit(id){editContact(id);go('agenda');}
-async function advanceStatus(id){
-  const c=contacts.find(x=>x.id===id);if(!c)return;
-  const keys=CRM_COLS.map(x=>x.key);
-  const next=keys[(keys.indexOf(crmStatusKey(c))+1)%keys.length];
+async function setStatus(id,next,msg){
+  const c=contacts.find(x=>x.id===id);if(!c||c.status===next)return;
   try{
     const r=await apiFetch('/contacts/'+id+'/status',{method:'PATCH',body:JSON.stringify({status:next})});
     if(!r.ok)throw new Error('Error');
-    c.status=next;renderCRM();toast(`${c.name} → ${next}`,'success');
+    c.status=next;renderCRM();toast(msg||`${c.name} → ${next}`,'success');
   }catch(e){toast('Error: '+e.message,'error');}
+}
+function advanceStatus(id){
+  const c=contacts.find(x=>x.id===id);if(!c)return;
+  const keys=CRM_COLS.map(x=>x.key);
+  const i=keys.indexOf(crmStatusKey(c));
+  if(i>=keys.length-1)return;
+  setStatus(id,keys[i+1]);
+}
+function retreatStatus(id){
+  const c=contacts.find(x=>x.id===id);if(!c)return;
+  const keys=CRM_COLS.map(x=>x.key);
+  const i=keys.indexOf(crmStatusKey(c));
+  if(i<=0)return;
+  setStatus(id,keys[i-1]);
+}
+function archiveContact(id){
+  const c=contacts.find(x=>x.id===id);
+  setStatus(id,'archivado',c?`${c.name} archivado`:'Archivado');
+}
+// ── CRM drag & drop (desktop) ──
+function crmDragStart(e,id){crmDragId=id;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',String(id));}catch(_){}}
+function crmDragEnd(e){crmDragId=null;document.querySelectorAll('.kanban-cards.drag-over').forEach(el=>el.classList.remove('drag-over'));}
+function crmDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';e.currentTarget.classList.add('drag-over');}
+function crmDragLeave(e){e.currentTarget.classList.remove('drag-over');}
+function crmDrop(e,colKey){
+  e.preventDefault();e.currentTarget.classList.remove('drag-over');
+  const id=crmDragId;crmDragId=null;
+  if(id==null)return;
+  const c=contacts.find(x=>x.id===id);if(!c)return;
+  if(crmStatusKey(c)===colKey)return;
+  const col=CRM_COLS.find(x=>x.key===colKey);
+  setStatus(id,colKey,`${c.name} → ${col?col.label:colKey}`);
 }
 
 function openMultiModal(){

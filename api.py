@@ -974,6 +974,79 @@ def list_contacts(_: str = Depends(require_auth)):
     finally:
         db.close()
 
+@app.get("/contacts/campaign-status")
+def contacts_campaign_status(_: str = Depends(require_auth)):
+    """
+    Cruza los destinatarios de campañas (campaign_contacts.email) con el estado
+    de envío de sus emails, para mostrar el indicador "En campaña" en el CRM.
+    Devuelve un dict: { email: [ {campaign_id, name, state}, ... ] }.
+    El `state` se calcula igual que en get_campaign_schedule y se consolida por
+    campaña con prioridad: delayed > scheduled > sent > cancelled.
+    DEBE declararse antes de las rutas /contacts/{cid} con path param.
+    """
+    db = get_db()
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    # Prioridad de estados para consolidar varios emails de una misma campaña.
+    priority = {"delayed": 0, "scheduled": 1, "sent": 2, "cancelled": 3}
+    try:
+        rows = rows_to_list(db.execute(text("""
+            SELECT
+                c.id   AS campaign_id,
+                c.name AS camp_name,
+                ce.scheduled_at, ce.sent_at, ce.send_status,
+                ce.status AS approval_status
+            FROM campaigns c
+            JOIN campaign_emails ce ON ce.campaign_id = c.id
+            WHERE c.status IN ('scheduled', 'sent')
+              AND ce.status IN ('approved', 'rejected')
+        """)).fetchall())
+
+        # Estado consolidado por campaña (el "mejor"/más accionable de sus emails).
+        camp_state = {}   # campaign_id -> {"name":..., "state":...}
+        for r in rows:
+            raw_sched = r.get("scheduled_at") or ""
+            sched = str(raw_sched).strip() if raw_sched else ""
+            if sched and len(sched) == 10:
+                sched = sched + " 09:00"
+            sent_at = r.get("sent_at")
+            send_status = r.get("send_status") or ""
+            approval_status = r.get("approval_status") or ""
+
+            if send_status == "cancelled" or approval_status == "rejected":
+                state = "cancelled"
+            elif sent_at or send_status == "sent":
+                state = "sent"
+            elif sched and sched[:16] <= now_str:
+                state = "delayed"
+            else:
+                state = "scheduled"
+
+            cid = r["campaign_id"]
+            prev = camp_state.get(cid)
+            if prev is None or priority[state] < priority[prev["state"]]:
+                camp_state[cid] = {"name": r["camp_name"], "state": state}
+
+        # Mapear cada email destinatario a las campañas en las que participa.
+        recipients = rows_to_list(db.execute(text(
+            "SELECT campaign_id, email FROM campaign_contacts"
+        )).fetchall())
+
+        result = {}
+        for rec in recipients:
+            cid = rec["campaign_id"]
+            email = (rec.get("email") or "").strip()
+            cs = camp_state.get(cid)
+            if not email or cs is None:
+                continue
+            result.setdefault(email, []).append({
+                "campaign_id": cid,
+                "name": cs["name"],
+                "state": cs["state"],
+            })
+        return result
+    finally:
+        db.close()
+
 @app.post("/contacts")
 async def create_contact(request: Request, _: str = Depends(require_auth)):
     data = await request.json()
