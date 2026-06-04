@@ -1393,8 +1393,37 @@ async def add_memory(request: Request, _: str = Depends(require_auth)):
 # ─────────────────────────────────────────────
 # ROUTES — SUPERVISION
 # ─────────────────────────────────────────────
+# Prefijos de respuesta/reenvio a quitar para comparar asuntos por hilo.
+# Cubre variantes ES/EN/PT: RE, RV, REF, FW, FWD, ENC, etc.
+_REPLY_PREFIX_RE = _re.compile(
+    r'^\s*(re|rv|ref|res|fw|fwd|enc|rep)\s*(\[\d+\])?\s*:\s*',
+    _re.IGNORECASE,
+)
+
+
+def _normalize_subject(subj: str) -> str:
+    """Normaliza un asunto para comparar hilos: quita prefijos RE:/RV:/FWD:
+    (encadenados, ej. 'RE: RV: Hola'), colapsa espacios y pasa a minusculas."""
+    s = (subj or "").strip()
+    # Quitar prefijos repetidamente (RE: RE: ... ) hasta que no queden.
+    while True:
+        new_s = _REPLY_PREFIX_RE.sub("", s)
+        if new_s == s:
+            break
+        s = new_s
+    s = _re.sub(r'\s+', ' ', s).strip().lower()
+    return s
+
+
 @app.get("/supervision")
-def get_supervision(_: str = Depends(require_auth)):
+def get_supervision(refresh: bool = True, _: str = Depends(require_auth)):
+    # Por defecto sincronizamos la bandeja via IMAP para detectar respuestas
+    # recientes antes de calcular el estado. Pasar ?refresh=false para omitir.
+    if refresh:
+        try:
+            fetch_inbox_sync(60)
+        except Exception as e:
+            logger.error(f"Supervision IMAP sync error: {e}")
     db = get_db()
     try:
         sent = db.execute(
@@ -1403,11 +1432,19 @@ def get_supervision(_: str = Depends(require_auth)):
                     WHERE l.direction='out' ORDER BY l.sent_at DESC LIMIT 100""")
         ).fetchall()
 
+        # Deteccion de respuestas POR HILO: un envio "tiene respuesta" si existe
+        # en la bandeja un mensaje DESDE el mismo contacto cuyo asunto normalizado
+        # coincide (ej. envio 'Saludos cordiales' -> respuesta 'RE: Saludos cordiales').
+        # Construimos un set de pares (remitente, asunto_normalizado).
         replied_set = set()
-        replied = db.execute(text("SELECT from_email FROM inbox_cache WHERE replied=1")).fetchall()
-        for r in replied:
-            # FIX: usar dict_from_row para acceso por nombre de columna
-            replied_set.add(dict_from_row(r)["from_email"])
+        inbox_rows = db.execute(text("SELECT from_email, subject FROM inbox_cache")).fetchall()
+        for r in inbox_rows:
+            rd = dict_from_row(r)
+            fe = rd.get("from_email")
+            if not fe:
+                continue
+            key = (fe.strip().lower(), _normalize_subject(rd.get("subject")))
+            replied_set.add(key)
 
         result = []
         for row in sent:
@@ -1425,7 +1462,9 @@ def get_supervision(_: str = Depends(require_auth)):
             except Exception:
                 hrs = None
             d["hours_since_sent"] = hrs
-            d["has_reply"] = d["contact_email"] in replied_set
+            ce = (d.get("contact_email") or "").strip().lower()
+            cs = _normalize_subject(d.get("subject"))
+            d["has_reply"] = bool(ce) and (ce, cs) in replied_set
             result.append(d)
         return result
     finally:
