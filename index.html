@@ -193,7 +193,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   .topbar{padding:.6rem .9rem}
   .page-title{font-size:15px}
   .content{padding:1rem}
-  #groqKey{flex:1;min-width:140px}
   .topbar-right{gap:6px}
 
   /* Grids a una columna */
@@ -343,8 +342,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <div class="stat-pill"><b id="tContacts">-</b> contactos</div>
     <div class="stat-pill"><b id="tSent">-</b> enviados</div>
     <div class="stat-pill"><b id="tInbox">-</b> recibidos</div>
-    <input type="password" id="groqKey" placeholder="gsk_... Groq API Key"
-      style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:var(--text);outline:none;width:190px"/>
   </div>
 </div>
 <div class="content">
@@ -1102,7 +1099,6 @@ let multiSelectedContacts = new Set();
 let campMode='daily', campTone='informative', campSelectedContacts=new Set();
 let currentCampaignId=null;
 let SESSION_TOKEN = localStorage.getItem('session_token') || '';
-let GROQ_KEY = '';
 
 // AUTH
 async function doLogin(){
@@ -1137,10 +1133,6 @@ async function doLogout(){
 async function showApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appShell').style.display='flex';
-  try{
-    const r=await apiFetch('/groq-key');
-    if(r.ok){const d=await r.json(); if(d.configured) GROQ_KEY=d.key;}
-  }catch(e){}
   loadDashboard(); loadContacts(); checkStatus();
   setInterval(checkStatus,30000); setInterval(loadStats,60000);
   // Verificar emails demorados al abrir la app
@@ -1174,11 +1166,6 @@ async function apiFetch(path,opts={}){
   return r;
 }
 
-function getGroqKey(){
-  const fieldEl=document.getElementById('groqKey');
-  const fieldVal=fieldEl?fieldEl.value.trim():'';
-  return fieldVal||GROQ_KEY||'';
-}
 
 let toastTimer;
 function toast(msg,type=''){
@@ -1522,11 +1509,9 @@ const intentPrompts={
 };
 
 async function composeEmail(){
-  const key=getGroqKey();
   const to=document.getElementById('c-to').value.trim();
   const subject=document.getElementById('c-subject').value.trim();
   const prompt=document.getElementById('c-prompt').value.trim();
-  if(!key)return toast('Groq API Key no configurada. Ingresala en la barra superior o configura GROQ_API_KEY en Render.','error');
   if(!to)return toast('Ingresa el destinatario','error');
   if(!subject)return toast('Ingresa el asunto','error');
   if(!prompt)return toast('Describe el email','error');
@@ -1551,12 +1536,11 @@ async function composeEmail(){
   const btn=document.getElementById('btnCompose');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Generando...';
   const body=document.getElementById('composedBody');body.textContent='';body.classList.add('streaming');
   try{
-    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-      body:JSON.stringify({model:'groq/compound',stream:true,
+    const res=await apiFetch('/ai/generate',{method:'POST',
+      body:JSON.stringify({stream:true,
         messages:[{role:'system',content:`Eres asistente ejecutivo experto en comunicaciones en espanol. Escribe el cuerpo del email en Markdown (**negrita**, *italica*, listas, ##titulos). NO incluyas encabezados Para/De/Asunto. Usa ${intentPrompts[currentIntent]||'tono profesional'}. Destinatario: ${to}. Asunto: ${subject}.${contactInfo}${sentHistory}${entityInfo}`},
           {role:'user',content:prompt}]})});
-    if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'Error Groq');}
+    if(!res.ok){let m='Error Groq';try{m=(await res.json()).detail||m;}catch(_){}throw new Error(m);}
     const reader=res.body.getReader(),decoder=new TextDecoder();let buffer='';
     while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){const clean=line.replace(/^data: /,'').trim();if(!clean||clean==='[DONE]')continue;try{body.textContent+=JSON.parse(clean).choices?.[0]?.delta?.content||'';}catch{}}}
     body.classList.remove('streaming');
@@ -1740,16 +1724,13 @@ async function selectInbox(mid){
 }
 async function generateReply(){
   const m=selectedInboxMsg;if(!m)return;
-  const key=getGroqKey();
-  if(!key)return toast('Groq API Key no configurada','error');
   const detail=document.getElementById('inboxDetail');let sugDiv=detail.querySelector('.ai-sug');
   if(!sugDiv){sugDiv=document.createElement('div');sugDiv.className='ai-sug';sugDiv.style.cssText='background:rgba(126,200,80,.04);border:1px solid rgba(126,200,80,.12);border-radius:9px;padding:12px;font-size:13px;font-style:italic;font-family:var(--serif);color:var(--text2);line-height:1.8;margin-bottom:14px';detail.insertBefore(sugDiv,detail.querySelector('.btn'));}
   sugDiv.textContent='Generando...';
   try{
     const entityInfo=await getEntityContext();
-    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-      body:JSON.stringify({model:'groq/compound',stream:false,
+    const res=await apiFetch('/ai/generate',{method:'POST',
+      body:JSON.stringify({stream:false,
         messages:[{role:'system',content:`Eres asistente ejecutivo. Genera respuesta profesional breve en espanol, en Markdown. Solo el cuerpo.${entityInfo}`},
           {role:'user',content:`Email recibido:
 De: ${m.from_name} <${m.from_email}>
@@ -1758,7 +1739,8 @@ Asunto: ${m.subject}
 ${m.body}
 
 Redacta una respuesta.`}]})});
-    const d=await res.json();const suggestion=d.choices?.[0]?.message?.content||'';
+    if(!res.ok){let mm='Error Groq';try{mm=(await res.json()).detail||mm;}catch(_){}throw new Error(mm);}
+    const d=await res.json();const suggestion=d.content||'';
     sugDiv.textContent=suggestion;
     await apiFetch('/inbox/save-suggestion',{method:'POST',body:JSON.stringify({message_id:m.message_id,suggestion})});
     m.ai_suggestion=suggestion;toast('Propuesta generada','success');

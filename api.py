@@ -828,7 +828,7 @@ if os.path.exists(static_dir) and os.listdir(static_dir):
 
 API_PATHS = ["auth","contacts","inbox","send-email","settings","context",
              "preview-email","logs","memory","supervision","stats",
-             "smtp-test","config","api","campaigns","groq-key",
+             "smtp-test","config","api","campaigns","ai",
              "schedule","process-scheduled"]
 
 @app.post("/auth/login")
@@ -1453,16 +1453,44 @@ def get_stats(_: str = Depends(require_auth)):
 # ─────────────────────────────────────────────
 
 # ─────────────────────────────────────────────
-# ROUTES — GROQ KEY (provista por API)
+# ROUTES — IA (proxy a Groq; la key nunca sale del backend)
 # ─────────────────────────────────────────────
-@app.get("/groq-key")
-def get_groq_key(_: str = Depends(require_auth)):
-    """Devuelve la Groq API Key configurada en env vars (sin exponerla completa)."""
-    key = os.getenv("GROQ_API_KEY", "")
-    if not key:
-        return {"configured": False, "key": ""}
-    # Devuelve la key completa — solo accesible a usuarios autenticados
-    return {"configured": True, "key": key}
+@app.post("/ai/generate")
+async def ai_generate(request: Request, _: str = Depends(require_auth)):
+    """
+    Proxy delgado hacia Groq. El frontend arma los `messages`; el backend agrega
+    GROQ_API_KEY (env vars) y reenvía. Si stream=true devuelve SSE (text/event-stream)
+    reenviando los chunks 'data: ...' de Groq tal cual; si no, devuelve {content}.
+    """
+    import httpx
+    from fastapi.responses import StreamingResponse
+    data = await request.json()
+    messages = data.get("messages") or []
+    stream = bool(data.get("stream", False))
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key:
+        raise HTTPException(500, "GROQ_API_KEY no configurada en variables de entorno")
+    if not messages:
+        raise HTTPException(400, "messages es obligatorio")
+
+    GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+    payload = {"model": "groq/compound", "stream": stream, "messages": messages}
+
+    if stream:
+        async def gen():
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                async with client.stream("POST", GROQ_URL, headers=headers, json=payload) as resp:
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            yield line + "\n\n"   # reenviar SSE tal cual (incluye [DONE])
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(GROQ_URL, headers=headers, json=payload)
+        d = resp.json()
+        content = (d.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        return {"content": content}
 
 # ─────────────────────────────────────────────
 # ROUTES — CAMPAIGNS
