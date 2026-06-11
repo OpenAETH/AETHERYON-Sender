@@ -24,3 +24,8 @@ CREATE TABLE IF NOT EXISTS contact_interactions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_contact_interactions_cid ON contact_interactions(contact_id);
+
+-- ── Plantillas de campañas pre-aprobadas ──
+-- Una plantilla es una campaña con status='template'. Reusa campaigns/campaign_emails.
+-- send_time persiste la hora de envío de la cadencia (antes solo iba embebida en scheduled_at).
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS send_time TEXT DEFAULT '09:00';

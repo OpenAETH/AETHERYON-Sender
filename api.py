@@ -1567,6 +1567,43 @@ def _get_campaign_dates(start_date: str, end_date: str, send_mode: str) -> list:
         current += timedelta(days=1)
     return dates
 
+
+def _get_campaign_dates_count(start_date: str, send_mode: str, count: int) -> list:
+    """Genera EXACTAMENTE `count` fechas válidas avanzando desde start_date según la cadencia.
+    Usado al instanciar una plantilla: la duración es consecuencia de N emails + cadencia."""
+    from datetime import date, timedelta
+    try:
+        start = date.fromisoformat(start_date)
+    except ValueError:
+        raise HTTPException(400, "Fecha de inicio inválida. Usar formato YYYY-MM-DD")
+    if count <= 0:
+        return []
+
+    dates = []
+    current = start
+    # Cota de seguridad para no iterar indefinidamente.
+    max_iter = count * 14 + 366
+    iters = 0
+    while len(dates) < count and iters < max_iter:
+        wd = current.weekday()  # 0=lun ... 6=dom
+        include = False
+        if send_mode == "daily":
+            include = True
+        elif send_mode == "alternate":
+            include = ((current - start).days % 2 == 0)
+        elif send_mode == "mon_wed_fri":
+            include = wd in (0, 2, 4)
+        elif send_mode == "tue_thu":
+            include = wd in (1, 3)
+        else:
+            include = True
+        if include:
+            dates.append(str(current))
+        current += timedelta(days=1)
+        iters += 1
+    return dates
+
+
 @app.get("/campaigns")
 def list_campaigns(_: str = Depends(require_auth)):
     db = get_db()
@@ -1578,6 +1615,7 @@ def list_campaigns(_: str = Depends(require_auth)):
                    SUM(CASE WHEN e.status='pending'  THEN 1 ELSE 0 END) AS pending_count
             FROM campaigns c
             LEFT JOIN campaign_emails e ON e.campaign_id = c.id
+            WHERE c.status != 'template'
             GROUP BY c.id ORDER BY c.created_at DESC
         """)).fetchall()
         return rows_to_list(rows)
@@ -1812,6 +1850,158 @@ async def cancel_scheduled_email(email_id: int, _: str = Depends(require_auth)):
         db.close()
 
 
+# ─────────────────────────────────────────────
+# PLANTILLAS DE CAMPAÑAS (status='template')
+# Una plantilla es una campaña pre-aprobada sin contactos ni fechas reales.
+# Estas rutas DEBEN ir antes de /campaigns/{cid} para evitar conflicto de rutas.
+# ─────────────────────────────────────────────
+
+@app.get("/campaigns/templates")
+def list_campaign_templates(_: str = Depends(require_auth)):
+    """Lista las plantillas pre-aprobadas con su cantidad de emails."""
+    db = get_db()
+    try:
+        rows = db.execute(text("""
+            SELECT c.id, c.name, c.intent, c.send_mode, c.tone, c.send_time, c.created_at,
+                   COUNT(e.id) AS total_emails
+            FROM campaigns c
+            LEFT JOIN campaign_emails e ON e.campaign_id = c.id
+            WHERE c.status = 'template'
+            GROUP BY c.id ORDER BY c.created_at DESC
+        """)).fetchall()
+        return rows_to_list(rows)
+    except Exception as e:
+        logger.error(f"list_campaign_templates: {e}")
+        return []
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/{cid}/save-as-template")
+async def save_campaign_as_template(cid: int, request: Request, _: str = Depends(require_auth)):
+    """Crea una plantilla pre-aprobada a partir de una campaña con todos sus emails aprobados."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    new_name = (data.get("name") or "").strip()
+
+    db = get_db()
+    try:
+        camp = dict_from_row(db.execute(text("SELECT * FROM campaigns WHERE id=:id"), {"id": cid}).fetchone())
+        if not camp:
+            raise HTTPException(404, "Campaña no encontrada")
+
+        emails = rows_to_list(db.execute(text(
+            "SELECT * FROM campaign_emails WHERE campaign_id=:id ORDER BY day_number"), {"id": cid}).fetchall())
+        if not emails:
+            raise HTTPException(400, "La campaña no tiene emails para guardar como plantilla")
+        not_approved = [e for e in emails if e.get("status") != "approved"]
+        if not_approved:
+            raise HTTPException(400, "Todos los emails deben estar aprobados antes de guardar como plantilla")
+
+        # Derivar send_time: columna o, como fallback, la hora embebida en el primer scheduled_at.
+        send_time = camp.get("send_time") or ""
+        if not send_time:
+            sched0 = str(emails[0].get("scheduled_at") or "")
+            send_time = sched0.split(" ")[1] if " " in sched0 else "09:00"
+
+        tmpl_name = new_name or f"{camp.get('name','Campaña')} (plantilla)"
+        result = db.execute(text("""
+            INSERT INTO campaigns (name, intent, start_date, end_date, send_mode, tone, send_time, status)
+            VALUES (:name,:intent,'','',:send_mode,:tone,:send_time,'template')
+            RETURNING id
+        """), {"name": tmpl_name, "intent": camp.get("intent", ""),
+               "send_mode": camp.get("send_mode", "daily"), "tone": camp.get("tone", "informative"),
+               "send_time": send_time})
+        tmpl_id = result.fetchone()[0]
+
+        for em in emails:
+            db.execute(text("""
+                INSERT INTO campaign_emails (campaign_id, day_number, subject, body, status, scheduled_at, version, regenerated_count)
+                VALUES (:cid,:day,:subject,:body,'approved',NULL,1,0)
+            """), {"cid": tmpl_id, "day": em["day_number"], "subject": em.get("subject", ""),
+                   "body": em.get("body", "")})
+
+        db.commit()
+        return {"success": True, "template_id": tmpl_id, "total_emails": len(emails)}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/templates/{tid}/use")
+async def use_campaign_template(tid: int, request: Request, _: str = Depends(require_auth)):
+    """Instancia una plantilla como campaña programada para los contactos indicados."""
+    data = await request.json()
+    contacts_list = data.get("contacts", []) or []
+    start_date    = (data.get("start_date") or "").strip()
+
+    db = get_db()
+    try:
+        tmpl = dict_from_row(db.execute(text(
+            "SELECT * FROM campaigns WHERE id=:id AND status='template'"), {"id": tid}).fetchone())
+        if not tmpl:
+            raise HTTPException(404, "Plantilla no encontrada")
+
+        tmpl_emails = rows_to_list(db.execute(text(
+            "SELECT * FROM campaign_emails WHERE campaign_id=:id ORDER BY day_number"), {"id": tid}).fetchall())
+        if not tmpl_emails:
+            raise HTTPException(400, "La plantilla no tiene emails")
+
+        contacts = [c.strip() for c in contacts_list if c and c.strip()]
+        if not contacts:
+            raise HTTPException(400, "Se requiere al menos un contacto")
+        if not start_date:
+            raise HTTPException(400, "Se requiere fecha de inicio")
+
+        # Overrides editables; default a la config de la plantilla.
+        send_mode = data.get("send_mode") or tmpl.get("send_mode", "daily")
+        send_time = data.get("send_time") or tmpl.get("send_time", "09:00")
+
+        n = len(tmpl_emails)
+        dates = _get_campaign_dates_count(start_date, send_mode, n)
+        if len(dates) < n:
+            raise HTTPException(400, "No se pudieron calcular suficientes fechas para la cadencia")
+
+        camp_name = (data.get("name") or "").strip() or tmpl.get("name", "Campaña").replace(" (plantilla)", "")
+        result = db.execute(text("""
+            INSERT INTO campaigns (name, intent, start_date, end_date, send_mode, tone, send_time, status)
+            VALUES (:name,:intent,:start_date,:end_date,:send_mode,:tone,:send_time,'scheduled')
+            RETURNING id
+        """), {"name": camp_name, "intent": tmpl.get("intent", ""),
+               "start_date": dates[0], "end_date": dates[-1], "send_mode": send_mode,
+               "tone": tmpl.get("tone", "informative"), "send_time": send_time})
+        camp_id = result.fetchone()[0]
+
+        for i, em in enumerate(tmpl_emails):
+            db.execute(text("""
+                INSERT INTO campaign_emails (campaign_id, day_number, subject, body, status, scheduled_at, version, regenerated_count)
+                VALUES (:cid,:day,:subject,:body,'approved',:scheduled_at,1,0)
+            """), {"cid": camp_id, "day": em["day_number"], "subject": em.get("subject", ""),
+                   "body": em.get("body", ""), "scheduled_at": f"{dates[i]} {send_time}"})
+
+        for email_addr in contacts:
+            db.execute(text("INSERT INTO campaign_contacts (campaign_id, email) VALUES (:cid,:email)"),
+                       {"cid": camp_id, "email": email_addr})
+
+        db.commit()
+        return {"success": True, "campaign_id": camp_id, "total_emails": n, "dates": dates}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
+
 @app.get("/campaigns/{cid}")
 def get_campaign(cid: int, _: str = Depends(require_auth)):
     db = get_db()
@@ -1867,11 +2057,11 @@ async def init_campaign(request: Request, _: str = Depends(require_auth)):
     db = get_db()
     try:
         result = db.execute(text("""
-            INSERT INTO campaigns (name, intent, start_date, end_date, send_mode, tone, status)
-            VALUES (:name,:intent,:start_date,:end_date,:send_mode,:tone,'draft')
+            INSERT INTO campaigns (name, intent, start_date, end_date, send_mode, tone, send_time, status)
+            VALUES (:name,:intent,:start_date,:end_date,:send_mode,:tone,:send_time,'draft')
             RETURNING id
         """), {"name": campaign_name, "intent": intent, "start_date": start_date,
-               "end_date": end_date, "send_mode": send_mode, "tone": tone})
+               "end_date": end_date, "send_mode": send_mode, "tone": tone, "send_time": send_time})
         camp_id = result.fetchone()[0]
 
         for i in range(n):
@@ -2162,11 +2352,11 @@ Responde ÚNICAMENTE con JSON válido con esta estructura exacta (sin texto extr
     db = get_db()
     try:
         result = db.execute(text("""
-            INSERT INTO campaigns (name, intent, start_date, end_date, send_mode, tone, status)
-            VALUES (:name,:intent,:start_date,:end_date,:send_mode,:tone,'draft')
+            INSERT INTO campaigns (name, intent, start_date, end_date, send_mode, tone, send_time, status)
+            VALUES (:name,:intent,:start_date,:end_date,:send_mode,:tone,:send_time,'draft')
             RETURNING id
         """), {"name": campaign_name, "intent": intent, "start_date": start_date,
-               "end_date": end_date, "send_mode": send_mode, "tone": tone})
+               "end_date": end_date, "send_mode": send_mode, "tone": tone, "send_time": send_time})
         camp_id = result.fetchone()[0]
 
         for i, em in enumerate(emails_list):
