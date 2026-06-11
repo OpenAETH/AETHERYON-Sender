@@ -818,10 +818,16 @@ if not os.path.exists(static_dir):
     os.makedirs(static_dir)
 
 index_root = os.path.join(BASE, "index.html")
-if os.path.exists(index_root) and not os.path.exists(os.path.join(static_dir, "index.html")):
-    import shutil
-    shutil.copy2(index_root, os.path.join(static_dir, "index.html"))
-    INDEX_PATH = os.path.join(static_dir, "index.html")
+static_index = os.path.join(static_dir, "index.html")
+# Copiar siempre que la raíz sea más nueva (o falte la copia), para no servir un index.html stale.
+if os.path.exists(index_root):
+    needs_copy = (not os.path.exists(static_index)
+                  or os.path.getmtime(index_root) > os.path.getmtime(static_index))
+    if needs_copy:
+        import shutil
+        shutil.copy2(index_root, static_index)
+        logger.info("index.html copiado a static/ (actualizado)")
+    INDEX_PATH = static_index
 
 if os.path.exists(static_dir) and os.listdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
