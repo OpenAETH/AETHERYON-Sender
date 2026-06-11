@@ -517,7 +517,7 @@ def decode_str(s):
         result.append(part.decode(enc or "utf-8", errors="replace") if isinstance(part, bytes) else str(part))
     return "".join(result)
 
-def fetch_inbox_sync(limit=60):
+def fetch_inbox_sync(limit=500):
     c = cfg()
     if not c["imap_host"] or not c["imap_user"]: return {"added":0,"deleted":0,"error":"IMAP no configurado"}
     try:
@@ -548,8 +548,10 @@ def fetch_inbox_sync(limit=60):
                 db.commit()
                 logger.info(f"IMAP sync: {deleted_count} mensajes eliminados de DB")
 
-            # Agregar nuevos mensajes
-            uids_to_fetch = list(server_uids)[-limit:]
+            # Agregar nuevos mensajes.
+            # server_uids es un set; los UIDs IMAP son enteros crecientes, así que
+            # ordenamos numéricamente y tomamos los `limit` más altos (más recientes).
+            uids_to_fetch = sorted(server_uids, key=lambda u: int(u))[-limit:]
             added_count = 0
 
             for uid in reversed(uids_to_fetch):
@@ -1277,10 +1279,10 @@ async def smtp_test(_: str = Depends(require_auth)):
 def get_inbox(refresh: bool = False, _: str = Depends(require_auth)):
     result = None
     if refresh:
-        result = fetch_inbox_sync(60)
+        result = fetch_inbox_sync(500)
     db = get_db()
     try:
-        rows = db.execute(text("SELECT * FROM inbox_cache ORDER BY date DESC LIMIT 80")).fetchall()
+        rows = db.execute(text("SELECT * FROM inbox_cache ORDER BY date DESC LIMIT 500")).fetchall()
         resp = rows_to_list(rows)
         if result: return {"messages": resp, "sync": result}
         return {"messages": resp, "sync": None}
