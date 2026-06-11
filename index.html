@@ -1048,8 +1048,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     </div>
     <div class="resp-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px">
       <div>
-        <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Contactos</div>
-        <div id="useTmplContactList" style="max-height:160px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Contactos</span>
+          <span id="useTmplSelCount" style="font-size:10px;color:var(--green)"></span>
+        </div>
+        <input type="text" id="useTmplSearch" placeholder="Buscar por nombre, email, empresa, tag..." oninput="renderUseTmplContacts()"
+          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;font-family:var(--mono);font-size:11px;color:var(--text);outline:none;margin-bottom:8px;caret-color:var(--green)"/>
+        <div id="useTmplContactList" style="max-height:150px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
         <textarea id="useTmplExtraEmails" rows="2" placeholder="emails adicionales, uno por linea"
           style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:vertical"></textarea>
         <div id="useTmplSelectedTags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px"></div>
@@ -1083,6 +1088,33 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <div style="display:flex;gap:8px;margin-top:16px">
       <div style="flex:1"></div>
       <button class="btn btn-green" id="btnUseTmplSchedule" onclick="scheduleFromTemplate()">Programar envío</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CONFIRMACIÓN GENÉRICA -->
+<div class="modal-backdrop" id="modalConfirm" style="z-index:70">
+  <div class="modal" style="max-width:440px">
+    <h2 id="confirmTitle" style="margin-bottom:8px">Confirmar</h2>
+    <div class="info" id="confirmMessage" style="margin-bottom:14px"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" style="flex:1;justify-content:center" id="confirmCancelBtn" onclick="resolveConfirm(false)">Cancelar</button>
+      <button class="btn btn-red" style="flex:1;justify-content:center" id="confirmOkBtn" onclick="resolveConfirm(true)">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: INPUT DE TEXTO GENÉRICO -->
+<div class="modal-backdrop" id="modalPrompt" style="z-index:70">
+  <div class="modal" style="max-width:460px">
+    <h2 id="promptTitle" style="margin-bottom:8px">Ingresar valor</h2>
+    <div class="info" id="promptMessage" style="margin-bottom:10px;display:none"></div>
+    <input type="text" id="promptInput"
+      style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;caret-color:var(--green)"
+      onkeydown="if(event.key==='Enter')resolvePrompt(true);if(event.key==='Escape')resolvePrompt(false)"/>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="resolvePrompt(false)">Cancelar</button>
+      <button class="btn btn-green" style="flex:1;justify-content:center" id="promptOkBtn" onclick="resolvePrompt(true)">Guardar</button>
     </div>
   </div>
 </div>
@@ -1245,6 +1277,41 @@ function toast(msg,type=''){
 function closeModal(id){document.getElementById(id)?.classList.remove('visible');}
 function openModal(id){document.getElementById(id)?.classList.add('visible');}
 
+// ── Modales genéricos basados en promesas (reemplazan confirm()/prompt() nativos) ──
+let _confirmResolver=null, _promptResolver=null;
+
+function uiConfirm({title='Confirmar', message='', okText='Eliminar', danger=true}={}){
+  document.getElementById('confirmTitle').textContent=title;
+  document.getElementById('confirmMessage').textContent=message;
+  const ok=document.getElementById('confirmOkBtn');
+  ok.textContent=okText;
+  ok.className='btn '+(danger?'btn-red':'btn-green');
+  ok.style.cssText='flex:1;justify-content:center';
+  openModal('modalConfirm');
+  return new Promise(res=>{_confirmResolver=res;});
+}
+function resolveConfirm(val){
+  closeModal('modalConfirm');
+  if(_confirmResolver){_confirmResolver(val);_confirmResolver=null;}
+}
+
+function uiPrompt({title='Ingresar valor', message='', value='', okText='Guardar', placeholder=''}={}){
+  document.getElementById('promptTitle').textContent=title;
+  const msgEl=document.getElementById('promptMessage');
+  msgEl.textContent=message; msgEl.style.display=message?'block':'none';
+  const inp=document.getElementById('promptInput');
+  inp.value=value; inp.placeholder=placeholder;
+  document.getElementById('promptOkBtn').textContent=okText;
+  openModal('modalPrompt');
+  setTimeout(()=>{inp.focus();inp.select();},50);
+  return new Promise(res=>{_promptResolver=res;});
+}
+function resolvePrompt(ok){
+  const val=document.getElementById('promptInput').value;
+  closeModal('modalPrompt');
+  if(_promptResolver){_promptResolver(ok?val:null);_promptResolver=null;}
+}
+
 const pageMap={dashboard:'Dashboard',agenda:'Agenda',crm:'CRM',compose:'Redactar',inbox:'Bandeja',
   supervision:'Supervision',memory:'Memoria',context:'Contexto',estilo:'Estilo',
   settings:'SMTP / IMAP',campaigns:'Campanas'};
@@ -1357,7 +1424,7 @@ async function saveContact(){
   }catch(e){toast('Error: '+e.message,'error');}
   finally{btn.disabled=false;btn.textContent='Guardar';}
 }
-async function deleteContact(id){if(!confirm('Eliminar contacto?'))return;await apiFetch('/contacts/'+id,{method:'DELETE'});toast('Eliminado');loadContacts();loadStats();}
+async function deleteContact(id){if(!await uiConfirm({title:'Eliminar contacto',message:'El contacto y su historial de interacciones se eliminarán permanentemente.',okText:'Eliminar'}))return;await apiFetch('/contacts/'+id,{method:'DELETE'});toast('Eliminado');loadContacts();loadStats();}
 function composeToContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;document.getElementById('c-to').value=c.email;matchContact();updateToTag();go('compose');}
 
 // ── CRM (kanban por estados) ──────────────────────────────
@@ -2092,7 +2159,7 @@ async function sendSingleDelayed(emailId){
   }
 }
 async function cancelScheduledEmail(emailId){
-  if(!confirm('¿Cancelar este envío programado? El email no se enviará.')) return;
+  if(!await uiConfirm({title:'Cancelar envío programado',message:'Este email no se enviará. La acción no se puede deshacer.',okText:'Cancelar envío'})) return;
   try{
     const r = await apiFetch(`/campaigns/schedule-email/${emailId}/cancel`, {method:'POST'});
     const d = await r.json();
@@ -2656,7 +2723,8 @@ async function loadTemplates(){
 }
 
 async function deleteTemplate(tid){
-  if(!confirm('Eliminar esta plantilla permanentemente?'))return;
+  const ok=await uiConfirm({title:'Eliminar plantilla',message:'Esta plantilla se eliminará permanentemente. Las campañas ya programadas a partir de ella no se ven afectadas.',okText:'Eliminar'});
+  if(!ok)return;
   try{
     await apiFetch('/campaigns/'+tid,{method:'DELETE'});
     toast('Plantilla eliminada');
@@ -2685,16 +2753,37 @@ async function openUseTemplate(tid){
     document.getElementById('useTmplExtraEmails').value='';
     document.getElementById('useTmplStart').value=nextValidStart(useTmplState.mode);
     setUseTmplMode(useTmplState.mode);
-    // Lista de contactos
-    document.getElementById('useTmplContactList').innerHTML=contacts.map(c=>`
-      <button class="tag" style="cursor:pointer;padding:5px 10px;font-size:10px" onclick="toggleUseTmplContact('${c.email}',this)">${c.name}</button>`).join('');
-    document.getElementById('useTmplSelectedTags').innerHTML='';
+    // Lista de contactos (con búsqueda)
+    document.getElementById('useTmplSearch').value='';
+    renderUseTmplContacts();
+    renderUseTmplSelected();
     updateUseTmplPreview();
     openModal('modalUseTemplate');
   }catch(e){toast('Error abriendo plantilla','error');}
 }
 
-function toggleUseTmplContact(email,btn){
+function renderUseTmplContacts(){
+  const q=(document.getElementById('useTmplSearch').value||'').toLowerCase().trim();
+  const filtered=contacts.filter(c=>!q
+    || (c.name||'').toLowerCase().includes(q)
+    || (c.email||'').toLowerCase().includes(q)
+    || (c.company||'').toLowerCase().includes(q)
+    || (c.tags||'').toLowerCase().includes(q));
+  const el=document.getElementById('useTmplContactList');
+  if(!filtered.length){
+    el.innerHTML='<div style="font-size:10px;color:var(--text3);padding:4px">Sin resultados.</div>';
+    return;
+  }
+  el.innerHTML=filtered.map(c=>{
+    const sel=useTmplState.contacts.has(c.email);
+    const selStyle=sel?'background:rgba(126,200,80,.15);color:var(--green);border-color:var(--green)':'';
+    return `<button class="tag" data-email="${(c.email||'').replace(/"/g,'&quot;')}" style="cursor:pointer;padding:5px 10px;font-size:10px;${selStyle}" onclick="toggleUseTmplContact(this)" title="${(c.email||'').replace(/"/g,'&quot;')}">${(c.name||c.email||'').replace(/</g,'&lt;')}</button>`;
+  }).join('');
+}
+
+function toggleUseTmplContact(btn){
+  const email=btn.getAttribute('data-email');
+  if(!email)return;
   if(useTmplState.contacts.has(email)){
     useTmplState.contacts.delete(email);
     btn.style.background='';btn.style.color='';btn.style.borderColor='';
@@ -2702,7 +2791,15 @@ function toggleUseTmplContact(email,btn){
     useTmplState.contacts.add(email);
     btn.style.background='rgba(126,200,80,.15)';btn.style.color='var(--green)';btn.style.borderColor='var(--green)';
   }
-  document.getElementById('useTmplSelectedTags').innerHTML=[...useTmplState.contacts].map(e=>`<span style="font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid var(--green-dim);color:var(--green)">${e}</span>`).join('');
+  renderUseTmplSelected();
+}
+
+function renderUseTmplSelected(){
+  const sel=[...useTmplState.contacts];
+  document.getElementById('useTmplSelectedTags').innerHTML=sel.map(e=>
+    `<span style="font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid var(--green-dim);color:var(--green)">${e.replace(/</g,'&lt;')}</span>`).join('');
+  const cnt=document.getElementById('useTmplSelCount');
+  if(cnt)cnt.textContent=sel.length?`${sel.length} seleccionado${sel.length>1?'s':''}`:'';
 }
 
 function setUseTmplMode(m){
@@ -2920,8 +3017,9 @@ async function finalizeCampaign(){
 async function saveAsTemplate(){
   if(!currentCampaignId)return;
   const defName=(document.getElementById('approvalCampName').textContent||'').trim();
-  const name=prompt('Nombre de la plantilla:', defName?`${defName}`:'');
+  const name=await uiPrompt({title:'Guardar como plantilla',message:'Nombre de la plantilla pre-aprobada:',value:defName,okText:'Guardar',placeholder:'Ej: Contacto inicial'});
   if(name===null)return; // cancelado
+  if(!name.trim())return toast('Ingresá un nombre para la plantilla','error');
   const btn=document.getElementById('btnSaveTemplate');
   btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Guardando...';
   try{
@@ -2934,7 +3032,7 @@ async function saveAsTemplate(){
 }
 
 async function deleteCampaign(campId){
-  if(!confirm('Eliminar esta campana permanentemente?'))return;
+  if(!await uiConfirm({title:'Eliminar campaña',message:'La campaña y todos sus emails se eliminarán permanentemente.',okText:'Eliminar'}))return;
   try{
     await apiFetch('/campaigns/'+campId,{method:'DELETE'});
     toast('Campana eliminada');
