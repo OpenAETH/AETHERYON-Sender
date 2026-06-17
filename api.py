@@ -183,14 +183,17 @@ def init_supabase():
     global supabase_client
     c = cfg()
     if c["supabase_url"] and c["supabase_service_key"]:
-        supabase_client = create_client(c["supabase_url"], c["supabase_service_key"])
-        logger.info("Supabase Storage inicializado correctamente")
+        try:
+            supabase_client = create_client(c["supabase_url"], c["supabase_service_key"])
+            logger.info("Supabase Storage inicializado correctamente")
+        except Exception as e:
+            supabase_client = None
+            logger.error(f"Error inicializando Supabase Storage: {e}")
     else:
+        supabase_client = None
         logger.warning("SUPABASE_URL o SUPABASE_SERVICE_KEY no configuradas — adjuntos no disponibles")
 
 def get_supabase():
-    if supabase_client is None:
-        raise RuntimeError("Supabase Storage no inicializado — revisa SUPABASE_URL y SUPABASE_SERVICE_KEY")
     return supabase_client
 
 def dict_from_row(row):
@@ -535,16 +538,19 @@ def send_resend(to: str, subject: str, body_plain: str, body_html: str, reply_to
             db.close()
         if rows:
             supabase = get_supabase()
-            atts = []
-            for row in rows:
-                signed = supabase.storage.from_(c["storage_bucket"]).create_signed_url(
-                    row["storage_path"], 1800
-                )
-                atts.append({
-                    "filename": row["filename"],
-                    "path": signed["signedURL"],
-                })
-            params["attachments"] = atts
+            if supabase:
+                atts = []
+                for row in rows:
+                    signed = supabase.storage.from_(c["storage_bucket"]).create_signed_url(
+                        row["storage_path"], 1800
+                    )
+                    atts.append({
+                        "filename": row["filename"],
+                        "path": signed["signedURL"],
+                    })
+                params["attachments"] = atts
+            else:
+                logger.warning("Supabase no disponible — saltando adjuntos")
 
     response = resend.Emails.send(params)
     email_id = response.id if hasattr(response, "id") else str(response)
@@ -1321,6 +1327,9 @@ async def upload_files(files: list[UploadFile] = File(...), _: str = Depends(req
         raise HTTPException(500, "Supabase Storage no configurado — revisa SUPABASE_URL y SUPABASE_SERVICE_KEY")
 
     supabase = get_supabase()
+    if supabase is None:
+        raise HTTPException(500, "Supabase Storage no inicializado — revisa SUPABASE_URL y SUPABASE_SERVICE_KEY en las variables de entorno")
+
     uploaded = []
     db = get_db()
     try:
@@ -1358,6 +1367,7 @@ async def upload_files(files: list[UploadFile] = File(...), _: str = Depends(req
         raise
     except Exception as e:
         db.rollback()
+        logger.exception(f"Error en upload: {e}")
         raise HTTPException(500, f"Error guardando metadata: {e}")
     finally:
         db.close()
@@ -1385,10 +1395,11 @@ def delete_attachment(att_id: int, _: str = Depends(require_auth)):
             raise HTTPException(404, "Attachment no encontrado")
 
         supabase = get_supabase()
-        try:
-            supabase.storage.from_(c["storage_bucket"]).remove([row["storage_path"]])
-        except Exception as e:
-            logger.warning(f"Error eliminando archivo de Storage: {e}")
+        if supabase:
+            try:
+                supabase.storage.from_(c["storage_bucket"]).remove([row["storage_path"]])
+            except Exception as e:
+                logger.warning(f"Error eliminando archivo de Storage: {e}")
 
         db.execute(text("DELETE FROM attachments WHERE id=:id"), {"id": att_id})
         db.commit()
