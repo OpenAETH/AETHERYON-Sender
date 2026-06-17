@@ -734,6 +734,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:6px 14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text3);cursor:pointer;transition:all .15s">
       Agenda de Envío
     </button>
+    <button id="campTab-templates" onclick="switchCampTab('templates')"
+      style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:6px 14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text3);cursor:pointer;transition:all .15s">
+      Preaprobadas
+    </button>
   </div>
 
   <!-- LISTA -->
@@ -819,6 +823,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <span style="font-family:var(--serif);font-size:15px;color:var(--text)" id="approvalCampName"></span>
       <div style="flex:1"></div>
       <span style="font-size:11px;color:var(--text3)" id="approvalProgress"></span>
+      <button class="btn btn-ghost btn-sm" id="btnSaveTemplate" onclick="saveAsTemplate()" style="display:none">Guardar como plantilla</button>
       <button class="btn btn-green btn-sm" id="btnFinalizeCamp" onclick="finalizeCampaign()" style="display:none">Confirmar campana &#x2713;</button>
     </div>
     <div id="approvalEmailList" style="display:flex;flex-direction:column;gap:10px"></div>
@@ -874,6 +879,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <div id="scheduleList">
         <div style="padding:2rem;color:var(--text3);font-size:11px;text-align:center">Cargando agenda...</div>
       </div>
+    </div>
+  </div>
+
+  <!-- PLANTILLAS PRE-APROBADAS -->
+  <div id="campaignTemplatesView" style="display:none">
+    <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center;flex-wrap:wrap">
+      <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Plantillas pre-aprobadas</span>
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost btn-sm" onclick="loadTemplates()">⟳ Actualizar</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Secuencias ya escritas y aprobadas. Usá una para programar el envío a nuevos contactos.</div>
+    <div id="templateCards" style="display:flex;flex-direction:column;gap:10px">
+      <div style="color:var(--text3);font-size:11px;padding:1rem">Cargando plantillas...</div>
     </div>
   </div>
 
@@ -1031,6 +1049,89 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       </button>
     </div>
     <div id="campGenStatus" style="margin-top:10px;font-size:11px;color:var(--text3);text-align:right"></div>
+  </div>
+</div>
+
+<!-- MODAL: USAR PLANTILLA PRE-APROBADA -->
+<div class="modal-backdrop" id="modalUseTemplate" style="z-index:60">
+  <div class="modal" style="max-width:680px;width:calc(100% - 2rem)">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+      <div style="flex:1">
+        <div style="font-family:var(--serif);font-size:18px;font-weight:400;color:var(--text)">Usar plantilla</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px" id="useTmplSubtitle"></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modalUseTemplate')">Cerrar</button>
+    </div>
+    <div class="resp-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Contactos</span>
+          <span id="useTmplSelCount" style="font-size:10px;color:var(--green)"></span>
+        </div>
+        <input type="text" id="useTmplSearch" placeholder="Buscar por nombre, email, empresa, tag..." oninput="renderUseTmplContacts()"
+          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;font-family:var(--mono);font-size:11px;color:var(--text);outline:none;margin-bottom:8px;caret-color:var(--green)"/>
+        <div id="useTmplContactList" style="max-height:150px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+        <textarea id="useTmplExtraEmails" rows="2" placeholder="emails adicionales, uno por linea"
+          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:vertical"></textarea>
+        <div id="useTmplSelectedTags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px"></div>
+      </div>
+      <div>
+        <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Programación</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--text3);width:56px">Inicio</span>
+            <input type="date" id="useTmplStart" onchange="updateUseTmplPreview()"
+              style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"/>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--text3);width:56px">Hora</span>
+            <input type="time" id="useTmplTime" value="09:00"
+              style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"/>
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Modo de envío</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <div class="intent-btn" id="utm-daily" onclick="setUseTmplMode('daily')">Diario</div>
+            <div class="intent-btn" id="utm-alternate" onclick="setUseTmplMode('alternate')">Día por medio</div>
+            <div class="intent-btn" id="utm-mon_wed_fri" onclick="setUseTmplMode('mon_wed_fri')">Lun-Mié-Vie</div>
+            <div class="intent-btn" id="utm-tue_thu" onclick="setUseTmplMode('tue_thu')">Mar-Jue</div>
+          </div>
+        </div>
+        <div id="useTmplPreview" style="font-size:11px;color:var(--text3);margin-top:12px"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <div style="flex:1"></div>
+      <button class="btn btn-green" id="btnUseTmplSchedule" onclick="scheduleFromTemplate()">Programar envío</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CONFIRMACIÓN GENÉRICA -->
+<div class="modal-backdrop" id="modalConfirm" style="z-index:70">
+  <div class="modal" style="max-width:440px">
+    <h2 id="confirmTitle" style="margin-bottom:8px">Confirmar</h2>
+    <div class="info" id="confirmMessage" style="margin-bottom:14px"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" style="flex:1;justify-content:center" id="confirmCancelBtn" onclick="resolveConfirm(false)">Cancelar</button>
+      <button class="btn btn-red" style="flex:1;justify-content:center" id="confirmOkBtn" onclick="resolveConfirm(true)">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: INPUT DE TEXTO GENÉRICO -->
+<div class="modal-backdrop" id="modalPrompt" style="z-index:70">
+  <div class="modal" style="max-width:460px">
+    <h2 id="promptTitle" style="margin-bottom:8px">Ingresar valor</h2>
+    <div class="info" id="promptMessage" style="margin-bottom:10px;display:none"></div>
+    <input type="text" id="promptInput"
+      style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;caret-color:var(--green)"
+      onkeydown="if(event.key==='Enter')resolvePrompt(true);if(event.key==='Escape')resolvePrompt(false)"/>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="resolvePrompt(false)">Cancelar</button>
+      <button class="btn btn-green" style="flex:1;justify-content:center" id="promptOkBtn" onclick="resolvePrompt(true)">Guardar</button>
+    </div>
   </div>
 </div>
 
@@ -1194,6 +1295,41 @@ function toast(msg,type=''){
 function closeModal(id){document.getElementById(id)?.classList.remove('visible');}
 function openModal(id){document.getElementById(id)?.classList.add('visible');}
 
+// ── Modales genéricos basados en promesas (reemplazan confirm()/prompt() nativos) ──
+let _confirmResolver=null, _promptResolver=null;
+
+function uiConfirm({title='Confirmar', message='', okText='Eliminar', danger=true}={}){
+  document.getElementById('confirmTitle').textContent=title;
+  document.getElementById('confirmMessage').textContent=message;
+  const ok=document.getElementById('confirmOkBtn');
+  ok.textContent=okText;
+  ok.className='btn '+(danger?'btn-red':'btn-green');
+  ok.style.cssText='flex:1;justify-content:center';
+  openModal('modalConfirm');
+  return new Promise(res=>{_confirmResolver=res;});
+}
+function resolveConfirm(val){
+  closeModal('modalConfirm');
+  if(_confirmResolver){_confirmResolver(val);_confirmResolver=null;}
+}
+
+function uiPrompt({title='Ingresar valor', message='', value='', okText='Guardar', placeholder=''}={}){
+  document.getElementById('promptTitle').textContent=title;
+  const msgEl=document.getElementById('promptMessage');
+  msgEl.textContent=message; msgEl.style.display=message?'block':'none';
+  const inp=document.getElementById('promptInput');
+  inp.value=value; inp.placeholder=placeholder;
+  document.getElementById('promptOkBtn').textContent=okText;
+  openModal('modalPrompt');
+  setTimeout(()=>{inp.focus();inp.select();},50);
+  return new Promise(res=>{_promptResolver=res;});
+}
+function resolvePrompt(ok){
+  const val=document.getElementById('promptInput').value;
+  closeModal('modalPrompt');
+  if(_promptResolver){_promptResolver(ok?val:null);_promptResolver=null;}
+}
+
 const pageMap={dashboard:'Dashboard',agenda:'Agenda',crm:'CRM',compose:'Redactar',inbox:'Bandeja',
   supervision:'Supervision',memory:'Memoria',context:'Contexto',estilo:'Estilo',
   settings:'SMTP / IMAP',campaigns:'Campanas'};
@@ -1306,7 +1442,7 @@ async function saveContact(){
   }catch(e){toast('Error: '+e.message,'error');}
   finally{btn.disabled=false;btn.textContent='Guardar';}
 }
-async function deleteContact(id){if(!confirm('Eliminar contacto?'))return;await apiFetch('/contacts/'+id,{method:'DELETE'});toast('Eliminado');loadContacts();loadStats();}
+async function deleteContact(id){if(!await uiConfirm({title:'Eliminar contacto',message:'El contacto y su historial de interacciones se eliminarán permanentemente.',okText:'Eliminar'}))return;await apiFetch('/contacts/'+id,{method:'DELETE'});toast('Eliminado');loadContacts();loadStats();}
 function composeToContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;document.getElementById('c-to').value=c.email;matchContact();updateToTag();go('compose');}
 
 // ── CRM (kanban por estados) ──────────────────────────────
@@ -1861,7 +1997,7 @@ let campGenState = {
 
 // ── Tab switcher ───────────────────────────
 function switchCampTab(tab){
-  const tabs = ['list','schedule'];
+  const tabs = ['list','schedule','templates'];
   tabs.forEach(t=>{
     const btn = document.getElementById('campTab-'+t);
     if(btn){
@@ -1874,6 +2010,7 @@ function switchCampTab(tab){
   document.getElementById('campaignFormView').style.display = 'none';
   document.getElementById('campaignApprovalView').style.display = 'none';
   document.getElementById('campaignScheduleView').style.display = 'none';
+  document.getElementById('campaignTemplatesView').style.display = 'none';
 
   if(tab === 'list'){
     document.getElementById('campaignListView').style.display = 'block';
@@ -1881,6 +2018,9 @@ function switchCampTab(tab){
   } else if(tab === 'schedule'){
     document.getElementById('campaignScheduleView').style.display = 'block';
     loadSchedule();
+  } else if(tab === 'templates'){
+    document.getElementById('campaignTemplatesView').style.display = 'block';
+    loadTemplates();
   }
 }
 
@@ -2077,7 +2217,7 @@ async function sendSingleDelayed(emailId){
   }
 }
 async function cancelScheduledEmail(emailId){
-  if(!confirm('¿Cancelar este envío programado? El email no se enviará.')) return;
+  if(!await uiConfirm({title:'Cancelar envío programado',message:'Este email no se enviará. La acción no se puede deshacer.',okText:'Cancelar envío'})) return;
   try{
     const r = await apiFetch(`/campaigns/schedule-email/${emailId}/cancel`, {method:'POST'});
     const d = await r.json();
@@ -2167,8 +2307,9 @@ function showCampaignList(){
   document.getElementById('campaignFormView').style.display='none';
   document.getElementById('campaignApprovalView').style.display='none';
   document.getElementById('campaignScheduleView').style.display='none';
+  document.getElementById('campaignTemplatesView').style.display='none';
   // Resync tab indicator
-  ['list','schedule'].forEach(t=>{
+  ['list','schedule','templates'].forEach(t=>{
     const btn=document.getElementById('campTab-'+t);
     if(btn){btn.style.borderBottomColor=t==='list'?'var(--green)':'transparent';btn.style.color=t==='list'?'var(--green)':'var(--text3)';}
   });
@@ -2180,6 +2321,7 @@ function showCampaignForm(){
   document.getElementById('campaignFormView').style.display='block';
   document.getElementById('campaignApprovalView').style.display='none';
   document.getElementById('campaignScheduleView').style.display='none';
+  document.getElementById('campaignTemplatesView').style.display='none';
   const today=new Date().toISOString().split('T')[0];
   document.getElementById('camp-start').value=today;
   const end=new Date();end.setDate(end.getDate()+14);
@@ -2608,12 +2750,182 @@ async function loadCampaigns(){
   }catch(e){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Error cargando campanas.</div>';}
 }
 
+// ── Plantillas pre-aprobadas ───────────────
+const SEND_MODE_LABELS={daily:'Diario',alternate:'Día por medio',mon_wed_fri:'Lun-Mié-Vie',tue_thu:'Mar-Jue'};
+
+async function loadTemplates(){
+  const el=document.getElementById('templateCards');
+  el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Cargando...</div>';
+  try{
+    const tmpls=await(await apiFetch('/campaigns/templates')).json();
+    if(!tmpls.length){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">No hay plantillas. Aprobá una campaña y guardala como plantilla.</div>';return;}
+    el.innerHTML=tmpls.map(t=>{
+      const cadence=`${SEND_MODE_LABELS[t.send_mode]||t.send_mode||''} · ${t.send_time||'09:00'}`;
+      const intent=(t.intent||'').replace(/</g,'&lt;');
+      return `
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="font-family:var(--serif);font-size:15px;color:var(--text);margin-bottom:4px">${(t.name||'').replace(/</g,'&lt;')}</div>
+            <div style="font-size:11px;color:var(--text3)">${t.total_emails||0} emails · ${cadence}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:4px">${intent.substring(0,90)}${intent.length>90?'...':''}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+            <button class="btn btn-green btn-sm" onclick="openUseTemplate(${t.id})">Usar →</button>
+            <button class="btn btn-red btn-sm" onclick="deleteTemplate(${t.id})" style="font-size:9px;padding:2px 8px">Eliminar</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Error cargando plantillas.</div>';}
+}
+
+async function deleteTemplate(tid){
+  const ok=await uiConfirm({title:'Eliminar plantilla',message:'Esta plantilla se eliminará permanentemente. Las campañas ya programadas a partir de ella no se ven afectadas.',okText:'Eliminar'});
+  if(!ok)return;
+  try{
+    await apiFetch('/campaigns/'+tid,{method:'DELETE'});
+    toast('Plantilla eliminada');
+    loadTemplates();
+  }catch(e){toast('Error eliminando','error');}
+}
+
+// ── Modal "Usar plantilla" ─────────────────
+let useTmplState={id:null,count:0,mode:'daily',contacts:new Set()};
+
+function nextValidStart(mode){
+  // Para cadencias con días fijos, arranca en el próximo día válido; si no, mañana.
+  const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+1);
+  const okDays={mon_wed_fri:[1,3,5],tue_thu:[2,4]}[mode];
+  if(okDays){let guard=0;while(!okDays.includes(d.getDay())&&guard<14){d.setDate(d.getDate()+1);guard++;}}
+  return d.toISOString().split('T')[0];
+}
+
+async function openUseTemplate(tid){
+  try{
+    const t=await(await apiFetch('/campaigns/'+tid)).json();
+    const count=(t.emails||[]).length;
+    useTmplState={id:tid,count,mode:t.send_mode||'daily',contacts:new Set()};
+    document.getElementById('useTmplSubtitle').textContent=`${(t.name||'').replace(/ \(plantilla\)$/,'')} · ${count} emails`;
+    document.getElementById('useTmplTime').value=t.send_time||'09:00';
+    document.getElementById('useTmplExtraEmails').value='';
+    document.getElementById('useTmplStart').value=nextValidStart(useTmplState.mode);
+    setUseTmplMode(useTmplState.mode);
+    // Lista de contactos (con búsqueda)
+    document.getElementById('useTmplSearch').value='';
+    renderUseTmplContacts();
+    renderUseTmplSelected();
+    updateUseTmplPreview();
+    openModal('modalUseTemplate');
+  }catch(e){toast('Error abriendo plantilla','error');}
+}
+
+function renderUseTmplContacts(){
+  const q=(document.getElementById('useTmplSearch').value||'').toLowerCase().trim();
+  const filtered=contacts.filter(c=>!q
+    || (c.name||'').toLowerCase().includes(q)
+    || (c.email||'').toLowerCase().includes(q)
+    || (c.company||'').toLowerCase().includes(q)
+    || (c.tags||'').toLowerCase().includes(q));
+  const el=document.getElementById('useTmplContactList');
+  if(!filtered.length){
+    el.innerHTML='<div style="font-size:10px;color:var(--text3);padding:4px">Sin resultados.</div>';
+    return;
+  }
+  el.innerHTML=filtered.map(c=>{
+    const sel=useTmplState.contacts.has(c.email);
+    const selStyle=sel?'background:rgba(126,200,80,.15);color:var(--green);border-color:var(--green)':'';
+    return `<button class="tag" data-email="${(c.email||'').replace(/"/g,'&quot;')}" style="cursor:pointer;padding:5px 10px;font-size:10px;${selStyle}" onclick="toggleUseTmplContact(this)" title="${(c.email||'').replace(/"/g,'&quot;')}">${(c.name||c.email||'').replace(/</g,'&lt;')}</button>`;
+  }).join('');
+}
+
+function toggleUseTmplContact(btn){
+  const email=btn.getAttribute('data-email');
+  if(!email)return;
+  if(useTmplState.contacts.has(email)){
+    useTmplState.contacts.delete(email);
+    btn.style.background='';btn.style.color='';btn.style.borderColor='';
+  }else{
+    useTmplState.contacts.add(email);
+    btn.style.background='rgba(126,200,80,.15)';btn.style.color='var(--green)';btn.style.borderColor='var(--green)';
+  }
+  renderUseTmplSelected();
+}
+
+function renderUseTmplSelected(){
+  const sel=[...useTmplState.contacts];
+  document.getElementById('useTmplSelectedTags').innerHTML=sel.map(e=>
+    `<span style="font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid var(--green-dim);color:var(--green)">${e.replace(/</g,'&lt;')}</span>`).join('');
+  const cnt=document.getElementById('useTmplSelCount');
+  if(cnt)cnt.textContent=sel.length?`${sel.length} seleccionado${sel.length>1?'s':''}`:'';
+}
+
+function setUseTmplMode(m){
+  useTmplState.mode=m;
+  ['daily','alternate','mon_wed_fri','tue_thu'].forEach(id=>{
+    const el=document.getElementById('utm-'+id);
+    if(el)el.classList.toggle('active',id===m);
+  });
+  updateUseTmplPreview();
+}
+
+function previewDatesCount(start,mode,count){
+  const dates=[]; if(!start||count<=0)return dates;
+  let cur=new Date(start+'T12:00:00'); const startD=new Date(start+'T12:00:00');
+  let guard=0; const maxGuard=count*14+366;
+  while(dates.length<count && guard<maxGuard){
+    const wd=cur.getDay(); let ok=false;
+    if(mode==='daily')ok=true;
+    else if(mode==='alternate')ok=(Math.round((cur-startD)/86400000)%2===0);
+    else if(mode==='mon_wed_fri')ok=[1,3,5].includes(wd);
+    else if(mode==='tue_thu')ok=[2,4].includes(wd);
+    else ok=true;
+    if(ok)dates.push(cur.toISOString().split('T')[0]);
+    cur.setDate(cur.getDate()+1); guard++;
+  }
+  return dates;
+}
+
+function updateUseTmplPreview(){
+  const start=document.getElementById('useTmplStart')?.value;
+  const el=document.getElementById('useTmplPreview'); if(!el)return;
+  if(!start){el.textContent='';return;}
+  const dates=previewDatesCount(start,useTmplState.mode,useTmplState.count);
+  if(!dates.length){el.textContent='';return;}
+  el.innerHTML=`<span style="color:var(--green);font-size:13px;font-weight:500">${dates.length}</span> <span style="color:var(--text2)">emails se agendarán</span> (${dates[0]} → ${dates[dates.length-1]})`;
+}
+
+async function scheduleFromTemplate(){
+  const start=document.getElementById('useTmplStart').value;
+  const time=document.getElementById('useTmplTime').value||'09:00';
+  const extra=document.getElementById('useTmplExtraEmails').value;
+  if(!start)return toast('Selecciona una fecha de inicio','error');
+  const all=[...useTmplState.contacts];
+  extra.split(/[\n,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>all.push(e));
+  if(!all.length)return toast('Agrega al menos un contacto','error');
+
+  const btn=document.getElementById('btnUseTmplSchedule');
+  btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Programando...';
+  try{
+    const r=await apiFetch('/campaigns/templates/'+useTmplState.id+'/use',{method:'POST',body:JSON.stringify({
+      contacts:all, start_date:start, send_time:time, send_mode:useTmplState.mode
+    })});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'Error');
+    closeModal('modalUseTemplate');
+    toast(`Campaña programada — ${d.total_emails} emails en la Agenda de Envío`,'success');
+    switchCampTab('schedule');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{btn.disabled=false;btn.innerHTML='Programar envío';}
+}
+
 async function showApprovalView(campId){
   currentCampaignId=campId;
   document.getElementById('campaignListView').style.display='none';
   document.getElementById('campaignFormView').style.display='none';
   document.getElementById('campaignApprovalView').style.display='block';
   document.getElementById('campaignScheduleView').style.display='none';
+  document.getElementById('campaignTemplatesView').style.display='none';
 
   const loadingEl=document.getElementById('approvalEmailList');
   loadingEl.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Cargando emails...</div>';
@@ -2627,8 +2939,11 @@ async function showApprovalView(campId){
     const total=emails.length;
     document.getElementById('approvalProgress').textContent=`${approved}/${total} aprobados`;
 
+    const allApproved=(approved===total&&total>0);
     const btnFinal=document.getElementById('btnFinalizeCamp');
-    btnFinal.style.display=(approved===total&&total>0)?'inline-flex':'none';
+    btnFinal.style.display=allApproved?'inline-flex':'none';
+    const btnTmpl=document.getElementById('btnSaveTemplate');
+    if(btnTmpl)btnTmpl.style.display=allApproved?'inline-flex':'none';
 
     // Attachments section
     const campaignAtts=camp.attachments||[];
@@ -2774,8 +3089,25 @@ async function finalizeCampaign(){
   finally{btn.disabled=false;btn.innerHTML='Confirmar campana ✓';}
 }
 
+async function saveAsTemplate(){
+  if(!currentCampaignId)return;
+  const defName=(document.getElementById('approvalCampName').textContent||'').trim();
+  const name=await uiPrompt({title:'Guardar como plantilla',message:'Nombre de la plantilla pre-aprobada:',value:defName,okText:'Guardar',placeholder:'Ej: Contacto inicial'});
+  if(name===null)return; // cancelado
+  if(!name.trim())return toast('Ingresá un nombre para la plantilla','error');
+  const btn=document.getElementById('btnSaveTemplate');
+  btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Guardando...';
+  try{
+    const r=await apiFetch('/campaigns/'+currentCampaignId+'/save-as-template',{method:'POST',body:JSON.stringify({name:name.trim()})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'Error');
+    toast('Plantilla guardada en Preaprobadas','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{btn.disabled=false;btn.innerHTML='Guardar como plantilla';}
+}
+
 async function deleteCampaign(campId){
-  if(!confirm('Eliminar esta campana permanentemente?'))return;
+  if(!await uiConfirm({title:'Eliminar campaña',message:'La campaña y todos sus emails se eliminarán permanentemente.',okText:'Eliminar'}))return;
   try{
     await apiFetch('/campaigns/'+campId,{method:'DELETE'});
     toast('Campana eliminada');
