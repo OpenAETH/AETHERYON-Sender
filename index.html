@@ -454,6 +454,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
           <span class="field-key">Instruccion</span>
           <textarea id="c-prompt" rows="5" placeholder="Describe el email. El agente incorporara contexto del contacto, historial de enviados, entidad y mision actual."></textarea>
         </div>
+        <div class="field" style="border-bottom:1px solid var(--border)">
+          <span class="field-key">Adjuntos</span>
+          <div style="flex:1">
+            <input type="file" id="c-attachments" multiple style="display:none"
+              accept=".pdf,image/*,.txt,.csv,.zip,.rar,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+              onchange="uploadComposeFiles(this.files)">
+            <button onclick="document.getElementById('c-attachments').click()"
+              style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--text3);font-family:var(--mono);font-size:10px;transition:border-color .15s,color .15s"
+              onmouseover="this.style.color='var(--green)';this.style.borderColor='var(--green)'"
+              onmouseout="this.style.color='var(--text3)';this.style.borderColor='var(--border)'">
+              + Elegir archivos
+            </button>
+            <div id="composeAttachmentList" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
+          </div>
+        </div>
         <div class="panel-footer">
           <span style="font-size:10px;color:var(--text3)"><span id="promptCount">0</span> chars</span>
           <button class="btn btn-green" id="btnCompose" onclick="composeEmail()">
@@ -893,6 +908,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <div class="info">Para: <b id="m-to"></b></div>
     <div class="info">Asunto: <b id="m-subject"></b></div>
     <div class="info">Via: <b id="m-via" style="color:var(--green)"></b></div>
+    <div class="info" id="m-attachments" style="display:none"></div>
     <div class="warn">El email se enviara formateado en HTML con los estilos configurados. Esta accion no se puede deshacer.</div>
     <div class="modal-btns">
       <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal('modalSend')">Cancelar</button>
@@ -1200,6 +1216,7 @@ let multiSelectedContacts = new Set();
 let campMode='daily', campTone='informative', campSelectedContacts=new Set();
 let currentCampaignId=null;
 let SESSION_TOKEN = localStorage.getItem('session_token') || '';
+let _pendingAttachments = [];
 
 // AUTH
 async function doLogin(){
@@ -1684,7 +1701,7 @@ async function composeEmail(){
   finally{btn.disabled=false;btn.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar con Groq';}
 }
 
-function clearCompose(){document.getElementById('composedBody').innerHTML='<span style="color:var(--text3);font-style:normal;font-family:var(--mono);font-size:11px">El email generado aparecera aqui.</span>';}
+function clearCompose(){document.getElementById('composedBody').innerHTML='<span style="color:var(--text3);font-style:normal;font-family:var(--mono);font-size:11px">El email generado aparecera aqui.</span>';_pendingAttachments=[];renderComposeAttachments();}
 
 async function openLoadEmailModal(){
   openModal('modalLoadEmail');
@@ -1746,6 +1763,11 @@ async function openSendConfirm(){
   try{const d=await(await apiFetch('/config')).json();document.getElementById('m-via').textContent=(d.sender_name||d.sender_email||'');}catch(e){}
   document.getElementById('m-to').textContent=to;
   document.getElementById('m-subject').textContent=subject;
+  const attEl=document.getElementById('m-attachments');
+  if(_pendingAttachments.length){
+    attEl.style.display='block';
+    attEl.innerHTML='Adjuntos: <b>'+_pendingAttachments.map(a=>a.filename).join(', ')+'</b>';
+  }else{attEl.style.display='none';}
   openModal('modalSend');
 }
 
@@ -1758,7 +1780,8 @@ async function confirmSend(){
       recipients:allRecipients,
       subject:document.getElementById('c-subject').value.trim(),
       body:document.getElementById('composedBody').textContent.trim(),
-      intent:currentIntent
+      intent:currentIntent,
+      attachment_ids:_pendingAttachments.map(a=>a.id)
     })});
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||'Error');
@@ -1766,7 +1789,7 @@ async function confirmSend(){
     if(failed.length&&d.sent===0)throw new Error(failed[0].error||'Error de envio');
     closeModal('modalSend');
     toast(d.sent>1?`${d.sent} emails enviados exitosamente`:'Email enviado exitosamente','success');
-    clearCompose();
+    _pendingAttachments=[];renderComposeAttachments();
     document.getElementById('c-to').value='';document.getElementById('c-subject').value='';
     document.getElementById('c-prompt').value='';document.getElementById('promptCount').textContent='0';
     document.getElementById('contactHint').style.display='none';
@@ -1777,6 +1800,40 @@ async function confirmSend(){
     loadStats();
   }catch(e){toast('Error: '+e.message,'error');}
   finally{btn.disabled=false;btn.textContent='Enviar ahora';}
+}
+
+async function uploadComposeFiles(files){
+  if(!files.length)return;
+  const formData=new FormData();
+  for(const f of files)formData.append('files',f);
+  try{
+    const r=await apiFetch('/upload',{method:'POST',body:formData});
+    if(!r.ok){let m='Error upload';try{m=(await r.json()).detail||m;}catch(_){}throw new Error(m);}
+    const d=await r.json();
+    for(const att of d.uploaded)_pendingAttachments.push(att);
+    renderComposeAttachments();
+    toast(`${d.uploaded.length} archivo(s) adjuntado(s)`,'success');
+  }catch(e){toast('Error al subir archivo: '+e.message,'error');}
+  document.getElementById('c-attachments').value='';
+}
+
+function renderComposeAttachments(){
+  const el=document.getElementById('composeAttachmentList');
+  if(!_pendingAttachments.length){el.innerHTML='';el.style.display='none';return;}
+  el.style.display='flex';
+  el.innerHTML=_pendingAttachments.map((a,i)=>`
+    <span style="display:inline-flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:10px;color:var(--text2);white-space:nowrap">
+      ${a.filename}
+      <span style="font-size:9px;color:var(--text3)">${a.size>1048576?(a.size/1048576).toFixed(1)+'MB':(a.size>1024?(a.size/1024).toFixed(0)+'KB':a.size+'B')}</span>
+      <span onclick="removeComposeAttachment(${i})" style="cursor:pointer;color:var(--text3);margin-left:2px"
+        onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">✕</span>
+    </span>
+  `).join('');
+}
+
+function removeComposeAttachment(idx){
+  _pendingAttachments.splice(idx,1);
+  renderComposeAttachments();
 }
 
 async function loadInbox(){
@@ -2887,12 +2944,29 @@ async function showApprovalView(campId){
     const btnTmpl=document.getElementById('btnSaveTemplate');
     if(btnTmpl)btnTmpl.style.display=allApproved?'inline-flex':'none';
 
+    // Attachments section
+    const campaignAtts=camp.attachments||[];
+    let attHtml='';
+    if(campaignAtts.length){
+      attHtml='<div style="padding:8px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:10px">'+
+        '<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Adjuntos de la campana</div>'+
+        '<div style="display:flex;flex-wrap:wrap;gap:4px">'+
+        campaignAtts.map(a=>'<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:10px;color:var(--text2)">'+
+          a.filename+' <span style="font-size:9px;color:var(--text3)">'+formatFileSize(a.size)+'</span></span>').join('')+
+        '</div></div>';
+    }
+    attHtml+='<div style="padding:8px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+      '<span style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Agregar adjuntos</span>'+
+      '<input type="file" id="camp-attachments" multiple style="display:none" accept=".pdf,image/*,.txt,.csv,.zip,.rar,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onchange="uploadCampAttachments('+campId+',this.files)">'+
+      '<button onclick="document.getElementById(\'camp-attachments\').click()" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;color:var(--text3);font-family:var(--mono);font-size:10px">+ Elegir archivos</button>'+
+      '<span id="campAttStatus" style="font-size:10px;color:var(--text3)"></span></div>';
+
     if(!emails.length){
-      loadingEl.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">No hay emails generados aun.</div>';
+      loadingEl.innerHTML=attHtml+'<div style="color:var(--text3);font-size:11px;padding:1rem">No hay emails generados aun.</div>';
       return;
     }
 
-    loadingEl.innerHTML=emails.map((em)=>{
+    loadingEl.innerHTML=attHtml+emails.map((em)=>{
       const isApproved=em.status==='approved';
       const isRejected=em.status==='rejected';
       const isEmpty=!em.subject&&!em.body;
@@ -3038,6 +3112,30 @@ async function deleteCampaign(campId){
     toast('Campana eliminada');
     loadCampaigns();
   }catch(e){toast('Error eliminando','error');}
+}
+
+async function uploadCampAttachments(campId,files){
+  if(!files.length)return;
+  const formData=new FormData();
+  for(const f of files)formData.append('files',f);
+  const statusEl=document.getElementById('campAttStatus');
+  try{
+    statusEl.textContent='Subiendo...';
+    const r=await apiFetch('/upload',{method:'POST',body:formData});
+    if(!r.ok){let m='Error';try{m=(await r.json()).detail||m;}catch(_){}throw new Error(m);}
+    const d=await r.json();
+    const ids=d.uploaded.map(a=>a.id);
+    const r2=await apiFetch('/campaigns/'+campId+'/attachments',{method:'POST',body:JSON.stringify({attachment_ids:ids})});
+    if(!r2.ok)throw new Error('Error vinculando adjuntos');
+    toast(d.uploaded.length+' archivo(s) adjuntados a la campana','success');
+    showApprovalView(campId);
+  }catch(e){toast('Error: '+e.message,'error');statusEl.textContent='Error';}
+}
+
+function formatFileSize(bytes){
+  if(bytes>=1048576)return (bytes/1048576).toFixed(1)+'MB';
+  if(bytes>=1024)return (bytes/1024).toFixed(0)+'KB';
+  return bytes+'B';
 }
 
 ['primary','link','bg','text','header-bg','header-fc'].forEach(id=>syncColor('st-'+id,'st-'+id+'-hex'));

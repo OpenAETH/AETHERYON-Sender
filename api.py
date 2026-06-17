@@ -4,7 +4,7 @@ Auth: JWT session  |  IMAP sync (delete-aware)  |  Envio multiple
 Envio: Resend API (resend.com)
 Database: SQLAlchemy + IPv4 forced connection for Supabase
 """
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,9 +18,10 @@ import psycopg2
 import psycopg2.extras
 from email.header import decode_header
 from datetime import datetime, timedelta
-import uvicorn, logging, re, secrets, hashlib, hmac, json, time
+import uvicorn, logging, re, secrets, hashlib, hmac, json, time, uuid, base64
 import asyncio
 import resend
+from supabase import create_client, Client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -39,6 +40,10 @@ def cfg():
         "imap_port":      int(os.getenv("IMAP_PORT", "993")),
         "imap_user":      os.getenv("IMAP_USER", ""),
         "imap_pass":      os.getenv("IMAP_PASS", ""),
+        # Supabase Storage
+        "supabase_url":        os.getenv("SUPABASE_URL", ""),
+        "supabase_service_key": os.getenv("SUPABASE_SERVICE_KEY", ""),
+        "storage_bucket":      os.getenv("STORAGE_BUCKET", "email_attachments"),
     }
 
 APP_USER     = os.getenv("APP_USER", "admin")
@@ -146,6 +151,9 @@ def create_db_engine():
 engine = None
 SessionLocal = None
 
+# Cliente global de Supabase Storage
+supabase_client: Client = None
+
 def init_db():
     """Inicializa la conexión a la base de datos (no crea tablas, asume que ya existen)"""
     global engine, SessionLocal
@@ -170,6 +178,20 @@ def get_db():
     if SessionLocal is None:
         raise RuntimeError("Base de datos no inicializada")
     return SessionLocal()
+
+def init_supabase():
+    global supabase_client
+    c = cfg()
+    if c["supabase_url"] and c["supabase_service_key"]:
+        supabase_client = create_client(c["supabase_url"], c["supabase_service_key"])
+        logger.info("Supabase Storage inicializado correctamente")
+    else:
+        logger.warning("SUPABASE_URL o SUPABASE_SERVICE_KEY no configuradas — adjuntos no disponibles")
+
+def get_supabase():
+    if supabase_client is None:
+        raise RuntimeError("Supabase Storage no inicializado — revisa SUPABASE_URL y SUPABASE_SERVICE_KEY")
+    return supabase_client
 
 def dict_from_row(row):
     """Convierte una fila de SQLAlchemy a diccionario. Retorna None si row es None."""
@@ -481,7 +503,7 @@ def build_html_email(body_text: str, style_cfg: dict = None) -> str:
 # ─────────────────────────────────────────────
 # RESEND SEND
 # ─────────────────────────────────────────────
-def send_resend(to: str, subject: str, body_plain: str, body_html: str, reply_to_mid: str = None):
+def send_resend(to: str, subject: str, body_plain: str, body_html: str, reply_to_mid: str = None, attachment_ids: list = None):
     c = cfg()
     if not c["resend_api_key"]:
         raise ValueError("RESEND_API_KEY no configurada en las variables de entorno de Render")
@@ -501,6 +523,28 @@ def send_resend(to: str, subject: str, body_plain: str, body_html: str, reply_to
     }
     if reply_to_mid:
         params["headers"] = {"In-Reply-To": reply_to_mid, "References": reply_to_mid}
+
+    # Attachments via Supabase Storage signed URLs
+    if attachment_ids:
+        db = get_db()
+        try:
+            rows = rows_to_list(db.execute(text(
+                "SELECT * FROM attachments WHERE id = ANY(:ids)"
+            ), {"ids": attachment_ids}).fetchall())
+        finally:
+            db.close()
+        if rows:
+            supabase = get_supabase()
+            atts = []
+            for row in rows:
+                signed = supabase.storage.from_(c["storage_bucket"]).create_signed_url(
+                    row["storage_path"], 1800
+                )
+                atts.append({
+                    "filename": row["filename"],
+                    "path": signed["signedURL"],
+                })
+            params["attachments"] = atts
 
     response = resend.Emails.send(params)
     email_id = response.id if hasattr(response, "id") else str(response)
@@ -674,13 +718,19 @@ def process_scheduled_emails(now_dt: datetime = None) -> dict:
                 results["skipped"] += 1
                 continue
 
+            # Cargar attachment_ids de la campaña
+            camp_atts = rows_to_list(db.execute(text(
+                "SELECT attachment_id FROM campaign_attachments WHERE campaign_id=:cid"
+            ), {"cid": em["campaign_id"]}).fetchall())
+            att_ids = [a["attachment_id"] for a in camp_atts]
+
             body_html = build_html_email(em["body"], style_cfg)
             ok_count = 0
             fail_count = 0
 
             for to in contact_emails:
                 try:
-                    send_resend(to, em["subject"], em["body"], body_html)
+                    send_resend(to, em["subject"], em["body"], body_html, attachment_ids=att_ids)
                     ok_count += 1
                     results["sent"] += 1
                     results["details"].append({
@@ -760,6 +810,7 @@ async def lifespan(app):
     task = None
     try:
         init_db()
+        init_supabase()
         logger.info("Aplicación iniciada correctamente")
         # Al arrancar: solo loguear cuántos emails están demorados, NO enviarlos.
         # El usuario decide desde la Agenda de Envío.
@@ -837,7 +888,7 @@ if os.path.exists(static_dir) and os.listdir(static_dir):
 API_PATHS = ["auth","contacts","inbox","send-email","settings","context",
              "preview-email","logs","memory","supervision","stats",
              "smtp-test","config","api","campaigns","ai",
-             "schedule","process-scheduled"]
+             "schedule","process-scheduled","upload","attachments"]
 
 @app.post("/auth/login")
 async def login(request: Request):
@@ -1185,22 +1236,27 @@ async def create_interaction(cid: int, request: Request, _: str = Depends(requir
 # ─────────────────────────────────────────────
 
 
-def _log_sent(db, to, subject, body, body_html, intent, campaign_id):
+def _log_sent(db, to, subject, body, body_html, intent, campaign_id, attachment_ids=None):
     result = db.execute(text("SELECT name FROM contacts WHERE email=:email"), {"email": to})
     row = dict_from_row(result.fetchone())
-    # FIX: usar dict_from_row para acceso por nombre de columna
     cname = row["name"] if row else to.split("@")[0]
-    db.execute(
+    log_result = db.execute(
         text("""INSERT INTO email_logs (direction,contact_email,contact_name,subject,body,body_html,intent,status,sent_at,campaign_id)
-                VALUES (:direction,:contact_email,:contact_name,:subject,:body,:body_html,:intent,:status,NOW(),:campaign_id)"""),
+                VALUES (:direction,:contact_email,:contact_name,:subject,:body,:body_html,:intent,:status,NOW(),:campaign_id)
+                RETURNING id"""),
         {"direction": "out", "contact_email": to, "contact_name": cname, "subject": subject,
          "body": body, "body_html": body_html, "intent": intent, "status": "sent", "campaign_id": campaign_id}
     )
+    email_log_id = log_result.fetchone()[0]
     db.execute(
         text("INSERT INTO memory (type,entity,content,importance) VALUES (:type,:entity,:content,:importance)"),
         {"type": "email_sent", "entity": to,
          "content": f"Email enviado a {cname}: {subject}", "importance": 2}
     )
+    if attachment_ids:
+        for aid in attachment_ids:
+            db.execute(text("INSERT INTO email_attachments (attachment_id, email_log_id) VALUES (:aid, :eid)"),
+                       {"aid": aid, "eid": email_log_id})
 
 @app.post("/send-email")
 async def send_email(request: Request, _: str = Depends(require_auth)):
@@ -1223,6 +1279,8 @@ async def send_email(request: Request, _: str = Depends(require_auth)):
     if not c["sender_email"]:
         raise HTTPException(500, "SENDER_EMAIL no configurada")
 
+    attachment_ids = data.get("attachment_ids", [])
+
     style_cfg = _build_style()
     body_html = build_html_email(body, style_cfg)
 
@@ -1231,9 +1289,9 @@ async def send_email(request: Request, _: str = Depends(require_auth)):
     try:
         for to in recipients:
             try:
-                resp = send_resend(to, subject, body, body_html, reply_to)
+                resp = send_resend(to, subject, body, body_html, reply_to, attachment_ids)
                 email_id = resp.id if hasattr(resp, "id") else "?"
-                _log_sent(db, to, subject, body, body_html, intent, campaign_id)
+                _log_sent(db, to, subject, body, body_html, intent, campaign_id, attachment_ids)
                 results.append({"to": to, "ok": True, "resend_id": email_id})
                 logger.info(f"Email enviado via Resend a {to} | resend_id={email_id}")
             except resend.exceptions.ResendError as e:
@@ -1251,6 +1309,93 @@ async def send_email(request: Request, _: str = Depends(require_auth)):
     if not sent_ok and sent_err:
         raise HTTPException(500, sent_err[0]["error"])
     return {"success": True, "sent": len(sent_ok), "failed": len(sent_err), "results": results}
+
+# ─────────────────────────────────────────────
+# ROUTES — ATTACHMENTS (upload / list / delete)
+# ─────────────────────────────────────────────
+
+@app.post("/upload")
+async def upload_files(files: list[UploadFile] = File(...), _: str = Depends(require_auth)):
+    c = cfg()
+    if not c["supabase_url"] or not c["supabase_service_key"]:
+        raise HTTPException(500, "Supabase Storage no configurado — revisa SUPABASE_URL y SUPABASE_SERVICE_KEY")
+
+    supabase = get_supabase()
+    uploaded = []
+    db = get_db()
+    try:
+        for file in files:
+            contents = await file.read()
+            size = len(contents)
+
+            if size > 50 * 1024 * 1024:
+                raise HTTPException(413, f"Archivo {file.filename} excede 50 MB")
+
+            ext = file.filename.rsplit('.', 1)[-1] if '.' in file.filename else ''
+            storage_filename = f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
+            storage_path = storage_filename
+
+            try:
+                supabase.storage.from_(c["storage_bucket"]).upload(
+                    path=storage_path,
+                    file=contents,
+                    file_options={"content-type": file.content_type or "application/octet-stream"}
+                )
+            except Exception as e:
+                raise HTTPException(502, f"Error subiendo {file.filename} a Storage: {e}")
+
+            result = db.execute(text("""
+                INSERT INTO attachments (filename, content_type, size, storage_path)
+                VALUES (:fn, :ct, :sz, :sp) RETURNING id
+            """), {"fn": file.filename, "ct": file.content_type or "application/octet-stream",
+                   "sz": size, "sp": storage_path})
+            att_id = result.fetchone()[0]
+            uploaded.append({"id": att_id, "filename": file.filename, "size": size, "content_type": file.content_type})
+
+        db.commit()
+        return {"uploaded": uploaded}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Error guardando metadata: {e}")
+    finally:
+        db.close()
+
+
+@app.get("/attachments")
+def list_attachments(_: str = Depends(require_auth)):
+    db = get_db()
+    try:
+        rows = rows_to_list(db.execute(text(
+            "SELECT id, filename, content_type, size, created_at FROM attachments ORDER BY created_at DESC"
+        )).fetchall())
+        return rows
+    finally:
+        db.close()
+
+
+@app.delete("/attachments/{att_id}")
+def delete_attachment(att_id: int, _: str = Depends(require_auth)):
+    c = cfg()
+    db = get_db()
+    try:
+        row = dict_from_row(db.execute(text("SELECT * FROM attachments WHERE id=:id"), {"id": att_id}).fetchone())
+        if not row:
+            raise HTTPException(404, "Attachment no encontrado")
+
+        supabase = get_supabase()
+        try:
+            supabase.storage.from_(c["storage_bucket"]).remove([row["storage_path"]])
+        except Exception as e:
+            logger.warning(f"Error eliminando archivo de Storage: {e}")
+
+        db.execute(text("DELETE FROM attachments WHERE id=:id"), {"id": att_id})
+        db.commit()
+        return {"success": True}
+    finally:
+        db.close()
+
 
 @app.get("/smtp-test")
 async def smtp_test(_: str = Depends(require_auth)):
@@ -1732,11 +1877,17 @@ async def api_process_scheduled(request: Request, _: str = Depends(require_auth)
                 ), {"cid": em["campaign_id"]}).fetchall())
                 contact_emails = [r["email"] for r in contacts_rows]
 
+                # Cargar attachment_ids de la campaña
+                camp_atts = rows_to_list(db.execute(text(
+                    "SELECT attachment_id FROM campaign_attachments WHERE campaign_id=:cid"
+                ), {"cid": em["campaign_id"]}).fetchall())
+                att_ids = [a["attachment_id"] for a in camp_atts]
+
                 body_html = build_html_email(em["body"], style_cfg)
                 ok_count = 0
                 for to in contact_emails:
                     try:
-                        send_resend(to, em["subject"], em["body"], body_html)
+                        send_resend(to, em["subject"], em["body"], body_html, attachment_ids=att_ids)
                         ok_count += 1
                         results["sent"] += 1
                         results["details"].append({"id": eid, "to": to, "ok": True})
@@ -2021,8 +2172,15 @@ def get_campaign(cid: int, _: str = Depends(require_auth)):
             "SELECT * FROM campaign_emails WHERE campaign_id=:id ORDER BY day_number"), {"id": cid}).fetchall())
         contacts = rows_to_list(db.execute(text(
             "SELECT * FROM campaign_contacts WHERE campaign_id=:id"), {"id": cid}).fetchall())
+        attachments = rows_to_list(db.execute(text("""
+            SELECT a.id, a.filename, a.content_type, a.size, a.created_at
+            FROM attachments a
+            JOIN campaign_attachments ca ON ca.attachment_id = a.id
+            WHERE ca.campaign_id = :cid
+        """), {"cid": cid}).fetchall())
         camp["emails"]   = emails
         camp["contacts"] = contacts
+        camp["attachments"] = attachments
         return camp
     finally:
         db.close()
@@ -2034,6 +2192,61 @@ def delete_campaign(cid: int, _: str = Depends(require_auth)):
         db.execute(text("DELETE FROM campaign_emails   WHERE campaign_id=:id"), {"id": cid})
         db.execute(text("DELETE FROM campaign_contacts WHERE campaign_id=:id"), {"id": cid})
         db.execute(text("DELETE FROM campaigns WHERE id=:id"), {"id": cid})
+        db.commit()
+        return {"success": True}
+    finally:
+        db.close()
+
+
+# ─────────────────────────────────────────────
+# ROUTES — CAMPAIGN ATTACHMENTS
+# ─────────────────────────────────────────────
+
+@app.get("/campaigns/{cid}/attachments")
+def list_campaign_attachments(cid: int, _: str = Depends(require_auth)):
+    db = get_db()
+    try:
+        rows = rows_to_list(db.execute(text("""
+            SELECT a.id, a.filename, a.content_type, a.size, a.created_at
+            FROM attachments a
+            JOIN campaign_attachments ca ON ca.attachment_id = a.id
+            WHERE ca.campaign_id = :cid
+            ORDER BY a.created_at DESC
+        """), {"cid": cid}).fetchall())
+        return rows
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/{cid}/attachments")
+async def add_campaign_attachments(cid: int, request: Request, _: str = Depends(require_auth)):
+    data = await request.json()
+    attachment_ids = data.get("attachment_ids", [])
+    if not attachment_ids:
+        raise HTTPException(400, "Se requiere al menos un attachment_id")
+
+    db = get_db()
+    try:
+        for aid in attachment_ids:
+            db.execute(text(
+                "INSERT INTO campaign_attachments (campaign_id, attachment_id) VALUES (:cid, :aid) ON CONFLICT DO NOTHING"
+            ), {"cid": cid, "aid": aid})
+        db.commit()
+        return {"success": True, "added": len(attachment_ids)}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
+
+@app.delete("/campaigns/{cid}/attachments/{att_id}")
+def remove_campaign_attachment(cid: int, att_id: int, _: str = Depends(require_auth)):
+    db = get_db()
+    try:
+        db.execute(text(
+            "DELETE FROM campaign_attachments WHERE campaign_id=:cid AND attachment_id=:aid"
+        ), {"cid": cid, "aid": att_id})
         db.commit()
         return {"success": True}
     finally:
@@ -2552,6 +2765,12 @@ async def send_campaign_now(cid: int, _: str = Depends(require_auth)):
         if not contact_emails:
             raise HTTPException(400, "No hay contactos en la campaña")
 
+        # Cargar attachment_ids de la campaña
+        camp_atts = rows_to_list(db.execute(text(
+            "SELECT attachment_id FROM campaign_attachments WHERE campaign_id=:cid"
+        ), {"cid": cid}).fetchall())
+        att_ids = [a["attachment_id"] for a in camp_atts]
+
         c = cfg()
         style_cfg = _build_style()
         results = []
@@ -2562,7 +2781,7 @@ async def send_campaign_now(cid: int, _: str = Depends(require_auth)):
             email_ok = False
             for to in contact_emails:
                 try:
-                    send_resend(to, em["subject"], em["body"], body_html)
+                    send_resend(to, em["subject"], em["body"], body_html, attachment_ids=att_ids)
                     results.append({"email_day": em["day_number"], "to": to, "ok": True})
                     email_ok = True
                 except Exception as e:
