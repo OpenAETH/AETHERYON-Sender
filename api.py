@@ -12,6 +12,8 @@ from contextlib import asynccontextmanager
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, scoped_session
 import os, imaplib, email as email_lib
+from dotenv import load_dotenv
+load_dotenv()
 import re as _re
 import socket as _socket
 import psycopg2
