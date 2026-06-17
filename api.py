@@ -179,6 +179,8 @@ def get_db():
 
 # ─────────────────────────────────────────────
 # SUPABASE STORAGE — helpers REST con httpx
+# Usa la service_role key (JWT, formato eyJ...) — NO la publishable key
+# ni la nueva Secret Key (sb_secret_), que no funcionan con Storage.
 # ─────────────────────────────────────────────
 
 def _storage_cfg():
@@ -194,7 +196,9 @@ def _storage_headers():
     return {"Authorization": f"Bearer {c['supabase_service_key']}"}
 
 def _storage_upload(bucket: str, path: str, file_bytes: bytes, content_type: str):
-    """Sube un archivo a Supabase Storage vía REST. Retorna True si OK."""
+    """Sube un archivo a Supabase Storage vía REST.
+    La clave debe ser la service_role (JWT), no publishable ni sb_secret_."""
+
     c = _storage_cfg()
     if not c:
         raise RuntimeError("Supabase Storage no configurado")
