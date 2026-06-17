@@ -205,7 +205,9 @@ def _storage_upload(bucket: str, path: str, file_bytes: bytes, content_type: str
     r = httpx.post(url, content=file_bytes, headers=headers, timeout=30)
     if r.status_code == 403:
         raise RuntimeError("Credenciales de Supabase Storage inválidas — revisa SUPABASE_SERVICE_KEY")
-    r.raise_for_status()
+    if not r.is_success:
+        body = r.text[:500]
+        raise RuntimeError(f"Supabase Storage respondio {r.status_code}: {body}")
     return True
 
 def _storage_signed_url(bucket: str, path: str, expires_in: int = 1800) -> str:
