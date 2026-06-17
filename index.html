@@ -1176,7 +1176,8 @@ async function checkAuth(){
 }
 
 async function apiFetch(path,opts={}){
-  const headers={'Content-Type':'application/json',...(opts.headers||{})};
+  const headers={...(opts.headers||{})};
+  if(!(opts.body instanceof FormData))headers['Content-Type']='application/json';
   if(SESSION_TOKEN)headers['X-Session-Token']=SESSION_TOKEN;
   const r=await fetch(API+path,{...opts,headers,credentials:'include'});
   if(r.status===401){doLogout();throw new Error('Sesion expirada');}
