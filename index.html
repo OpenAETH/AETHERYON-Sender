@@ -1809,7 +1809,13 @@ async function uploadComposeFiles(files){
   for(const f of files)formData.append('files',f);
   try{
     const r=await apiFetch('/upload',{method:'POST',body:formData});
-    if(!r.ok){let m='Error upload';try{m=(await r.json()).detail||m;}catch(_){}throw new Error(m);}
+    if(!r.ok){
+      let m='Error del servidor';
+      try{const j=await r.json();m=j.detail||JSON.stringify(j);}catch(_){
+        try{m=await r.text();}catch(__){}
+      }
+      throw new Error(m);
+    }
     const d=await r.json();
     for(const att of d.uploaded)_pendingAttachments.push(att);
     renderComposeAttachments();
