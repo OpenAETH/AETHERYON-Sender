@@ -89,6 +89,10 @@ Drag & drop, avance/retroceso por botón, badges de campañas activas, archivado
 Cuerpo en Markdown → HTML con template personalizable. Destinatario único o múltiples.  
 `POST /send-email`
 
+### 📎 Adjuntos (Supabase Storage)
+Los archivos se suben una vez a Supabase Storage (`POST /upload`) y quedan referenciados por `attachment_id`. Al enviar, el backend **descarga el archivo de Storage y lo adjunta a Resend como `content` base64** — los reenvíos reutilizan el mismo objeto sin volver a subirlo. Límite: 50 MB por archivo al subir, 40 MB por email (límite de Resend tras base64). Disponible tanto en envío individual como en campañas.  
+`POST /upload` · `GET /attachments` · `DELETE /attachments/{id}` · `POST /campaigns/{id}/attachments`
+
 ### 📬 Bandeja de entrada (IMAP)
 Sync bidireccional: agrega mensajes nuevos, elimina de DB los borrados del servidor, preserva flags.  
 `GET /inbox?refresh=true`
@@ -151,6 +155,16 @@ Colores, fuentes, firma HTML. Vista previa en vivo. Persistido en DB (`settings`
 |--------|------|-------------|
 | POST | `/send-email` | Envío individual o múltiple via Resend |
 | POST | `/preview-email` | Renderiza HTML del email con estilos actuales |
+</details>
+
+<details>
+<summary><strong>📎 Adjuntos</strong> (3 endpoints)</summary>
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| POST | `/upload` | Sube archivos a Supabase Storage, devuelve `attachment_id` |
+| GET | `/attachments` | Lista adjuntos disponibles |
+| DELETE | `/attachments/{id}` | Elimina adjunto (Storage + metadata) |
 </details>
 
 <details>
@@ -235,6 +249,9 @@ Colores, fuentes, firma HTML. Vista previa en vivo. Persistido en DB (`settings`
 | `campaigns` | Campañas de email marketing |
 | `campaign_emails` | Emails individuales de cada campaña |
 | `campaign_contacts` | Contactos asignados a cada campaña |
+| `attachments` | Metadata de archivos subidos a Supabase Storage (`storage_path`) |
+| `campaign_attachments` | Vínculo N:N entre campañas y adjuntos |
+| `email_attachments` | Auditoría: qué adjunto se envió con qué email |
 
 ---
 
@@ -245,6 +262,9 @@ Colores, fuentes, firma HTML. Vista previa en vivo. Persistido en DB (`settings`
 | `DATABASE_URL` | ✅ | Connection string de Supabase |
 | `RESEND_API_KEY` | ✅ | API key de Resend |
 | `GROQ_API_KEY` | ✅ | API key de Groq |
+| `SUPABASE_URL` | ❌ (req. para adjuntos) | URL del proyecto Supabase |
+| `SUPABASE_SERVICE_KEY` | ❌ (req. para adjuntos) | **service_role JWT** (`eyJ...`) — NO publishable ni `sb_secret_` |
+| `STORAGE_BUCKET` | ❌ | Bucket de Storage (default: `email_attachments`) |
 | `APP_USER` | ✅ | Usuario del login |
 | `APP_PASSWORD` | ✅ | Contraseña del login |
 | `SECRET_KEY` | ⚠️ (auto en Render) | Firma de tokens de sesión |

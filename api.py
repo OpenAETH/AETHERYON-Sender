@@ -230,8 +230,30 @@ def _storage_signed_url(bucket: str, path: str, expires_in: int = 1800) -> str:
     signed = data.get("signedURL") or data.get("signedUrl", "")
     if not signed:
         raise RuntimeError(f"Respuesta inesperada de Storage: {data}")
+    if signed.startswith("http"):
+        return signed
+    # Supabase devuelve signedURL como ruta relativa a la raíz de Storage
+    # (p. ej. "/object/sign/...?token=..."); hay que anteponer el host + el
+    # prefijo "/storage/v1" para obtener una URL descargable.
     base = c["supabase_url"].rstrip("/")
-    return f"{base}{signed}" if signed.startswith("/") else signed
+    path_part = signed if signed.startswith("/") else f"/{signed}"
+    if not path_part.startswith("/storage/v1"):
+        path_part = f"/storage/v1{path_part}"
+    return f"{base}{path_part}"
+
+def _storage_download(bucket: str, path: str) -> bytes:
+    """Descarga los bytes de un archivo de Supabase Storage vía REST."""
+    c = _storage_cfg()
+    if not c:
+        raise RuntimeError("Supabase Storage no configurado")
+    url = f"{c['supabase_url']}/storage/v1/object/{bucket}/{path}"
+    headers = _storage_headers()
+    r = httpx.get(url, headers=headers, timeout=30)
+    if r.status_code == 403:
+        raise RuntimeError("Credenciales de Supabase Storage inválidas — revisa SUPABASE_SERVICE_KEY")
+    if not r.is_success:
+        raise RuntimeError(f"Supabase Storage respondio {r.status_code}: {r.text[:300]}")
+    return r.content
 
 def _storage_delete(bucket: str, paths: list):
     """Elimina archivos de Supabase Storage."""
@@ -577,7 +599,9 @@ def send_resend(to: str, subject: str, body_plain: str, body_html: str, reply_to
     if reply_to_mid:
         params["headers"] = {"In-Reply-To": reply_to_mid, "References": reply_to_mid}
 
-    # Attachments via Supabase Storage signed URLs
+    # Attachments: se descargan de Supabase Storage y se envían como base64.
+    # Se lee por attachment_id → storage_path; nunca se re-sube nada (reenvíos
+    # reutilizan el objeto existente en Storage).
     if attachment_ids:
         db = get_db()
         try:
@@ -586,18 +610,16 @@ def send_resend(to: str, subject: str, body_plain: str, body_html: str, reply_to
             ), {"ids": attachment_ids}).fetchall())
         finally:
             db.close()
-        if rows:
-            try:
-                atts = []
-                for row in rows:
-                    signed_url = _storage_signed_url(c["storage_bucket"], row["storage_path"], 1800)
-                    atts.append({
-                        "filename": row["filename"],
-                        "path": signed_url,
-                    })
-                params["attachments"] = atts
-            except Exception as e:
-                logger.warning(f"Error generando signed URLs para adjuntos: {e}")
+        atts = []
+        for row in rows:
+            file_bytes = _storage_download(c["storage_bucket"], row["storage_path"])
+            atts.append({
+                "filename": row["filename"],
+                "content": base64.b64encode(file_bytes).decode("ascii"),
+                "content_type": row["content_type"],
+            })
+        if atts:
+            params["attachments"] = atts
 
     response = resend.Emails.send(params)
     email_id = response.id if hasattr(response, "id") else str(response)
