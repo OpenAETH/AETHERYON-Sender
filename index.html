@@ -385,8 +385,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <input id="searchContact" type="text" placeholder="Buscar por nombre, email, empresa o tag..."
       style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:7px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"
       oninput="filterContacts()"/>
+    <button class="btn btn-ghost" id="btnImportLeadforge" onclick="importLeadforge()" title="Importar leads scrapeados por LeadForge">↧ LeadForge</button>
     <button class="btn btn-green" onclick="openNewContact()">+ Nuevo</button>
   </div>
+  <div id="leadforgeStatus" style="font-size:10px;color:var(--text3);margin:-6px 0 12px"></div>
   <div class="card-grid" id="contactGrid"></div>
   <div id="contactForm" style="display:none">
     <div class="section-label" id="contactFormTitle">Nuevo contacto</div>
@@ -795,6 +797,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <div>
         <div class="section-label">Contactos de la campana</div>
         <div class="panel">
+          <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Segmentar por categoría (LeadForge)</div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select id="campCategorySelect" style="flex:1;background:var(--bg2);border:1px solid var(--border);color:var(--text2);font-family:var(--mono);font-size:10px;padding:6px 8px;border-radius:var(--r)">
+                <option value="">— elegí una categoría —</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" onclick="selectCampCategory()" style="white-space:nowrap">Agregar rubro</button>
+            </div>
+            <div id="campCategoryHint" style="font-size:10px;color:var(--text3);margin-top:6px"></div>
+          </div>
           <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
             <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Seleccionar de agenda</div>
             <div id="campContactList" style="max-height:180px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:6px"></div>
@@ -1403,6 +1415,35 @@ async function loadDashboard(){
 async function loadContacts(){
   try{contacts=await(await apiFetch('/contacts')).json();renderContacts(contacts);}
   catch(e){toast('Error cargando contactos','error');}
+  refreshLeadforgeStatus();
+}
+
+// Muestra cuántos leads hay en leadforge.db y el último import realizado.
+async function refreshLeadforgeStatus(){
+  const el=document.getElementById('leadforgeStatus');
+  const btn=document.getElementById('btnImportLeadforge');
+  if(!el)return;
+  try{
+    const st=await(await apiFetch('/contacts/leadforge-status')).json();
+    if(!st.db_present){el.textContent='';if(btn)btn.style.display='none';return;}
+    if(btn)btn.style.display='';
+    const imp=st.last_import?` · último import: ${st.last_import.replace('T',' ')} UTC`:' · sin importar aún';
+    el.textContent=`LeadForge: ${st.total_leads} leads en ${st.db_last_run||'—'}${imp}`;
+  }catch(e){el.textContent='';}
+}
+
+// Dispara la importación manual leadforge.db → contacts.
+async function importLeadforge(){
+  const btn=document.getElementById('btnImportLeadforge');
+  if(btn){btn.disabled=true;btn.textContent='↧ Importando…';}
+  try{
+    const r=await apiFetch('/contacts/import-leadforge',{method:'POST'});
+    const d=await r.json();
+    if(!r.ok){toast(d.detail||'Error importando','error');}
+    else{toast(`LeadForge: +${d.imported} nuevos, ${d.updated} actualizados`,'success');
+      await loadContacts();loadStats();}
+  }catch(e){toast('Error importando LeadForge','error');}
+  finally{if(btn){btn.disabled=false;btn.textContent='↧ LeadForge';}}
 }
 function renderContacts(list){
   const el=document.getElementById('contactGrid');
@@ -2345,6 +2386,43 @@ function initCampContacts(){
       ${c.name}
     </button>`).join('');
   document.getElementById('campSelectedTags').innerHTML='';
+  loadCampCategories();
+}
+
+// Llena el selector de rubros con las categorías presentes en leadforge.db.
+async function loadCampCategories(){
+  const sel=document.getElementById('campCategorySelect');
+  if(!sel)return;
+  try{
+    const st=await(await apiFetch('/contacts/leadforge-status')).json();
+    if(!st.available||!st.categories){sel.parentElement.parentElement.style.display='none';return;}
+    sel.parentElement.parentElement.style.display='';
+    sel.innerHTML='<option value="">— elegí una categoría —</option>'+
+      st.categories.map(c=>`<option value="${c.categoria.replace(/"/g,'&quot;')}">${c.categoria} (${c.n})</option>`).join('');
+  }catch(e){/* leadforge no disponible: dejar el selector oculto */
+    sel.parentElement.parentElement.style.display='none';}
+}
+
+// Agrega en bloque todos los leads de la categoría elegida a la selección.
+async function selectCampCategory(){
+  const sel=document.getElementById('campCategorySelect');
+  const cat=sel.value;
+  if(!cat){toast('Elegí una categoría primero','error');return;}
+  const hint=document.getElementById('campCategoryHint');
+  hint.textContent='Cargando leads…';
+  try{
+    const r=await(await apiFetch('/contacts/by-category?categoria='+encodeURIComponent(cat))).json();
+    (r.emails||[]).forEach(e=>campSelectedContacts.add(e));
+    // Reflejar en los botones de la agenda los que ya están seleccionados.
+    document.querySelectorAll('#campContactList button').forEach(btn=>{
+      const m=btn.getAttribute('onclick').match(/toggleCampContact\('([^']+)'/);
+      if(m&&campSelectedContacts.has(m[1])){
+        btn.style.background='rgba(126,200,80,.15)';btn.style.color='var(--green)';btn.style.borderColor='var(--green)';
+      }
+    });
+    renderCampSelectedTags();
+    hint.textContent=`+${r.count} leads de "${cat}" agregados (${campSelectedContacts.size} en total).`;
+  }catch(e){hint.textContent='';toast('Error cargando la categoría','error');}
 }
 
 function toggleCampContact(email,name,btn){

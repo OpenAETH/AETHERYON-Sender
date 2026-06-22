@@ -886,6 +886,22 @@ async def lifespan(app):
     try:
         init_db()
         logger.info("Aplicación iniciada correctamente")
+
+        # Auto-sync de LeadForge: importa leadforge.db → contacts al arrancar.
+        # Idempotente (UPSERT por email). Best-effort: si falla, la app sigue.
+        # En remoto (Render) cada deploy con .db nuevo dispara esta importación;
+        # en local corre en cada reinicio del contenedor.
+        try:
+            if os.path.exists(_leadforge_db_path()):
+                res = import_leadforge_to_contacts()
+                logger.info(f"[startup] LeadForge auto-sync: "
+                            f"+{res.get('imported',0)} nuevos, "
+                            f"{res.get('updated',0)} actualizados "
+                            f"(run {res.get('last_run','')})")
+            else:
+                logger.info("[startup] leadforge.db no presente — auto-sync omitido.")
+        except Exception as e:
+            logger.warning(f"[startup] LeadForge auto-sync falló (no crítico): {e}")
         # Al arrancar: solo loguear cuántos emails están demorados, NO enviarlos.
         # El usuario decide desde la Agenda de Envío.
         try:
@@ -1106,6 +1122,203 @@ def list_contacts(_: str = Depends(require_auth)):
         return rows_to_list(rows)
     finally:
         db.close()
+
+# ─────────────────────────────────────────────
+# LEADFORGE — puente leadforge.db (SQLite) → contacts (Postgres)
+#
+# LeadForge escribe leadforge.db en la raíz de este repo (un lead por email,
+# acumulativo). El deploy local lo lee del folder; el remoto lo recibe por
+# git push. La importación es idempotente: UPSERT por email preservando los
+# campos del CRM que ya editó el usuario (status, notes, next_followup…).
+# La segmentación por categoría se resuelve leyendo leadforge.db directamente
+# (fuente de verdad), no el campo libre `tags`.
+# ─────────────────────────────────────────────
+import sqlite3 as _sqlite3
+
+def _leadforge_db_path() -> str:
+    """Ruta de leadforge.db. Override con env LEADFORGE_DB; default = raíz del repo."""
+    return os.getenv("LEADFORGE_DB", os.path.join(BASE, "leadforge.db"))
+
+
+def _leadforge_connect():
+    """Abre leadforge.db en modo solo-lectura. None si no existe."""
+    path = _leadforge_db_path()
+    if not os.path.exists(path):
+        return None
+    conn = _sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    conn.row_factory = _sqlite3.Row
+    return conn
+
+
+def _lead_tags(row) -> str:
+    """Tags para el CRM: marca de origen + categoría + ciudad + último run."""
+    parts = ["leadforge"]
+    for key in ("categoria", "ciudad", "last_seen_run"):
+        val = (row[key] or "").strip() if row[key] else ""
+        if val:
+            parts.append(val)
+    return ", ".join(parts)
+
+
+def _lead_notes(row) -> str:
+    """Contexto del lead para el panel CRM (sólo se escribe al crear el contacto)."""
+    bits = []
+    if row["website"]:
+        bits.append(f"Web: {row['website']}")
+    loc = ", ".join(p for p in (row["ciudad"], row["provincia"]) if p)
+    if loc:
+        bits.append(f"Ubicación: {loc}")
+    if row["rating"] is not None:
+        bits.append(f"Rating: {row['rating']} ({row['cantidad_reviews'] or 0} reviews)")
+    if row["maps_link"]:
+        bits.append(f"Maps: {row['maps_link']}")
+    bits.append(f"Origen: LeadForge {row['last_seen_run']}")
+    return " · ".join(bits)
+
+
+def import_leadforge_to_contacts() -> dict:
+    """
+    Vuelca los leads de leadforge.db a la tabla contacts (Postgres) por UPSERT.
+
+    - Nuevo email      → INSERT con datos completos + tags + notes.
+    - Email existente  → actualiza company/phone/tags/website-en-context y
+                         refresca updated_at, SIN tocar status/notes/next_followup
+                         (lo que el usuario haya trabajado en el CRM se preserva).
+
+    Devuelve {imported, updated, total, last_run}. Idempotente.
+    """
+    lf = _leadforge_connect()
+    if lf is None:
+        return {"error": "leadforge.db no encontrado", "imported": 0, "updated": 0, "total": 0}
+
+    try:
+        leads = lf.execute(
+            "SELECT * FROM leads WHERE email IS NOT NULL AND TRIM(email) <> ''"
+        ).fetchall()
+        last_run_row = lf.execute(
+            "SELECT MAX(last_seen_run) AS r FROM leads"
+        ).fetchone()
+        last_run = last_run_row["r"] if last_run_row else ""
+    finally:
+        lf.close()
+
+    db = get_db()
+    imported = updated = 0
+    try:
+        for row in leads:
+            email = (row["email"] or "").strip().lower()
+            if not email:
+                continue
+            name = (row["empresa"] or email).strip()
+            res = db.execute(
+                text("""
+                    INSERT INTO contacts
+                        (name, email, company, role, phone, context, tags,
+                         status, tipo, medio, notes)
+                    VALUES
+                        (:name, :email, :company, '', :phone, :context, :tags,
+                         'nuevo', 'lead', :medio, :notes)
+                    ON CONFLICT (email) DO UPDATE SET
+                        company   = EXCLUDED.company,
+                        phone     = COALESCE(NULLIF(EXCLUDED.phone, ''), contacts.phone),
+                        tags      = EXCLUDED.tags,
+                        context   = EXCLUDED.context,
+                        updated_at = NOW()
+                    RETURNING (xmax = 0) AS inserted
+                """),
+                {
+                    "name": name,
+                    "email": email,
+                    "company": name,
+                    "phone": (row["telefono"] or "").strip(),
+                    "context": _lead_notes(row),
+                    "tags": _lead_tags(row),
+                    "medio": (row["categoria"] or "").strip(),
+                    "notes": _lead_notes(row),
+                },
+            )
+            was_insert = dict_from_row(res.fetchone())["inserted"]
+            if was_insert:
+                imported += 1
+            else:
+                updated += 1
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[leadforge] Error importando: {e}")
+        raise
+    finally:
+        db.close()
+
+    set_setting("leadforge_last_import", datetime.utcnow().isoformat(timespec="seconds"))
+    set_setting("leadforge_last_run", last_run or "")
+    logger.info(f"[leadforge] Import: +{imported} nuevos, {updated} actualizados (run {last_run})")
+    return {"imported": imported, "updated": updated,
+            "total": imported + updated, "last_run": last_run}
+
+
+@app.get("/contacts/leadforge-status")
+def leadforge_status(_: str = Depends(require_auth)):
+    """Estado del puente: leads disponibles en la DB y último import realizado."""
+    lf = _leadforge_connect()
+    if lf is None:
+        return {"available": False, "db_present": False,
+                "last_import": get_setting("leadforge_last_import", ""),
+                "last_run": get_setting("leadforge_last_run", "")}
+    try:
+        total = lf.execute("SELECT COUNT(*) AS n FROM leads").fetchone()["n"]
+        max_run = lf.execute("SELECT MAX(last_seen_run) AS r FROM leads").fetchone()["r"]
+        cats = [dict(r) for r in lf.execute(
+            "SELECT categoria, COUNT(*) AS n FROM leads "
+            "WHERE categoria IS NOT NULL AND TRIM(categoria) <> '' "
+            "GROUP BY categoria ORDER BY n DESC"
+        ).fetchall()]
+    finally:
+        lf.close()
+    return {
+        "available": True, "db_present": True,
+        "total_leads": total, "db_last_run": max_run,
+        "categories": cats,
+        "last_import": get_setting("leadforge_last_import", ""),
+        "last_run": get_setting("leadforge_last_run", ""),
+    }
+
+
+@app.post("/contacts/import-leadforge")
+async def import_leadforge(_: str = Depends(require_auth)):
+    """Dispara la importación manual de leadforge.db → contacts."""
+    try:
+        result = import_leadforge_to_contacts()
+    except Exception as e:
+        raise HTTPException(500, f"Error importando LeadForge: {e}")
+    if result.get("error"):
+        raise HTTPException(404, result["error"])
+    return {"success": True, **result}
+
+
+@app.get("/contacts/by-category")
+def contacts_by_category(categoria: str, _: str = Depends(require_auth)):
+    """
+    Emails de los leads de una categoría (desde leadforge.db, fuente de verdad).
+    Usado para pre-poblar los destinatarios de una campaña segmentada por rubro.
+    """
+    lf = _leadforge_connect()
+    if lf is None:
+        raise HTTPException(404, "leadforge.db no encontrado")
+    try:
+        rows = lf.execute(
+            "SELECT email, empresa FROM leads "
+            "WHERE categoria = :cat AND email IS NOT NULL AND TRIM(email) <> '' "
+            "ORDER BY cantidad_reviews DESC",
+            {"cat": categoria},
+        ).fetchall()
+    finally:
+        lf.close()
+    return {"categoria": categoria,
+            "count": len(rows),
+            "emails": [r["email"] for r in rows],
+            "leads": [dict(r) for r in rows]}
+
 
 @app.get("/contacts/campaign-status")
 def contacts_campaign_status(_: str = Depends(require_auth)):

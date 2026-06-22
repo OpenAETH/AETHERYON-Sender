@@ -1,0 +1,23 @@
+services:
+  asistente-ejecutivo:
+    build: .
+    image: asistente-ejecutivo:local
+    container_name: asistente-ejecutivo
+    # Encendido 24/7: se reinicia ante crash o reinicio del host (no si lo paras a mano)
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    # Carga todas las credenciales desde el .env (mismas claves que .env.example)
+    env_file:
+      - .env
+    environment:
+      - PORT=8000
+    # Healthcheck: si la app deja de responder, Docker marca el contenedor unhealthy
+    # y (con restart: unless-stopped) lo reinicia.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    # El scheduler evalua la agenda en UTC (datetime.utcnow). Programa los envios en UTC.

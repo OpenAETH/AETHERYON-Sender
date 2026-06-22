@@ -125,6 +125,21 @@ Flujo completo con revisión humana:
 Seguimiento de envíos con detección automática de respuestas por hilo (remitente + asunto normalizado).  
 `GET /supervision`
 
+### 🔗 Integración LeadForge (leadforge.db → contactos)
+LeadForge (scraper) deja un **SQLite acumulativo** (`leadforge.db`) en la raíz de este
+repo. La app lo importa a la tabla `contacts` por **UPSERT por email**, preservando los
+campos del CRM ya editados (status, notas, seguimiento).
+
+- **Auto-sync al arrancar**: en cada boot (local) o deploy (Render con `.db` nuevo vía push).
+- **Manual**: botón **↧ LeadForge** en la Agenda.
+- **Segmentación por categoría**: el formulario de campaña ofrece un selector de rubro
+  (lee las categorías de `leadforge.db`) que pre-puebla los destinatarios.
+
+`GET /contacts/leadforge-status` · `POST /contacts/import-leadforge` · `GET /contacts/by-category?categoria=…`
+
+> Override de la ruta con la env `LEADFORGE_DB` (default: `leadforge.db` junto a `api.py`).
+> El `.db` viaja en el repo: local lo lee del folder, remoto lo recibe por `git push`.
+
 ### 🧠 Memoria del agente
 Registro cronológico de eventos (emails enviados, contactos agregados, notas manuales). Se inyecta como contexto en prompts de IA.
 
