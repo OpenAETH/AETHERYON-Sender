@@ -206,9 +206,16 @@ def _storage_upload(bucket: str, path: str, file_bytes: bytes, content_type: str
     headers = _storage_headers()
     headers["Content-Type"] = content_type or "application/octet-stream"
     headers["x-upsert"] = "true"
-    r = httpx.post(url, content=file_bytes, headers=headers, timeout=30)
+    r = httpx.post(url, content=file_bytes, headers=headers, timeout=60)
     if r.status_code == 403:
         raise RuntimeError("Credenciales de Supabase Storage inválidas — revisa SUPABASE_SERVICE_KEY")
+    if r.status_code == 413:
+        mb = len(file_bytes) / 1048576
+        raise RuntimeError(
+            f"El archivo ({mb:.1f} MB) supera el límite del bucket '{bucket}' en Supabase. "
+            f"Subí el límite en Supabase → Storage → bucket '{bucket}' → Edit bucket → "
+            f"'File size limit' (o el global en Project Settings → Storage)."
+        )
     if not r.is_success:
         body = r.text[:500]
         raise RuntimeError(f"Supabase Storage respondio {r.status_code}: {body}")
