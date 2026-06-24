@@ -747,6 +747,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
       <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Campanas IA</span>
       <div style="flex:1"></div>
+      <input type="file" id="camp-import-file" accept=".yaml,.yml" style="display:none" onchange="importCampaignFile(this.files)">
+      <button class="btn btn-ghost btn-sm" onclick="importCampaignPrompt()">↑ Importar campaña</button>
       <button class="btn btn-green btn-sm" onclick="showCampaignForm()">+ Nueva campana</button>
     </div>
     <div id="campaignCards" style="display:flex;flex-direction:column;gap:10px">
@@ -2830,11 +2832,53 @@ async function loadCampaigns(){
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
             <span style="font-size:10px;padding:3px 9px;border-radius:10px;border:1px solid;color:${statusColor[c.status]||'var(--text3)'};border-color:${statusColor[c.status]||'var(--text3)'};">${statusLabel[c.status]||c.status}</span>
             <div style="font-size:10px;color:var(--text3)">${c.approved_count||0}/${c.total_emails||0} aprobados</div>
-            <button class="btn btn-red btn-sm" onclick="event.stopPropagation();deleteCampaign(${c.id})" style="font-size:9px;padding:2px 8px">Eliminar</button>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();exportCampaign(${c.id})" style="font-size:9px;padding:2px 8px">Exportar</button>
+              <button class="btn btn-red btn-sm" onclick="event.stopPropagation();deleteCampaign(${c.id})" style="font-size:9px;padding:2px 8px">Eliminar</button>
+            </div>
           </div>
         </div>
       </div>`).join('');
   }catch(e){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Error cargando campanas.</div>';}
+}
+
+// ── Importar / Exportar campañas (YAML) ─────
+function importCampaignPrompt(){
+  document.getElementById('camp-import-file').click();
+}
+
+async function importCampaignFile(files){
+  const input=document.getElementById('camp-import-file');
+  if(!files||!files.length)return;
+  const file=files[0];
+  try{
+    const text=await file.text();
+    const r=await apiFetch('/campaigns/import',{method:'POST',body:JSON.stringify({yaml:text})});
+    if(!r.ok){let m='Error';try{m=(await r.json()).detail||m;}catch(_){}throw new Error(m);}
+    const d=await r.json();
+    toast('Campaña importada ('+(d.total_emails||0)+' emails)','success');
+    loadCampaigns();
+  }catch(e){toast('Error importando: '+e.message,'error');}
+  finally{if(input)input.value='';}
+}
+
+async function exportCampaign(campId){
+  try{
+    const r=await apiFetch('/campaigns/'+campId+'/export');
+    if(!r.ok){let m='Error';try{m=(await r.json()).detail||m;}catch(_){}throw new Error(m);}
+    const blob=await r.blob();
+    // Nombre de archivo desde el header Content-Disposition (fallback campaign_<id>.yaml)
+    let fname='campaign_'+campId+'.yaml';
+    const cd=r.headers.get('Content-Disposition')||'';
+    const m=cd.match(/filename="?([^"]+)"?/);
+    if(m)fname=m[1];
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=fname;
+    document.body.appendChild(a);a.click();a.remove();
+    URL.revokeObjectURL(url);
+    toast('Campaña exportada','success');
+  }catch(e){toast('Error exportando: '+e.message,'error');}
 }
 
 // ── Plantillas pre-aprobadas ───────────────

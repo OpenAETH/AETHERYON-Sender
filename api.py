@@ -6,7 +6,7 @@ Database: SQLAlchemy + IPv4 forced connection for Supabase
 """
 from fastapi import FastAPI, HTTPException, Request, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from sqlalchemy import create_engine, text
@@ -23,6 +23,7 @@ from datetime import datetime, timedelta
 import uvicorn, logging, re, secrets, hashlib, hmac, json, time, uuid, base64
 import asyncio
 import httpx
+import yaml
 import resend
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -2448,6 +2449,137 @@ async def use_campaign_template(tid: int, request: Request, _: str = Depends(req
         raise HTTPException(500, str(e))
     finally:
         db.close()
+
+
+@app.post("/campaigns/import")
+async def import_campaign(request: Request, _: str = Depends(require_auth)):
+    """Importa una campaña completa desde YAML. Crea un borrador (draft) sin
+    contactos con los emails pre-cargados. Tolera el formato espejo de la DB y
+    alias del ejemplo (sequence, schedule/alternate_days, intent como lista)."""
+    body = await request.json()
+    yaml_text = body.get("yaml", "")
+    if not yaml_text or not yaml_text.strip():
+        raise HTTPException(400, "Archivo YAML vacío")
+    try:
+        data = yaml.safe_load(yaml_text)
+    except yaml.YAMLError as e:
+        raise HTTPException(400, f"YAML inválido: {e}")
+    if not isinstance(data, dict):
+        raise HTTPException(400, "YAML inválido: se esperaba un objeto en la raíz")
+
+    camp = data.get("campaign") or {}
+    if not isinstance(camp, dict):
+        raise HTTPException(400, "YAML inválido: 'campaign' debe ser un objeto")
+
+    # intent: texto o lista -> texto unido por comas
+    intent_raw = camp.get("intent", "")
+    if isinstance(intent_raw, (list, tuple)):
+        intent = ", ".join(str(x).strip() for x in intent_raw if str(x).strip())
+    else:
+        intent = str(intent_raw or "").strip()
+
+    # send_mode: alias 'schedule' y valores tipo 'alternate_days'
+    send_mode = camp.get("send_mode") or camp.get("schedule") or "daily"
+    send_mode = str(send_mode).strip()
+    _MODE_ALIASES = {"alternate_days": "alternate", "every_day": "daily",
+                     "mon_wed_fri": "mon_wed_fri", "tue_thu": "tue_thu"}
+    send_mode = _MODE_ALIASES.get(send_mode, send_mode)
+
+    name       = str(camp.get("name") or "").strip()
+    start_date = str(camp.get("start_date") or "").strip()
+    end_date   = str(camp.get("end_date") or "").strip()
+    tone       = str(camp.get("tone") or "informative").strip()
+    send_time  = str(camp.get("send_time") or "09:00").strip()
+
+    # emails: cada uno con subject/body; day_number o sequence
+    emails_raw = data.get("emails") or []
+    if not isinstance(emails_raw, list) or not emails_raw:
+        raise HTTPException(400, "YAML inválido: se requiere al menos un email")
+    emails = []
+    for i, em in enumerate(emails_raw):
+        if not isinstance(em, dict):
+            raise HTTPException(400, f"Email #{i+1} inválido")
+        emails.append({
+            "day_number": em.get("day_number") or em.get("sequence") or (i + 1),
+            "subject": str(em.get("subject") or "").strip(),
+            "body": str(em.get("body") or "").strip(),
+        })
+    emails.sort(key=lambda e: e["day_number"])
+
+    if not name:       raise HTTPException(400, "Falta 'name' en la campaña")
+    if not intent:     raise HTTPException(400, "Falta 'intent' en la campaña")
+    if not start_date: raise HTTPException(400, "Falta 'start_date' en la campaña")
+
+    n = len(emails)
+    # Las fechas se derivan de start_date + cadencia + cantidad de emails.
+    dates = _get_campaign_dates_count(start_date, send_mode, n)
+    if not dates or len(dates) < n:
+        raise HTTPException(400, f"No se pudieron calcular {n} fechas con modo '{send_mode}'")
+    if not end_date:
+        end_date = dates[-1]
+
+    db = get_db()
+    try:
+        result = db.execute(text("""
+            INSERT INTO campaigns (name, intent, start_date, end_date, send_mode, tone, send_time, status)
+            VALUES (:name,:intent,:start_date,:end_date,:send_mode,:tone,:send_time,'draft')
+            RETURNING id
+        """), {"name": name, "intent": intent, "start_date": start_date,
+               "end_date": end_date, "send_mode": send_mode, "tone": tone, "send_time": send_time})
+        camp_id = result.fetchone()[0]
+
+        for i in range(n):
+            db.execute(text("""
+                INSERT INTO campaign_emails (campaign_id, day_number, subject, body, status, scheduled_at, version, regenerated_count)
+                VALUES (:cid,:day,:subject,:body,'pending',:scheduled_at,1,0)
+            """), {"cid": camp_id, "day": i + 1, "subject": emails[i]["subject"],
+                   "body": emails[i]["body"], "scheduled_at": f"{dates[i]} {send_time}"})
+        db.commit()
+        return {"success": True, "campaign_id": camp_id, "total_emails": n}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
+
+@app.get("/campaigns/{cid}/export")
+def export_campaign(cid: int, _: str = Depends(require_auth)):
+    """Exporta una campaña a YAML (formato espejo de la DB, sin contactos)."""
+    db = get_db()
+    try:
+        camp = dict_from_row(db.execute(text("SELECT * FROM campaigns WHERE id=:id"), {"id": cid}).fetchone())
+        if not camp:
+            raise HTTPException(404, "Campaña no encontrada")
+        emails = rows_to_list(db.execute(text(
+            "SELECT day_number, subject, body FROM campaign_emails WHERE campaign_id=:id ORDER BY day_number"),
+            {"id": cid}).fetchall())
+    finally:
+        db.close()
+
+    payload = {
+        "version": 1,
+        "campaign": {
+            "name": camp.get("name") or "",
+            "intent": camp.get("intent") or "",
+            "start_date": camp.get("start_date") or "",
+            "end_date": camp.get("end_date") or "",
+            "send_mode": camp.get("send_mode") or "daily",
+            "send_time": camp.get("send_time") or "09:00",
+            "tone": camp.get("tone") or "informative",
+        },
+        "emails": [
+            {"day_number": e["day_number"], "subject": e["subject"] or "", "body": e["body"] or ""}
+            for e in emails
+        ],
+    }
+    yaml_text = yaml.safe_dump(payload, allow_unicode=True, sort_keys=False, default_flow_style=False)
+    safe_name = re.sub(r'[^A-Za-z0-9_-]+', '_', (camp.get("name") or f"campaign_{cid}")).strip("_") or f"campaign_{cid}"
+    return Response(
+        content=yaml_text,
+        media_type="application/x-yaml",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}.yaml"'},
+    )
 
 
 @app.get("/campaigns/{cid}")
