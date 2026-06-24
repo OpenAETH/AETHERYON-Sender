@@ -2594,6 +2594,101 @@ async def init_campaign(request: Request, _: str = Depends(require_auth)):
         db.close()
 
 
+def _escape_unescaped_control_chars(s: str) -> str:
+    """Escapa saltos de linea/tabs/retornos literales que aparezcan DENTRO de
+    strings JSON (causa tipica del error 'Invalid control character').
+    Respeta los caracteres de control que esten fuera de strings (formato)."""
+    out = []
+    in_string = False
+    escaped = False
+    for ch in s:
+        if in_string:
+            if escaped:
+                out.append(ch)
+                escaped = False
+                continue
+            if ch == '\\':
+                out.append(ch)
+                escaped = True
+                continue
+            if ch == '"':
+                out.append(ch)
+                in_string = False
+                continue
+            # Caracteres de control sin escapar dentro del string -> escaparlos
+            if ch == '\n':
+                out.append('\\n'); continue
+            if ch == '\r':
+                out.append('\\r'); continue
+            if ch == '\t':
+                out.append('\\t'); continue
+            if ord(ch) < 0x20:
+                out.append('\\u%04x' % ord(ch)); continue
+            out.append(ch)
+        else:
+            if ch == '"':
+                in_string = True
+            out.append(ch)
+    return ''.join(out)
+
+
+def parse_ai_json(raw: str) -> dict:
+    """Parsea JSON devuelto por un LLM de forma tolerante.
+
+    Maneja: code fences (```json), texto alrededor del objeto, y caracteres de
+    control literales (saltos de linea/tabs sin escapar dentro de strings, que
+    son la causa de 'Invalid control character at...'). Emojis, acentos UTF-8 y
+    apostrofes (') son JSON valido y se preservan tal cual.
+    """
+    if not raw or not raw.strip():
+        raise json.JSONDecodeError("respuesta vacia de la IA", raw or "", 0)
+    s = raw.strip()
+    # Quitar code fences de markdown
+    s = re.sub(r'^```(?:json)?\s*', '', s)
+    s = re.sub(r'\s*```$', '', s).strip()
+    # Recortar al objeto JSON externo si la IA agrego texto alrededor
+    start, end = s.find('{'), s.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        s = s[start:end + 1]
+
+    # 1) Intento estandar
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        pass
+    # 2) strict=False permite caracteres de control dentro de strings
+    try:
+        return json.loads(s, strict=False)
+    except json.JSONDecodeError:
+        pass
+    # 3) Escapar manualmente los caracteres de control dentro de strings
+    return json.loads(_escape_unescaped_control_chars(s), strict=False)
+
+
+def _extract_subject_body(raw: str) -> dict | None:
+    """Ultimo recurso para un email individual: extrae subject/body con regex
+    tolerante aunque el body tenga comillas (\") sin escapar."""
+    if not raw:
+        return None
+    m_sub = re.search(r'"subject"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+    m_body = re.search(r'"body"\s*:\s*"(.*)"\s*\}?\s*$', raw, re.DOTALL)
+    if not m_body:
+        m_body = re.search(r'"body"\s*:\s*"(.*)', raw, re.DOTALL)
+    if not (m_sub or m_body):
+        return None
+
+    def _unescape(v: str) -> str:
+        return (v.replace('\\n', '\n').replace('\\t', '\t')
+                 .replace('\\r', '\r').replace('\\"', '"').replace('\\\\', '\\'))
+
+    subject = _unescape(m_sub.group(1)) if m_sub else ""
+    body = m_body.group(1) if m_body else ""
+    # Recortar cierre del objeto si quedo pegado al body
+    body = re.sub(r'"\s*\}?\s*$', '', body)
+    body = _unescape(body)
+    return {"subject": subject.strip(), "body": body.strip()}
+
+
 @app.post("/campaigns/{cid}/generate-one")
 async def generate_one_email(cid: int, request: Request, _: str = Depends(require_auth)):
     """Genera UN email de la secuencia usando SSE streaming. El frontend llama de a uno."""
@@ -2698,14 +2793,15 @@ Responde UNICAMENTE con JSON valido (sin texto extra, sin backticks):
                             except Exception:
                                 pass
 
-            # Parsear JSON del contenido completo
-            clean = re.sub(r'^```(?:json)?\s*', '', full_content.strip())
-            clean = re.sub(r'\s*```$', '', clean)
-            # Intentar extraer JSON si hay texto alrededor
-            json_match = re.search(r'\{[\s\S]*"subject"[\s\S]*"body"[\s\S]*\}', clean)
-            if json_match:
-                clean = json_match.group(0)
-            parsed = json.loads(clean)
+            # Parsear JSON del contenido completo (tolerante a saltos de linea,
+            # comillas, emojis y caracteres de control que emite el LLM)
+            try:
+                parsed = parse_ai_json(full_content)
+            except json.JSONDecodeError:
+                # Ultimo recurso: extraer subject/body con regex
+                parsed = _extract_subject_body(full_content)
+                if parsed is None:
+                    raise
             subject = parsed.get("subject","")
             body    = parsed.get("body","")
 
@@ -2840,10 +2936,7 @@ Responde ÚNICAMENTE con JSON válido con esta estructura exacta (sin texto extr
         resp.raise_for_status()
         groq_data = resp.json()
         raw_content = groq_data["choices"][0]["message"]["content"].strip()
-        # Limpiar posibles backticks de markdown
-        raw_content = re.sub(r'^```(?:json)?\s*', '', raw_content)
-        raw_content = re.sub(r'\s*```$', '', raw_content)
-        emails_data = json.loads(raw_content)
+        emails_data = parse_ai_json(raw_content)
         emails_list = emails_data.get("emails", [])
     except httpx.HTTPStatusError as e:
         raise HTTPException(502, f"Groq API error: {e.response.status_code}")
@@ -2990,9 +3083,12 @@ Genera un nuevo email mejorado para esta posición. Responde SOLO con JSON:
             )
         resp.raise_for_status()
         raw = resp.json()["choices"][0]["message"]["content"].strip()
-        raw = re.sub(r'^```(?:json)?\s*', '', raw)
-        raw = re.sub(r'\s*```$', '', raw)
-        new_data = json.loads(raw)
+        try:
+            new_data = parse_ai_json(raw)
+        except json.JSONDecodeError:
+            new_data = _extract_subject_body(raw)
+            if new_data is None:
+                raise
 
         db.execute(text("""
             UPDATE campaign_emails
