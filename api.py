@@ -3015,21 +3015,44 @@ async def approve_email(cid: int, request: Request, _: str = Depends(require_aut
 async def retry_email(cid: int, request: Request, _: str = Depends(require_auth)):
     """Regenera un email específico de la campaña manteniendo contexto y posición."""
     import httpx
-    data     = await request.json()
-    email_id = data.get("email_id")
-    feedback = data.get("feedback", "")
-
-    groq_key = os.getenv("GROQ_API_KEY", "")
-    if not groq_key:
-        raise HTTPException(500, "GROQ_API_KEY no configurada")
+    data       = await request.json()
+    email_id   = data.get("email_id")
+    day_num    = data.get("day_number")
+    feedback   = data.get("feedback", "")
+    edit_subj  = data.get("subject")
+    edit_body  = data.get("body")
 
     db = get_db()
     try:
-        em = dict_from_row(db.execute(text(
-            "SELECT e.*, c.intent, c.tone, c.send_mode, c.start_date, c.end_date FROM campaign_emails e JOIN campaigns c ON c.id=e.campaign_id WHERE e.id=:id AND e.campaign_id=:cid"),
-            {"id": email_id, "cid": cid}).fetchone())
+        # Resolver el email por id o por day_number (el modal de generacion usa day_number)
+        if email_id:
+            em = dict_from_row(db.execute(text(
+                "SELECT e.*, c.intent, c.tone, c.send_mode, c.start_date, c.end_date FROM campaign_emails e JOIN campaigns c ON c.id=e.campaign_id WHERE e.id=:id AND e.campaign_id=:cid"),
+                {"id": email_id, "cid": cid}).fetchone())
+        elif day_num:
+            em = dict_from_row(db.execute(text(
+                "SELECT e.*, c.intent, c.tone, c.send_mode, c.start_date, c.end_date FROM campaign_emails e JOIN campaigns c ON c.id=e.campaign_id WHERE e.day_number=:day AND e.campaign_id=:cid"),
+                {"day": day_num, "cid": cid}).fetchone())
+        else:
+            raise HTTPException(400, "Se requiere email_id o day_number")
         if not em:
             raise HTTPException(404, "Email no encontrado")
+        email_id = em["id"]
+
+        # Edicion manual via campos explicitos subject/body (preferido) o el
+        # formato legacy feedback "EDIT:subject|||body".
+        if edit_subj is not None and edit_body is not None:
+            db.execute(text("""
+                UPDATE campaign_emails
+                SET subject=:s, body=:b, status='pending', version=version+1
+                WHERE id=:id AND campaign_id=:cid"""),
+                {"s": edit_subj, "b": edit_body, "id": email_id, "cid": cid})
+            db.commit()
+            return {"success": True, "subject": edit_subj, "body": edit_body}
+
+        groq_key = os.getenv("GROQ_API_KEY", "")
+        if not groq_key:
+            raise HTTPException(500, "GROQ_API_KEY no configurada")
 
         # Contexto de emails ya generados para coherencia
         others = rows_to_list(db.execute(text(
