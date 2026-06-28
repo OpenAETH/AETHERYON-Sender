@@ -1957,7 +1957,10 @@ async def ai_generate(request: Request, _: str = Depends(require_auth)):
 
     GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
-    payload = {"model": "groq/compound", "stream": stream, "messages": messages}
+    # El modelo se configura desde el Panel de Configuración (setting `ai_model`);
+    # el frontend puede sobreescribirlo por request enviando `model`.
+    model = data.get("model") or get_setting("ai_model", "groq/compound")
+    payload = {"model": model, "stream": stream, "messages": messages}
 
     if stream:
         async def gen():

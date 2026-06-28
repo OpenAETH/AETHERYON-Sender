@@ -150,6 +150,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .ctx-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;display:block}
 .ctx-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:none;line-height:1.6;caret-color:var(--green)}
 .ctx-input:focus{border-color:var(--border2)}
+.dest-cell{cursor:help;border-bottom:1px dotted var(--text3)}
+.chat-msg{max-width:82%;padding:10px 13px;border-radius:var(--r2);font-size:12px;line-height:1.6;white-space:pre-wrap;word-wrap:break-word}
+.chat-msg.user{align-self:flex-end;background:var(--green);color:#0c0f0a}
+.chat-msg.bot{align-self:flex-start;background:var(--bg3);border:1px solid var(--border);color:var(--text2)}
+.chat-msg.bot.streaming::after{content:'▋';animation:blink 1s steps(2) infinite;color:var(--green)}
+@keyframes blink{0%,50%{opacity:1}50.01%,100%{opacity:0}}
 
 .preview-frame{width:100%;height:400px;border:1px solid var(--border);border-radius:var(--r2);background:#fff}
 
@@ -287,10 +293,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="3" stroke="currentColor" stroke-width="1.2"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     Agenda
   </div>
-  <div class="nav-item" onclick="go('crm')">
-    <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="3" height="12" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="6.5" y="2" width="3" height="8" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="11" y="2" width="3" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>
-    CRM
-  </div>
   <div class="nav-item" onclick="go('compose')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M2 12L4 10l7-7 2 2-7 7-2 2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M9 3l2 2" stroke="currentColor" stroke-width="1.2"/></svg>
     Redactar
@@ -299,7 +301,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M2 6l6 4 6-4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     Bandeja
   </div>
+  <div class="nav-item" onclick="go('chat')">
+    <svg viewBox="0 0 16 16" fill="none"><path d="M2 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H6l-3 3V4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+    Asistente
+  </div>
   <span class="nav-section">Gestion</span>
+  <div class="nav-item" onclick="go('crm')">
+    <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="3" height="12" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="6.5" y="2" width="3" height="8" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="11" y="2" width="3" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>
+    CRM
+  </div>
   <div class="nav-item" onclick="go('supervision')">
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     Supervision
@@ -309,6 +319,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     Memoria
   </div>
   <span class="nav-section">Config</span>
+  <div class="nav-item" onclick="go('config')">
+    <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M5 6h6M5 9h6M5 12h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+    Configuracion
+  </div>
   <div class="nav-item" onclick="go('context')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2z" stroke="currentColor" stroke-width="1.2"/><path d="M8 7v5M8 5v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Contexto
@@ -706,7 +720,60 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   <div id="settingsResult" style="display:none;margin-top:12px;padding:12px 14px;border-radius:var(--r);font-size:12px;border:1px solid;line-height:1.6"></div>
 </div>
 
+<!-- CONFIGURACION (panel unificado) -->
+<div class="view" id="view-config">
+  <div class="ctx-block">
+    <div class="ctx-title">Modelo de IA</div>
+    <div class="ctx-hint">Modelo usado por el Asistente y por la redaccion de emails con IA. Se aplica de inmediato a las nuevas generaciones.</div>
+    <label class="ctx-label">Modelo activo</label>
+    <select class="ctx-input" id="cfg-ai-model">
+      <option value="groq/compound">groq/compound — agentico (busqueda + herramientas)</option>
+      <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile — potente</option>
+      <option value="llama-3.1-8b-instant">llama-3.1-8b-instant — rapido</option>
+      <option value="openai/gpt-oss-120b">openai/gpt-oss-120b</option>
+      <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
+    </select>
+  </div>
+  <div class="ctx-block">
+    <div class="ctx-title">Contexto del agente</div>
+    <div class="ctx-hint">El agente incorpora este contexto automaticamente al redactar, responder y conversar. Es el mismo contexto de la vista Contexto.</div>
+    <label class="ctx-label">Entidad — quienes somos</label>
+    <textarea class="ctx-input" id="cfg-ctx-entity" rows="3" placeholder="Ej: Agraound es una editorial de desarrollo..."></textarea>
+    <label class="ctx-label" style="margin-top:12px">Mision actual — campana o foco</label>
+    <textarea class="ctx-input" id="cfg-ctx-mission" rows="2" placeholder="Ej: Comunicar la campana de crowdfunding..."></textarea>
+    <label class="ctx-label" style="margin-top:12px">Contexto adicional — instrucciones</label>
+    <textarea class="ctx-input" id="cfg-ctx-extra" rows="2" placeholder="Ej: Tono entusiasta pero profesional..."></textarea>
+  </div>
+  <div class="ctx-block">
+    <div class="ctx-title">Firma</div>
+    <div class="ctx-hint">Firma HTML que se agrega al pie de los emails. Es la misma firma de la vista Estilo y Firma.</div>
+    <label class="ctx-label">Firma HTML</label>
+    <textarea class="ctx-input" id="cfg-signature" rows="4" placeholder="&lt;strong&gt;Nombre&lt;/strong&gt;&lt;br&gt;Cargo | Empresa&lt;br&gt;&lt;a href='https://...'&gt;web&lt;/a&gt;"></textarea>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:.5rem">
+    <button class="btn btn-green" onclick="saveConfigPanel()">Guardar configuracion</button>
+    <button class="btn btn-ghost" onclick="loadConfigPanel()">Descartar cambios</button>
+  </div>
+</div>
 
+<!-- ASISTENTE (chatbot) -->
+<div class="view" id="view-chat">
+  <div class="panel" style="display:flex;flex-direction:column;height:calc(100vh - 150px);min-height:380px">
+    <div class="panel-header">
+      <span class="panel-title">Asistente IA</span>
+      <span style="flex:1"></span>
+      <span style="font-size:10px;color:var(--text3)" id="chatModelLabel">—</span>
+      <button class="btn btn-ghost btn-sm" onclick="clearChat()">Limpiar</button>
+    </div>
+    <div id="chatMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px"></div>
+    <div style="display:flex;gap:8px;padding:12px;border-top:1px solid var(--border)">
+      <textarea id="chatInput" rows="1" placeholder="Escribe un mensaje... (Enter para enviar, Shift+Enter salto de linea)"
+        style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:none;max-height:120px;caret-color:var(--green)"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+      <button class="btn btn-green" id="btnChatSend" onclick="sendChat()" style="align-self:flex-end">Enviar</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL: MULTI DESTINATARIOS -->
 <div class="modal-backdrop" id="modalMultiRecipient">
@@ -1275,7 +1342,7 @@ async function doLogin(){
 
 async function doLogout(){
   try{await apiFetch('/auth/logout',{method:'POST'});}catch(e){}
-  SESSION_TOKEN='';localStorage.removeItem('session_token');
+  SESSION_TOKEN='';localStorage.removeItem('session_token');clearAppCache();
   document.getElementById('appShell').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('loginUser').value='';
@@ -1318,6 +1385,14 @@ async function apiFetch(path,opts={}){
   if(r.status===401){doLogout();throw new Error('Sesion expirada');}
   return r;
 }
+
+// ── Cache local (stale-while-revalidate) ─────────────────
+// Pinta al instante desde localStorage y revalida contra la API en segundo
+// plano. Las claves se limpian al cerrar sesion para no mezclar cuentas.
+const CACHE_PREFIX='lf_cache_';
+function cacheGet(key){try{const raw=localStorage.getItem(CACHE_PREFIX+key);return raw?JSON.parse(raw):null;}catch(e){return null;}}
+function cacheSet(key,data){try{localStorage.setItem(CACHE_PREFIX+key,JSON.stringify(data));}catch(e){}}
+function clearAppCache(){try{Object.keys(localStorage).filter(k=>k.startsWith(CACHE_PREFIX)).forEach(k=>localStorage.removeItem(k));}catch(e){}}
 
 
 let toastTimer;
@@ -1365,8 +1440,8 @@ function resolvePrompt(ok){
 }
 
 const pageMap={dashboard:'Dashboard',agenda:'Agenda',crm:'CRM',compose:'Redactar',inbox:'Bandeja',
-  supervision:'Supervision',memory:'Memoria',context:'Contexto',estilo:'Estilo',
-  settings:'SMTP / IMAP',campaigns:'Campanas'};
+  chat:'Asistente',supervision:'Supervision',memory:'Memoria',config:'Configuracion',
+  context:'Contexto',estilo:'Estilo',settings:'SMTP / IMAP',campaigns:'Campanas'};
 
 function toggleSidebar(){document.body.classList.toggle('nav-open');}
 
@@ -1391,6 +1466,8 @@ function go(view){
   if(view==='estilo')     loadStyle();
   if(view==='dashboard')  loadDashboard();
   if(view==='campaigns')  showCampaignList();
+  if(view==='config')     loadConfigPanel();
+  if(view==='chat')       initChat();
 }
 
 async function checkStatus(){
@@ -1403,15 +1480,19 @@ async function checkStatus(){
   }catch(e){dot.classList.remove('on');txt.textContent='sin conexion';}
 }
 
+function renderStats(d){
+  ['contacts','sent','inbox','replied','memory'].forEach(k=>{
+    const el=document.getElementById('s-'+k);if(el)el.textContent=d[k]??'-';
+  });
+  document.getElementById('tContacts').textContent=d.contacts??'-';
+  document.getElementById('tSent').textContent=d.sent??'-';
+  document.getElementById('tInbox').textContent=d.inbox??'-';
+}
 async function loadStats(){
+  const cached=cacheGet('stats');if(cached)renderStats(cached);
   try{
     const d=await(await apiFetch('/stats')).json();
-    ['contacts','sent','inbox','replied','memory'].forEach(k=>{
-      const el=document.getElementById('s-'+k);if(el)el.textContent=d[k]??'-';
-    });
-    document.getElementById('tContacts').textContent=d.contacts??'-';
-    document.getElementById('tSent').textContent=d.sent??'-';
-    document.getElementById('tInbox').textContent=d.inbox??'-';
+    cacheSet('stats',d);renderStats(d);
   }catch(e){}
 }
 
@@ -1435,8 +1516,10 @@ async function loadDashboard(){
 }
 
 async function loadContacts(){
-  try{contacts=await(await apiFetch('/contacts')).json();renderContacts(contacts);}
-  catch(e){toast('Error cargando contactos','error');}
+  const cached=cacheGet('contacts');
+  if(cached){contacts=cached;renderContacts(contacts);}
+  try{contacts=await(await apiFetch('/contacts')).json();cacheSet('contacts',contacts);renderContacts(contacts);}
+  catch(e){if(!cached)toast('Error cargando contactos','error');}
   refreshLeadforgeStatus();
 }
 
@@ -1510,12 +1593,17 @@ function composeToContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;d
 
 // ── CRM (kanban por estados) ──────────────────────────────
 async function loadCRM(){
+  // Pintar al instante desde cache (contactos + estados de campana).
+  const cc=cacheGet('contacts'),cs=cacheGet('crmCampaigns');
+  if(cc&&!contacts.length)contacts=cc;
+  if(cs)crmCampaigns=cs;
+  if(contacts.length)renderCRM();
   try{
-    if(!contacts.length)contacts=await(await apiFetch('/contacts')).json();
-    try{crmCampaigns=await(await apiFetch('/contacts/campaign-status')).json();}
-    catch(e){crmCampaigns={};}
+    contacts=await(await apiFetch('/contacts')).json();cacheSet('contacts',contacts);
+    try{crmCampaigns=await(await apiFetch('/contacts/campaign-status')).json();cacheSet('crmCampaigns',crmCampaigns);}
+    catch(e){if(!cs)crmCampaigns={};}
     renderCRM();
-  }catch(e){toast('Error cargando CRM','error');}
+  }catch(e){if(!cc&&!contacts.length)toast('Error cargando CRM','error');}
 }
 function filterCRM(){crmSearch=document.getElementById('crm-search').value.toLowerCase();renderCRM();}
 function crmStatusKey(c){const k=(c.status||'nuevo');return CRM_COLS.some(x=>x.key===k)?k:'nuevo';}
@@ -2012,31 +2100,139 @@ Redacta una respuesta.`}]})});
 function replyWith(){const m=selectedInboxMsg;if(!m||!m.ai_suggestion)return toast('Genera una propuesta primero','error');document.getElementById('c-to').value=m.from_email;document.getElementById('c-subject').value='Re: '+(m.subject||'');document.getElementById('composedBody').textContent=m.ai_suggestion;matchContact();updateToTag();go('compose');}
 async function markReplied(mid){await apiFetch('/inbox/mark-replied',{method:'POST',body:JSON.stringify({message_id:mid})});toast('Marcado como respondido');loadInbox();}
 
-async function loadSupervision(){
-  try{
-    const rows=await(await apiFetch('/supervision')).json();
+function renderSupervision(rows){
     const el=document.getElementById('supervisionList');
     if(!rows.length){el.innerHTML='<div style="padding:14px;color:var(--text3);font-size:11px">Sin emails enviados.</div>';return;}
     el.innerHTML=rows.map(row=>{
       const hrs=row.hours_since_sent;
       const hrsStr=hrs!==null?(hrs>48?Math.round(hrs/24)+'d':hrs+'h'):'-';
       const hrsCol=hrs>48?'var(--red)':hrs>24?'var(--amber)':'var(--text2)';
-      return `<div class="sup-row"><span data-label="Fecha" style="color:var(--text3)">${formatDate(row.sent_at)}</span><span data-label="Destinatario" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${row.contact_email}">${row.contact_name||row.contact_email}</span><span data-label="Asunto" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2)">${row.subject||'-'}</span><span data-label="Horas" style="color:${hrsCol}">${hrsStr}</span><span data-label="Respuesta">${row.has_reply?'<span class="status-ok">Si</span>':'<span class="status-no">No</span>'}</span><button class="open-email-btn" onclick="openEmailModal(${row.id})">Ver email</button></div>`;
+      return `<div class="sup-row"><span data-label="Fecha" style="color:var(--text3)">${formatDate(row.sent_at)}</span><span data-label="Destinatario" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${row.contact_name&&row.contact_name!==row.contact_email?`<span class="dest-cell" title="${row.contact_email}">${row.contact_name}</span>`:row.contact_email}</span><span data-label="Asunto" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2)">${row.subject||'-'}</span><span data-label="Horas" style="color:${hrsCol}">${hrsStr}</span><span data-label="Respuesta">${row.has_reply?'<span class="status-ok">Si</span>':'<span class="status-no">No</span>'}</span><button class="open-email-btn" onclick="openEmailModal(${row.id})">Ver email</button></div>`;
     }).join('');
-  }catch(e){toast('Error supervision','error');}
+}
+async function loadSupervision(){
+  const cached=cacheGet('supervision');if(cached)renderSupervision(cached);
+  try{
+    const rows=await(await apiFetch('/supervision')).json();
+    cacheSet('supervision',rows);renderSupervision(rows);
+  }catch(e){if(!cached)toast('Error supervision','error');}
 }
 async function openEmailModal(logId){
   try{const row=await(await apiFetch('/logs/'+logId)).json();document.getElementById('modalEmailSubject').textContent=row.subject||'(sin asunto)';document.getElementById('modalEmailMeta').innerHTML=`Para: <b>${row.contact_name||row.contact_email}</b> &lt;${row.contact_email}&gt; · ${formatDate(row.sent_at)} · ${row.intent||''}`;document.getElementById('modalEmailBody').textContent=row.body||'';document.getElementById('modalEmailHtml').srcdoc=row.body_html||'<html><body style="display:flex;align-items:center;justify-content:center;height:100%;color:#aaa;font-family:sans-serif;font-size:13px">Sin HTML</body></html>';openModal('modalEmail');}catch(e){toast('Error cargando email','error');}
 }
 
+function renderMemory(items){const el=document.getElementById('memoryList');el.innerHTML=items.length?items.map(m=>`<div class="mem-item"><span class="mem-type">${m.type}</span><div style="flex:1">${m.entity?`<div style="font-size:10px;color:var(--text3);margin-bottom:2px">${m.entity}</div>`:''}<div class="mem-content">${m.content}</div></div><span class="mem-date">${formatDate(m.created_at)}</span></div>`).join(''):'<div style="padding:14px;color:var(--text3);font-size:11px">Sin memorias.</div>';}
 async function loadMemory(){
-  try{const items=await(await apiFetch('/memory?limit=100')).json();const el=document.getElementById('memoryList');el.innerHTML=items.length?items.map(m=>`<div class="mem-item"><span class="mem-type">${m.type}</span><div style="flex:1">${m.entity?`<div style="font-size:10px;color:var(--text3);margin-bottom:2px">${m.entity}</div>`:''}<div class="mem-content">${m.content}</div></div><span class="mem-date">${formatDate(m.created_at)}</span></div>`).join(''):'<div style="padding:14px;color:var(--text3);font-size:11px">Sin memorias.</div>';}catch(e){}
+  const cached=cacheGet('memory');if(cached)renderMemory(cached);
+  try{const items=await(await apiFetch('/memory?limit=100')).json();cacheSet('memory',items);renderMemory(items);}catch(e){}
 }
 function openAddMemory(){document.getElementById('mem-type').value='nota';document.getElementById('mem-entity').value='';document.getElementById('mem-content').value='';openModal('modalMemory');}
 async function saveMemory(){const content=document.getElementById('mem-content').value.trim();if(!content)return toast('Escribe el contenido','error');try{await apiFetch('/memory',{method:'POST',body:JSON.stringify({type:document.getElementById('mem-type').value,entity:document.getElementById('mem-entity').value.trim(),content})});closeModal('modalMemory');toast('Nota guardada','success');loadMemory();loadStats();}catch(e){toast('Error','error');}}
 
 async function loadContext(){try{const d=await(await apiFetch('/context')).json();document.getElementById('ctx-entity').value=d.entity||'';document.getElementById('ctx-mission').value=d.mission||'';document.getElementById('ctx-extra').value=d.extra||'';}catch(e){}}
 async function saveContext(){try{await apiFetch('/context',{method:'POST',body:JSON.stringify({entity:document.getElementById('ctx-entity').value.trim(),mission:document.getElementById('ctx-mission').value.trim(),extra:document.getElementById('ctx-extra').value.trim()})});toast('Contexto guardado','success');loadDashboard();}catch(e){toast('Error','error');}}
+
+// ── Panel de Configuracion unificado (modelo + contexto + firma) ──
+async function loadConfigPanel(){
+  try{
+    const ctx=await(await apiFetch('/context')).json();
+    document.getElementById('cfg-ctx-entity').value=ctx.entity||'';
+    document.getElementById('cfg-ctx-mission').value=ctx.mission||'';
+    document.getElementById('cfg-ctx-extra').value=ctx.extra||'';
+  }catch(e){}
+  try{
+    const s=await(await apiFetch('/settings')).json();
+    document.getElementById('cfg-ai-model').value=s.ai_model||'groq/compound';
+    document.getElementById('cfg-signature').value=s.signature_html||'';
+  }catch(e){}
+}
+async function saveConfigPanel(){
+  try{
+    await apiFetch('/context',{method:'POST',body:JSON.stringify({
+      entity:document.getElementById('cfg-ctx-entity').value.trim(),
+      mission:document.getElementById('cfg-ctx-mission').value.trim(),
+      extra:document.getElementById('cfg-ctx-extra').value.trim()})});
+    await apiFetch('/settings',{method:'POST',body:JSON.stringify({
+      ai_model:document.getElementById('cfg-ai-model').value,
+      signature_html:document.getElementById('cfg-signature').value})});
+    toast('Configuracion guardada','success');
+    loadDashboard();
+  }catch(e){toast('Error guardando configuracion','error');}
+}
+
+// ── Asistente (chatbot) ──────────────────────────────────
+let chatHistory=JSON.parse(localStorage.getItem('chatHistory')||'[]');
+let chatBusy=false;
+function saveChatHistory(){try{localStorage.setItem('chatHistory',JSON.stringify(chatHistory.slice(-40)));}catch(e){}}
+function initChat(){
+  renderChat();
+  apiFetch('/settings').then(r=>r.json()).then(s=>{
+    document.getElementById('chatModelLabel').textContent=s.ai_model||'groq/compound';
+  }).catch(()=>{});
+}
+function appendChatBubble(role,text){
+  const wrap=document.getElementById('chatMessages');
+  const div=document.createElement('div');
+  div.className='chat-msg '+(role==='user'?'user':'bot');
+  div.textContent=text;
+  wrap.appendChild(div);
+  wrap.scrollTop=wrap.scrollHeight;
+  return div;
+}
+function renderChat(){
+  const wrap=document.getElementById('chatMessages');
+  if(!chatHistory.length){
+    wrap.innerHTML='<div style="margin:auto;text-align:center;color:var(--text3);font-size:11px;line-height:1.7">Asistente con el contexto y la firma configurados.<br>Preguntame sobre tus contactos, redaccion o estrategia de envios.</div>';
+    return;
+  }
+  wrap.innerHTML='';
+  chatHistory.forEach(m=>appendChatBubble(m.role,m.content));
+}
+function clearChat(){chatHistory=[];saveChatHistory();renderChat();}
+async function sendChat(){
+  if(chatBusy)return;
+  const input=document.getElementById('chatInput');
+  const text=input.value.trim();
+  if(!text)return;
+  input.value='';
+  chatBusy=true;
+  const btn=document.getElementById('btnChatSend');btn.disabled=true;
+  if(!chatHistory.length)document.getElementById('chatMessages').innerHTML='';
+  chatHistory.push({role:'user',content:text});
+  appendChatBubble('user',text);
+  saveChatHistory();
+
+  const bubble=appendChatBubble('bot','');
+  bubble.classList.add('streaming');
+  try{
+    const entityInfo=await getEntityContext();
+    const sysPrompt=`Eres un asistente ejecutivo experto en comunicaciones por email, en espanol. Ayudas a redactar, revisar y planificar envios. Responde de forma clara y concisa.${entityInfo}`;
+    const messages=[{role:'system',content:sysPrompt},...chatHistory.map(m=>({role:m.role,content:m.content}))];
+    const res=await apiFetch('/ai/generate',{method:'POST',body:JSON.stringify({stream:true,messages})});
+    if(!res.ok){let m='Error IA';try{m=(await res.json()).detail||m;}catch(_){}throw new Error(m);}
+    const reader=res.body.getReader(),decoder=new TextDecoder();let buffer='',acc='';
+    while(true){
+      const{done,value}=await reader.read();if(done)break;
+      buffer+=decoder.decode(value,{stream:true});
+      const lines=buffer.split('\n');buffer=lines.pop();
+      for(const line of lines){
+        const clean=line.replace(/^data: /,'').trim();
+        if(!clean||clean==='[DONE]')continue;
+        try{acc+=JSON.parse(clean).choices?.[0]?.delta?.content||'';}catch{}
+      }
+      bubble.textContent=acc;
+      document.getElementById('chatMessages').scrollTop=document.getElementById('chatMessages').scrollHeight;
+    }
+    bubble.classList.remove('streaming');
+    chatHistory.push({role:'assistant',content:acc});
+    saveChatHistory();
+  }catch(e){
+    bubble.classList.remove('streaming');
+    bubble.textContent='⚠ '+e.message;
+    chatHistory.pop(); // descartar el turno de usuario fallido del historial enviado
+    saveChatHistory();
+  }finally{chatBusy=false;btn.disabled=false;}
+}
 
 function syncColor(inputId,hexId){const picker=document.getElementById(inputId),hex=document.getElementById(hexId);if(!picker||!hex)return;picker.addEventListener('input',()=>hex.value=picker.value);hex.addEventListener('input',()=>{if(/^#[0-9a-f]{6}$/i.test(hex.value))picker.value=hex.value;});}
 async function loadStyle(){try{const d=await(await apiFetch('/settings')).json();const set=(id,k,def)=>{const el=document.getElementById(id);if(el)el.value=d[k]||def;};set('st-font','style_font_family',"Georgia,'Times New Roman',serif");set('st-size','style_font_size','16px');['primary','link','bg','text','header-bg','header-fc'].forEach(n=>{const key={'primary':'style_primary_color','link':'style_link_color','bg':'style_bg_color','text':'style_text_color','header-bg':'style_header_bg','header-fc':'style_header_color'}[n];const def={'primary':'#7ec850','link':'#2563eb','bg':'#ffffff','text':'#1a1a1a','header-bg':'#0c0f0a','header-fc':'#7ec850'}[n];set('st-'+n,key,def);set('st-'+n+'-hex',key,def);});set('st-sig','signature_html','');}catch(e){}}
