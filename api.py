@@ -36,7 +36,9 @@ def cfg():
         # Resend
         "resend_api_key": os.getenv("RESEND_API_KEY", ""),
         "sender_email":   os.getenv("SENDER_EMAIL", os.getenv("SMTP_USER", "")),
-        "sender_name":    os.getenv("SENDER_NAME", ""),
+        # El nombre del remitente es editable desde el Panel de Configuracion
+        # (setting `sender_name`); si no se guardo nada, usa la env SENDER_NAME.
+        "sender_name":    get_setting("sender_name", os.getenv("SENDER_NAME", "")),
         # IMAP
         "imap_host":      os.getenv("IMAP_HOST", ""),
         "imap_port":      int(os.getenv("IMAP_PORT", "993")),
@@ -888,59 +890,78 @@ async def _scheduler_loop():
 # ─────────────────────────────────────────────
 # APP LIFESPAN
 # ─────────────────────────────────────────────
+def _startup_background_work():
+    """
+    Trabajo de arranque BLOQUEANTE (I/O síncrona a Postgres/SQLite). Se ejecuta
+    en un hilo aparte vía asyncio.to_thread para NO bloquear el event loop:
+    de lo contrario uvicorn no abriría el socket hasta terminar la importación
+    de LeadForge (miles de UPSERT remotos), causando ERR_EMPTY_RESPONSE.
+    """
+    # Auto-sync de LeadForge: importa leadforge.db → contacts al arrancar.
+    # Idempotente (UPSERT por email). Best-effort: si falla, la app sigue.
+    try:
+        if os.path.exists(_leadforge_db_path()):
+            res = import_leadforge_to_contacts()
+            logger.info(f"[startup] LeadForge auto-sync: "
+                        f"+{res.get('imported',0)} nuevos, "
+                        f"{res.get('updated',0)} actualizados "
+                        f"(run {res.get('last_run','')})")
+        else:
+            logger.info("[startup] leadforge.db no presente — auto-sync omitido.")
+    except Exception as e:
+        logger.warning(f"[startup] LeadForge auto-sync falló (no crítico): {e}")
+    # Al arrancar: solo loguear cuántos emails están demorados, NO enviarlos.
+    # El usuario decide desde la Agenda de Envío.
+    try:
+        db = get_db()
+        try:
+            now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+            delayed = db.execute(text("""
+                SELECT COUNT(*) as n FROM campaign_emails ce
+                JOIN campaigns c ON c.id = ce.campaign_id
+                WHERE c.status = 'scheduled' AND ce.status = 'approved'
+                  AND ce.sent_at IS NULL AND ce.scheduled_at IS NOT NULL
+                  AND ce.scheduled_at <= :now
+            """), {"now": now_str}).fetchone()
+            n = dict_from_row(delayed)["n"] if delayed else 0
+            if n > 0:
+                logger.warning(f"[startup] {n} email(s) demorados detectados. El usuario debe enviarlos desde la Agenda.")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"[startup] No se pudo verificar emails demorados: {e}")
+
+
+async def _startup_tasks():
+    """Corre el trabajo de arranque bloqueante en un hilo, sin frenar el serving."""
+    try:
+        await asyncio.to_thread(_startup_background_work)
+    except Exception as e:
+        logger.error(f"[startup] Error en tareas de arranque: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app):
     task = None
+    bg = None
     try:
         init_db()
         logger.info("Aplicación iniciada correctamente")
-
-        # Auto-sync de LeadForge: importa leadforge.db → contacts al arrancar.
-        # Idempotente (UPSERT por email). Best-effort: si falla, la app sigue.
-        # En remoto (Render) cada deploy con .db nuevo dispara esta importación;
-        # en local corre en cada reinicio del contenedor.
-        try:
-            if os.path.exists(_leadforge_db_path()):
-                res = import_leadforge_to_contacts()
-                logger.info(f"[startup] LeadForge auto-sync: "
-                            f"+{res.get('imported',0)} nuevos, "
-                            f"{res.get('updated',0)} actualizados "
-                            f"(run {res.get('last_run','')})")
-            else:
-                logger.info("[startup] leadforge.db no presente — auto-sync omitido.")
-        except Exception as e:
-            logger.warning(f"[startup] LeadForge auto-sync falló (no crítico): {e}")
-        # Al arrancar: solo loguear cuántos emails están demorados, NO enviarlos.
-        # El usuario decide desde la Agenda de Envío.
-        try:
-            db = get_db()
-            try:
-                now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
-                delayed = db.execute(text("""
-                    SELECT COUNT(*) as n FROM campaign_emails ce
-                    JOIN campaigns c ON c.id = ce.campaign_id
-                    WHERE c.status = 'scheduled' AND ce.status = 'approved'
-                      AND ce.sent_at IS NULL AND ce.scheduled_at IS NOT NULL
-                      AND ce.scheduled_at <= :now
-                """), {"now": now_str}).fetchone()
-                n = dict_from_row(delayed)["n"] if delayed else 0
-                if n > 0:
-                    logger.warning(f"[startup] {n} email(s) demorados detectados. El usuario debe enviarlos desde la Agenda.")
-            finally:
-                db.close()
-        except Exception as e:
-            logger.warning(f"[startup] No se pudo verificar emails demorados: {e}")
+        # El trabajo pesado (LeadForge sync, chequeo de demorados) corre en
+        # background para que uvicorn empiece a servir HTTP de inmediato.
+        bg = asyncio.create_task(_startup_tasks())
         # Iniciar loop de scheduler en background (solo envía en horario, no los demorados)
         task = asyncio.create_task(_scheduler_loop())
     except Exception as e:
         logger.error(f"Error al iniciar la aplicación: {e}")
     yield
-    if task:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+    for t in (task, bg):
+        if t:
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
     logger.info("Aplicación cerrada")
 
 app = FastAPI(title="Asistente Ejecutivo API", lifespan=lifespan)

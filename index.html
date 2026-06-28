@@ -70,6 +70,30 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .cfg-field label{display:block;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:5px}
 .cfg-field input,.cfg-field select,.cfg-field textarea{width:100%;background:transparent;border:none;outline:none;font-family:var(--mono);font-size:12px;color:var(--text);caret-color:var(--green);resize:none}
 .cfg-field input::placeholder,.cfg-field textarea::placeholder{color:var(--text3)}
+/* Autofill del navegador: forzar el tema oscuro. El fondo amarillo/blanco que
+   pinta Chrome/Safari no se puede sobreescribir con `background`; se enmascara
+   con un box-shadow inset enorme y el texto con -webkit-text-fill-color. El
+   transition-delay largo evita el flash blanco mientras el navegador autollena. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill{
+  -webkit-text-fill-color:var(--text)!important;
+  caret-color:var(--green)!important;
+  /* Los inputs viven sobre paneles var(--bg2) (login, .field, .cfg-field);
+     el inset enmascara el fondo amarillo/blanco del autofill con ese tono. */
+  -webkit-box-shadow:0 0 0 1000px var(--bg2) inset!important;
+          box-shadow:0 0 0 1000px var(--bg2) inset!important;
+  transition:background-color 9999s ease-in-out 0s!important;
+  font-family:var(--mono)!important;
+}
+/* .ctx-input (panel de Configuracion) tiene fondo propio var(--bg3). */
+.ctx-input:-webkit-autofill{
+  -webkit-box-shadow:0 0 0 1000px var(--bg3) inset!important;
+          box-shadow:0 0 0 1000px var(--bg3) inset!important;
+}
 .cfg-field select option{background:var(--bg2)}
 
 .btn{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;letter-spacing:.05em;border-radius:6px;padding:7px 13px;cursor:pointer;transition:opacity .15s,transform .1s;border:none;white-space:nowrap}
@@ -323,22 +347,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M5 6h6M5 9h6M5 12h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     Configuracion
   </div>
-  <div class="nav-item" onclick="go('context')">
-    <svg viewBox="0 0 16 16" fill="none"><path d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2z" stroke="currentColor" stroke-width="1.2"/><path d="M8 7v5M8 5v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-    Contexto
-  </div>
   <div class="nav-item" onclick="go('estilo')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M3 13l4-10 4 10M5 9h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     Estilo y Firma
   </div>
-
   <div class="nav-item" onclick="go('campaigns')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M2 3h12v2H2zM2 7h8v2H2zM2 11h10v2H2z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><circle cx="13" cy="8" r="2.5" stroke="currentColor" stroke-width="1.1"/><path d="M12 7.5l1 1 1.5-1.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
     Campanas
-  </div>
-  <div class="nav-item" onclick="go('settings')">
-    <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-    SMTP / IMAP
   </div>
   <div class="status-indicator">
     <div style="font-size:10px;color:var(--text3);margin-bottom:6px;letter-spacing:.06em">CONEXION</div>
@@ -576,28 +591,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- CONTEXTO -->
-<div class="view" id="view-context">
-  <div class="ctx-block">
-    <div class="ctx-title">Identidad y Mision</div>
-    <div class="ctx-hint">El agente incorporara este contexto automaticamente al redactar y responder emails. Define quien es la entidad y cual es su mision o campana activa.</div>
-    <label class="ctx-label">Entidad — quienes somos</label>
-    <textarea class="ctx-input" id="ctx-entity" rows="4" placeholder="Ej: Agraound es una editorial de desarrollo integrada por AETHERYON Systems como desarrolladora de software y OpenAETH como comunidad colaborativa..."></textarea>
-  </div>
-  <div class="ctx-block">
-    <label class="ctx-label">Mision actual — campana o foco</label>
-    <textarea class="ctx-input" id="ctx-mission" rows="3" placeholder="Ej: Comunicar la campana de crowdfunding y promocionar los tiers de financiamiento del proyecto..."></textarea>
-  </div>
-  <div class="ctx-block">
-    <label class="ctx-label">Contexto adicional — instrucciones para el agente</label>
-    <textarea class="ctx-input" id="ctx-extra" rows="3" placeholder="Ej: Siempre mencionar el link de la campana. Tono entusiasta pero profesional. No prometer fechas de entrega..."></textarea>
-  </div>
-  <div style="display:flex;gap:8px;margin-top:.5rem">
-    <button class="btn btn-green" onclick="saveContext()">Guardar contexto</button>
-    <button class="btn btn-ghost" onclick="loadContext()">Descartar cambios</button>
-  </div>
-</div>
-
 <!-- ESTILO Y FIRMA -->
 <div class="view" id="view-estilo">
   <div class="resp-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
@@ -683,45 +676,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- SETTINGS -->
-<div class="view" id="view-settings">
-  <div class="section-label">SMTP — Envio</div>
-  <div class="panel" style="margin-bottom:1rem">
-    <div class="grid2">
-      <div class="cfg-field" style="grid-column:1/-1;border-right:none;border-top:none">
-        <label>Metodo</label>
-        <select id="s-smtp-method">
-          <option value="smtp_ssl">SSL directo — puerto 465</option>
-          <option value="smtp_tls">STARTTLS — puerto 587</option>
-          <option value="gmail">Gmail App Password</option>
-          <option value="outlook">Outlook / Office 365</option>
-        </select>
-      </div>
-      <div class="cfg-field" style="border-top:none"><label>SMTP Host</label><input type="text" id="s-smtp-host" placeholder="mail.dominio.com"/></div>
-      <div class="cfg-field" style="border-top:none"><label>Puerto</label><input type="number" id="s-smtp-port" placeholder="465"/></div>
-      <div class="cfg-field"><label>Email / Usuario</label><input type="email" id="s-smtp-user" placeholder="contacto@dominio.com"/></div>
-      <div class="cfg-field"><label>Contrasena</label><input type="password" id="s-smtp-pass" placeholder="Dejar vacio para no cambiar"/></div>
-      <div class="cfg-field full"><label>Nombre del remitente</label><input type="text" id="s-sender-name" placeholder="Mi Empresa"/></div>
-    </div>
-  </div>
-  <div class="section-label">IMAP — Lectura de bandeja</div>
-  <div class="panel" style="margin-bottom:1.5rem">
-    <div class="grid2">
-      <div class="cfg-field" style="border-top:none"><label>IMAP Host</label><input type="text" id="s-imap-host" placeholder="mail.dominio.com"/></div>
-      <div class="cfg-field" style="border-top:none"><label>Puerto</label><input type="number" id="s-imap-port" placeholder="993"/></div>
-      <div class="cfg-field"><label>Usuario</label><input type="email" id="s-imap-user" placeholder="contacto@dominio.com"/></div>
-      <div class="cfg-field"><label>Contrasena</label><input type="password" id="s-imap-pass" placeholder="Dejar vacio para no cambiar"/></div>
-    </div>
-  </div>
-  <div style="display:flex;gap:8px">
-    <button class="btn btn-green" onclick="saveSettings()" id="btnSaveSettings">Guardar configuracion</button>
-    <button class="btn btn-ghost" onclick="testAPI()">Probar conexion</button>
-  </div>
-  <div id="settingsResult" style="display:none;margin-top:12px;padding:12px 14px;border-radius:var(--r);font-size:12px;border:1px solid;line-height:1.6"></div>
-</div>
-
 <!-- CONFIGURACION (panel unificado) -->
 <div class="view" id="view-config">
+  <div class="ctx-block">
+    <div class="ctx-title">Remitente</div>
+    <div class="ctx-hint">Nombre que aparece como remitente en los emails enviados. El correo y las credenciales SMTP/IMAP se configuran por variables de entorno.</div>
+    <label class="ctx-label">Nombre del remitente</label>
+    <input class="ctx-input" type="text" id="cfg-sender-name" placeholder="Ej: Agraound · Comunicaciones"/>
+  </div>
   <div class="ctx-block">
     <div class="ctx-title">Modelo de IA</div>
     <div class="ctx-hint">Modelo usado por el Asistente y por la redaccion de emails con IA. Se aplica de inmediato a las nuevas generaciones.</div>
@@ -736,19 +698,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
   <div class="ctx-block">
     <div class="ctx-title">Contexto del agente</div>
-    <div class="ctx-hint">El agente incorpora este contexto automaticamente al redactar, responder y conversar. Es el mismo contexto de la vista Contexto.</div>
+    <div class="ctx-hint">El agente incorpora este contexto automaticamente al redactar, responder y conversar.</div>
     <label class="ctx-label">Entidad — quienes somos</label>
     <textarea class="ctx-input" id="cfg-ctx-entity" rows="3" placeholder="Ej: Agraound es una editorial de desarrollo..."></textarea>
     <label class="ctx-label" style="margin-top:12px">Mision actual — campana o foco</label>
     <textarea class="ctx-input" id="cfg-ctx-mission" rows="2" placeholder="Ej: Comunicar la campana de crowdfunding..."></textarea>
     <label class="ctx-label" style="margin-top:12px">Contexto adicional — instrucciones</label>
     <textarea class="ctx-input" id="cfg-ctx-extra" rows="2" placeholder="Ej: Tono entusiasta pero profesional..."></textarea>
-  </div>
-  <div class="ctx-block">
-    <div class="ctx-title">Firma</div>
-    <div class="ctx-hint">Firma HTML que se agrega al pie de los emails. Es la misma firma de la vista Estilo y Firma.</div>
-    <label class="ctx-label">Firma HTML</label>
-    <textarea class="ctx-input" id="cfg-signature" rows="4" placeholder="&lt;strong&gt;Nombre&lt;/strong&gt;&lt;br&gt;Cargo | Empresa&lt;br&gt;&lt;a href='https://...'&gt;web&lt;/a&gt;"></textarea>
   </div>
   <div style="display:flex;gap:8px;margin-top:.5rem">
     <button class="btn btn-green" onclick="saveConfigPanel()">Guardar configuracion</button>
@@ -1441,7 +1397,7 @@ function resolvePrompt(ok){
 
 const pageMap={dashboard:'Dashboard',agenda:'Agenda',crm:'CRM',compose:'Redactar',inbox:'Bandeja',
   chat:'Asistente',supervision:'Supervision',memory:'Memoria',config:'Configuracion',
-  context:'Contexto',estilo:'Estilo',settings:'SMTP / IMAP',campaigns:'Campanas'};
+  estilo:'Estilo',campaigns:'Campanas'};
 
 function toggleSidebar(){document.body.classList.toggle('nav-open');}
 
@@ -1461,8 +1417,6 @@ function go(view){
   if(view==='inbox')      loadInbox();
   if(view==='supervision')loadSupervision();
   if(view==='memory')     loadMemory();
-  if(view==='settings')   loadSettings();
-  if(view==='context')    loadContext();
   if(view==='estilo')     loadStyle();
   if(view==='dashboard')  loadDashboard();
   if(view==='campaigns')  showCampaignList();
@@ -1505,7 +1459,7 @@ async function loadDashboard(){
       el.innerHTML=(ctx.entity?`<div style="font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.6"><b style="color:var(--text3);font-size:9px;letter-spacing:.1em;text-transform:uppercase">Entidad</b><br>${ctx.entity.substring(0,120)}...</div>`:'')+
         (ctx.mission?`<div style="font-size:11px;color:var(--green);line-height:1.6"><b style="color:var(--text3);font-size:9px;letter-spacing:.1em;text-transform:uppercase">Mision</b><br>${ctx.mission}</div>`:'');
     }else{
-      el.innerHTML=`<div style="font-size:11px;color:var(--text3)">Sin contexto. <span style="color:var(--green);cursor:pointer" onclick="go('context')">Configurar -></span></div>`;
+      el.innerHTML=`<div style="font-size:11px;color:var(--text3)">Sin contexto. <span style="color:var(--green);cursor:pointer" onclick="go('config')">Configurar -></span></div>`;
     }
   }catch(e){}
   try{
@@ -1814,10 +1768,14 @@ const intentPrompts={
 };
 
 async function composeEmail(){
-  const to=document.getElementById('c-to').value.trim();
+  const mainTo=document.getElementById('c-to').value.trim();
   const subject=document.getElementById('c-subject').value.trim();
   const prompt=document.getElementById('c-prompt').value.trim();
-  if(!to)return toast('Ingresa el destinatario','error');
+  // El destinatario puede venir del campo de texto O de los contactos
+  // agregados (chips en extraRecipients). Para generar usamos el primero
+  // disponible como referencia; el envio ya combina todos los destinatarios.
+  const to=mainTo||[...extraRecipients][0]||'';
+  if(!to)return toast('Ingresa o selecciona al menos un destinatario','error');
   if(!subject)return toast('Ingresa el asunto','error');
   if(!prompt)return toast('Describe el email','error');
 
@@ -1910,10 +1868,12 @@ async function previewEmail(){
 async function openSendConfirm(){
   const bodyText=document.getElementById('composedBody').textContent.trim();
   if(!bodyText||bodyText.includes('aparecera aqui'))return toast('Genera un email primero','error');
-  const to=document.getElementById('c-to').value.trim(),subject=document.getElementById('c-subject').value.trim();
-  if(!to||!subject)return toast('Completa destinatario y asunto','error');
+  const mainTo=document.getElementById('c-to').value.trim(),subject=document.getElementById('c-subject').value.trim();
+  // Destinatarios = campo de texto + contactos agregados (chips).
+  const allRecipients=[mainTo,...extraRecipients].filter((v,i,a)=>v&&a.indexOf(v)===i);
+  if(!allRecipients.length||!subject)return toast('Completa destinatario y asunto','error');
   try{const d=await(await apiFetch('/config')).json();document.getElementById('m-via').textContent=(d.sender_name||d.sender_email||'');}catch(e){}
-  document.getElementById('m-to').textContent=to;
+  document.getElementById('m-to').textContent=allRecipients.length>1?`${allRecipients[0]} +${allRecipients.length-1} mas`:allRecipients[0];
   document.getElementById('m-subject').textContent=subject;
   const attEl=document.getElementById('m-attachments');
   if(_pendingAttachments.length){
@@ -2129,10 +2089,7 @@ async function loadMemory(){
 function openAddMemory(){document.getElementById('mem-type').value='nota';document.getElementById('mem-entity').value='';document.getElementById('mem-content').value='';openModal('modalMemory');}
 async function saveMemory(){const content=document.getElementById('mem-content').value.trim();if(!content)return toast('Escribe el contenido','error');try{await apiFetch('/memory',{method:'POST',body:JSON.stringify({type:document.getElementById('mem-type').value,entity:document.getElementById('mem-entity').value.trim(),content})});closeModal('modalMemory');toast('Nota guardada','success');loadMemory();loadStats();}catch(e){toast('Error','error');}}
 
-async function loadContext(){try{const d=await(await apiFetch('/context')).json();document.getElementById('ctx-entity').value=d.entity||'';document.getElementById('ctx-mission').value=d.mission||'';document.getElementById('ctx-extra').value=d.extra||'';}catch(e){}}
-async function saveContext(){try{await apiFetch('/context',{method:'POST',body:JSON.stringify({entity:document.getElementById('ctx-entity').value.trim(),mission:document.getElementById('ctx-mission').value.trim(),extra:document.getElementById('ctx-extra').value.trim()})});toast('Contexto guardado','success');loadDashboard();}catch(e){toast('Error','error');}}
-
-// ── Panel de Configuracion unificado (modelo + contexto + firma) ──
+// ── Panel de Configuracion unificado (modelo + contexto) ──
 async function loadConfigPanel(){
   try{
     const ctx=await(await apiFetch('/context')).json();
@@ -2143,7 +2100,7 @@ async function loadConfigPanel(){
   try{
     const s=await(await apiFetch('/settings')).json();
     document.getElementById('cfg-ai-model').value=s.ai_model||'groq/compound';
-    document.getElementById('cfg-signature').value=s.signature_html||'';
+    document.getElementById('cfg-sender-name').value=s.sender_name||'';
   }catch(e){}
 }
 async function saveConfigPanel(){
@@ -2154,7 +2111,7 @@ async function saveConfigPanel(){
       extra:document.getElementById('cfg-ctx-extra').value.trim()})});
     await apiFetch('/settings',{method:'POST',body:JSON.stringify({
       ai_model:document.getElementById('cfg-ai-model').value,
-      signature_html:document.getElementById('cfg-signature').value})});
+      sender_name:document.getElementById('cfg-sender-name').value.trim()})});
     toast('Configuracion guardada','success');
     loadDashboard();
   }catch(e){toast('Error guardando configuracion','error');}
@@ -2246,9 +2203,7 @@ Ejemplo con **negrita** y *italica* y [enlace](https://ejemplo.com).
 
 Saludos,`;const data={body:sampleBody,font_family:document.getElementById('st-font').value,font_size:document.getElementById('st-size').value,primary_color:document.getElementById('st-primary-hex').value,link_color:document.getElementById('st-link-hex').value,bg_color:document.getElementById('st-bg-hex').value,text_color:document.getElementById('st-text-hex').value,header_bg:document.getElementById('st-header-bg-hex').value,header_color:document.getElementById('st-header-fc-hex').value,signature_html:document.getElementById('st-sig').value};try{const r=await apiFetch('/preview-email',{method:'POST',body:JSON.stringify(data)});const d=await r.json();document.getElementById('stylePreview').srcdoc=d.html;}catch(e){toast('Error preview','error');}}
 
-async function loadSettings(){try{const d=await(await apiFetch('/config')).json();document.getElementById('s-smtp-method')&&(document.getElementById('s-smtp-method').value=d.smtp_method||'smtp_ssl');document.getElementById('s-smtp-host').value=d.smtp_host||'';document.getElementById('s-smtp-port').value=d.smtp_port||'465';document.getElementById('s-smtp-user').value=d.smtp_user||'';document.getElementById('s-sender-name').value=d.sender_name||'';document.getElementById('s-imap-host').value=d.imap_host||'';document.getElementById('s-imap-port').value=d.imap_port||'993';document.getElementById('s-imap-user').value=d.imap_user||'';}catch(e){}}
-async function saveSettings(){const btn=document.getElementById('btnSaveSettings');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span>';const data={sender_name:document.getElementById('s-sender-name').value.trim(),imap_host:document.getElementById('s-imap-host').value.trim(),imap_port:document.getElementById('s-imap-port').value.trim(),imap_user:document.getElementById('s-imap-user').value.trim()};const ip=document.getElementById('s-imap-pass').value;if(ip)data.imap_pass=ip;try{await apiFetch('/config',{method:'POST',body:JSON.stringify(data)});toast('Guardado. Credenciales SMTP/Resend se configuran en Variables de Entorno de Render','success');checkStatus();}catch(e){toast('Error','error');}finally{btn.disabled=false;btn.textContent='Guardar';}}
-async function testAPI(){const res=document.getElementById('settingsResult');res.style.display='block';res.style.background='var(--bg3)';res.style.borderColor='var(--border)';res.style.color='var(--text2)';res.textContent='Probando...';try{const d=await(await apiFetch('/api/status')).json();res.style.borderColor='rgba(126,200,80,.2)';res.style.color='var(--text2)';res.innerHTML=`<span style="color:var(--green)">API online</span> · Resend: ${d.resend_configured?'SI':'NO'} · Remitente: ${d.sender_email||'no configurado'}`;}catch(e){res.style.borderColor='rgba(192,80,80,.3)';res.style.color='var(--red)';res.textContent='Sin conexion: '+e.message;}}
+
 
 // CAMPAIGNS
 let campGenState = {
