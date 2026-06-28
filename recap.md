@@ -27,6 +27,16 @@ Bitácora de trabajo para iterar sobre el código. Anotaciones de Claude para re
 
 ## Historial de cambios
 
+### 2026-06-19 — Fix envío de emails con adjuntos (Supabase Storage)
+**Problema:** al adjuntar un archivo (p. ej. PDF), el email **no se enviaba**.
+**Causa raíz:** `send_resend()` (`api.py:~559`) generaba una *signed URL* con `_storage_signed_url()` y se la pasaba a Resend como `attachment.path`. La URL estaba mal construida: Supabase devuelve `signedURL` como ruta relativa a la raíz de Storage (`/object/sign/...`) y el código anteponía solo el host, **omitiendo el prefijo obligatorio `/storage/v1`**. La URL daba 404; Resend fallaba al descargarla en el momento del envío y **reventaba el email completo** (el fallo ocurría dentro de `resend.Emails.send()`, fuera del `try/except` que solo logueaba un warning).
+**Fix (`api.py`):**
+1. Nuevo helper `_storage_download(bucket, path)` — descarga bytes vía REST `GET /storage/v1/object/{bucket}/{path}`, simétrico a `_storage_upload()`.
+2. `send_resend()` ahora **descarga el archivo de Storage y lo envía a Resend como `content` base64** (usa el `base64` ya importado), en vez de pasar una URL externa. Elimina la dependencia del fetch externo y la expiración de 30 min de la signed URL. Límite Resend: 40 MB/email.
+3. Se quitó el `try/except` que silenciaba fallos de adjuntos: si un adjunto no se puede descargar, el envío falla con error claro (el llamador `/send-email` ya reporta el error por destinatario).
+4. (Defensivo) `_storage_signed_url()` corregido para anteponer `/storage/v1` correctamente por si vuelve a usarse; idempotente y respeta URLs absolutas.
+**Reenvío:** garantizado por construcción — el envío lee por `attachment_id → storage_path` y solo **descarga** el objeto existente; nunca re-sube. Un PDF ya en Storage se reutiliza tal cual.
+
 ### 2026-06-04 — Fix módulo Supervisión (commit `f53a0e5`)
 **Problema:** la columna "Respuesta" siempre mostraba "No" aunque el contacto respondiera.
 **Causa raíz:** dependía del flag `inbox_cache.replied=1`, que solo se activa manualmente desde la Bandeja y semánticamente significa "yo respondí", no "me respondieron". El sync IMAP nunca lo activaba.

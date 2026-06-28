@@ -6,12 +6,14 @@ Database: SQLAlchemy + IPv4 forced connection for Supabase
 """
 from fastapi import FastAPI, HTTPException, Request, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, scoped_session
 import os, imaplib, email as email_lib
+from dotenv import load_dotenv
+load_dotenv()
 import re as _re
 import socket as _socket
 import psycopg2
@@ -20,9 +22,9 @@ from email.header import decode_header
 from datetime import datetime, timedelta
 import uvicorn, logging, re, secrets, hashlib, hmac, json, time, uuid, base64
 import asyncio
+import httpx
+import yaml
 import resend
-from supabase import create_client, Client
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -151,9 +153,6 @@ def create_db_engine():
 engine = None
 SessionLocal = None
 
-# Cliente global de Supabase Storage
-supabase_client: Client = None
-
 def init_db():
     """Inicializa la conexión a la base de datos (no crea tablas, asume que ya existen)"""
     global engine, SessionLocal
@@ -179,22 +178,103 @@ def get_db():
         raise RuntimeError("Base de datos no inicializada")
     return SessionLocal()
 
-def init_supabase():
-    global supabase_client
-    c = cfg()
-    if c["supabase_url"] and c["supabase_service_key"]:
-        try:
-            supabase_client = create_client(c["supabase_url"], c["supabase_service_key"])
-            logger.info("Supabase Storage inicializado correctamente")
-        except Exception as e:
-            supabase_client = None
-            logger.error(f"Error inicializando Supabase Storage: {e}")
-    else:
-        supabase_client = None
-        logger.warning("SUPABASE_URL o SUPABASE_SERVICE_KEY no configuradas — adjuntos no disponibles")
+# ─────────────────────────────────────────────
+# SUPABASE STORAGE — helpers REST con httpx
+# Usa la service_role key (JWT, formato eyJ...) — NO la publishable key
+# ni la nueva Secret Key (sb_secret_), que no funcionan con Storage.
+# ─────────────────────────────────────────────
 
-def get_supabase():
-    return supabase_client
+def _storage_cfg():
+    c = cfg()
+    if not c["supabase_url"] or not c["supabase_service_key"]:
+        return None
+    return c
+
+def _storage_headers():
+    c = _storage_cfg()
+    if not c:
+        return None
+    return {"Authorization": f"Bearer {c['supabase_service_key']}"}
+
+def _storage_upload(bucket: str, path: str, file_bytes: bytes, content_type: str):
+    """Sube un archivo a Supabase Storage vía REST.
+    La clave debe ser la service_role (JWT), no publishable ni sb_secret_."""
+
+    c = _storage_cfg()
+    if not c:
+        raise RuntimeError("Supabase Storage no configurado")
+    url = f"{c['supabase_url']}/storage/v1/object/{bucket}/{path}"
+    headers = _storage_headers()
+    headers["Content-Type"] = content_type or "application/octet-stream"
+    headers["x-upsert"] = "true"
+    r = httpx.post(url, content=file_bytes, headers=headers, timeout=60)
+    if r.status_code == 403:
+        raise RuntimeError("Credenciales de Supabase Storage inválidas — revisa SUPABASE_SERVICE_KEY")
+    if r.status_code == 413:
+        mb = len(file_bytes) / 1048576
+        raise RuntimeError(
+            f"El archivo ({mb:.1f} MB) supera el límite del bucket '{bucket}' en Supabase. "
+            f"Subí el límite en Supabase → Storage → bucket '{bucket}' → Edit bucket → "
+            f"'File size limit' (o el global en Project Settings → Storage)."
+        )
+    if not r.is_success:
+        body = r.text[:500]
+        raise RuntimeError(f"Supabase Storage respondio {r.status_code}: {body}")
+    return True
+
+def _storage_signed_url(bucket: str, path: str, expires_in: int = 1800) -> str:
+    """Crea una signed URL temporal para un archivo. Retorna la URL completa."""
+    c = _storage_cfg()
+    if not c:
+        raise RuntimeError("Supabase Storage no configurado")
+    url = f"{c['supabase_url']}/storage/v1/object/sign/{bucket}/{path}"
+    headers = _storage_headers()
+    headers["Content-Type"] = "application/json"
+    r = httpx.post(url, json={"expiresIn": str(expires_in)}, headers=headers, timeout=15)
+    if r.status_code == 403:
+        raise RuntimeError("Credenciales de Supabase Storage inválidas — revisa SUPABASE_SERVICE_KEY")
+    r.raise_for_status()
+    data = r.json()
+    signed = data.get("signedURL") or data.get("signedUrl", "")
+    if not signed:
+        raise RuntimeError(f"Respuesta inesperada de Storage: {data}")
+    if signed.startswith("http"):
+        return signed
+    # Supabase devuelve signedURL como ruta relativa a la raíz de Storage
+    # (p. ej. "/object/sign/...?token=..."); hay que anteponer el host + el
+    # prefijo "/storage/v1" para obtener una URL descargable.
+    base = c["supabase_url"].rstrip("/")
+    path_part = signed if signed.startswith("/") else f"/{signed}"
+    if not path_part.startswith("/storage/v1"):
+        path_part = f"/storage/v1{path_part}"
+    return f"{base}{path_part}"
+
+def _storage_download(bucket: str, path: str) -> bytes:
+    """Descarga los bytes de un archivo de Supabase Storage vía REST."""
+    c = _storage_cfg()
+    if not c:
+        raise RuntimeError("Supabase Storage no configurado")
+    url = f"{c['supabase_url']}/storage/v1/object/{bucket}/{path}"
+    headers = _storage_headers()
+    r = httpx.get(url, headers=headers, timeout=30)
+    if r.status_code == 403:
+        raise RuntimeError("Credenciales de Supabase Storage inválidas — revisa SUPABASE_SERVICE_KEY")
+    if not r.is_success:
+        raise RuntimeError(f"Supabase Storage respondio {r.status_code}: {r.text[:300]}")
+    return r.content
+
+def _storage_delete(bucket: str, paths: list):
+    """Elimina archivos de Supabase Storage."""
+    c = _storage_cfg()
+    if not c:
+        raise RuntimeError("Supabase Storage no configurado")
+    url = f"{c['supabase_url']}/storage/v1/object/{bucket}"
+    headers = _storage_headers()
+    r = httpx.delete(url, json={"prefixes": paths}, headers=headers, timeout=15)
+    if r.status_code == 403:
+        raise RuntimeError("Credenciales de Supabase Storage inválidas — revisa SUPABASE_SERVICE_KEY")
+    r.raise_for_status()
+    return True
 
 def dict_from_row(row):
     """Convierte una fila de SQLAlchemy a diccionario. Retorna None si row es None."""
@@ -527,7 +607,9 @@ def send_resend(to: str, subject: str, body_plain: str, body_html: str, reply_to
     if reply_to_mid:
         params["headers"] = {"In-Reply-To": reply_to_mid, "References": reply_to_mid}
 
-    # Attachments via Supabase Storage signed URLs
+    # Attachments: se descargan de Supabase Storage y se envían como base64.
+    # Se lee por attachment_id → storage_path; nunca se re-sube nada (reenvíos
+    # reutilizan el objeto existente en Storage).
     if attachment_ids:
         db = get_db()
         try:
@@ -536,21 +618,16 @@ def send_resend(to: str, subject: str, body_plain: str, body_html: str, reply_to
             ), {"ids": attachment_ids}).fetchall())
         finally:
             db.close()
-        if rows:
-            supabase = get_supabase()
-            if supabase:
-                atts = []
-                for row in rows:
-                    signed = supabase.storage.from_(c["storage_bucket"]).create_signed_url(
-                        row["storage_path"], 1800
-                    )
-                    atts.append({
-                        "filename": row["filename"],
-                        "path": signed["signedURL"],
-                    })
-                params["attachments"] = atts
-            else:
-                logger.warning("Supabase no disponible — saltando adjuntos")
+        atts = []
+        for row in rows:
+            file_bytes = _storage_download(c["storage_bucket"], row["storage_path"])
+            atts.append({
+                "filename": row["filename"],
+                "content": base64.b64encode(file_bytes).decode("ascii"),
+                "content_type": row["content_type"],
+            })
+        if atts:
+            params["attachments"] = atts
 
     response = resend.Emails.send(params)
     email_id = response.id if hasattr(response, "id") else str(response)
@@ -816,8 +893,23 @@ async def lifespan(app):
     task = None
     try:
         init_db()
-        init_supabase()
         logger.info("Aplicación iniciada correctamente")
+
+        # Auto-sync de LeadForge: importa leadforge.db → contacts al arrancar.
+        # Idempotente (UPSERT por email). Best-effort: si falla, la app sigue.
+        # En remoto (Render) cada deploy con .db nuevo dispara esta importación;
+        # en local corre en cada reinicio del contenedor.
+        try:
+            if os.path.exists(_leadforge_db_path()):
+                res = import_leadforge_to_contacts()
+                logger.info(f"[startup] LeadForge auto-sync: "
+                            f"+{res.get('imported',0)} nuevos, "
+                            f"{res.get('updated',0)} actualizados "
+                            f"(run {res.get('last_run','')})")
+            else:
+                logger.info("[startup] leadforge.db no presente — auto-sync omitido.")
+        except Exception as e:
+            logger.warning(f"[startup] LeadForge auto-sync falló (no crítico): {e}")
         # Al arrancar: solo loguear cuántos emails están demorados, NO enviarlos.
         # El usuario decide desde la Agenda de Envío.
         try:
@@ -1038,6 +1130,203 @@ def list_contacts(_: str = Depends(require_auth)):
         return rows_to_list(rows)
     finally:
         db.close()
+
+# ─────────────────────────────────────────────
+# LEADFORGE — puente leadforge.db (SQLite) → contacts (Postgres)
+#
+# LeadForge escribe leadforge.db en la raíz de este repo (un lead por email,
+# acumulativo). El deploy local lo lee del folder; el remoto lo recibe por
+# git push. La importación es idempotente: UPSERT por email preservando los
+# campos del CRM que ya editó el usuario (status, notes, next_followup…).
+# La segmentación por categoría se resuelve leyendo leadforge.db directamente
+# (fuente de verdad), no el campo libre `tags`.
+# ─────────────────────────────────────────────
+import sqlite3 as _sqlite3
+
+def _leadforge_db_path() -> str:
+    """Ruta de leadforge.db. Override con env LEADFORGE_DB; default = raíz del repo."""
+    return os.getenv("LEADFORGE_DB", os.path.join(BASE, "leadforge.db"))
+
+
+def _leadforge_connect():
+    """Abre leadforge.db en modo solo-lectura. None si no existe."""
+    path = _leadforge_db_path()
+    if not os.path.exists(path):
+        return None
+    conn = _sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    conn.row_factory = _sqlite3.Row
+    return conn
+
+
+def _lead_tags(row) -> str:
+    """Tags para el CRM: marca de origen + categoría + ciudad + último run."""
+    parts = ["leadforge"]
+    for key in ("categoria", "ciudad", "last_seen_run"):
+        val = (row[key] or "").strip() if row[key] else ""
+        if val:
+            parts.append(val)
+    return ", ".join(parts)
+
+
+def _lead_notes(row) -> str:
+    """Contexto del lead para el panel CRM (sólo se escribe al crear el contacto)."""
+    bits = []
+    if row["website"]:
+        bits.append(f"Web: {row['website']}")
+    loc = ", ".join(p for p in (row["ciudad"], row["provincia"]) if p)
+    if loc:
+        bits.append(f"Ubicación: {loc}")
+    if row["rating"] is not None:
+        bits.append(f"Rating: {row['rating']} ({row['cantidad_reviews'] or 0} reviews)")
+    if row["maps_link"]:
+        bits.append(f"Maps: {row['maps_link']}")
+    bits.append(f"Origen: LeadForge {row['last_seen_run']}")
+    return " · ".join(bits)
+
+
+def import_leadforge_to_contacts() -> dict:
+    """
+    Vuelca los leads de leadforge.db a la tabla contacts (Postgres) por UPSERT.
+
+    - Nuevo email      → INSERT con datos completos + tags + notes.
+    - Email existente  → actualiza company/phone/tags/website-en-context y
+                         refresca updated_at, SIN tocar status/notes/next_followup
+                         (lo que el usuario haya trabajado en el CRM se preserva).
+
+    Devuelve {imported, updated, total, last_run}. Idempotente.
+    """
+    lf = _leadforge_connect()
+    if lf is None:
+        return {"error": "leadforge.db no encontrado", "imported": 0, "updated": 0, "total": 0}
+
+    try:
+        leads = lf.execute(
+            "SELECT * FROM leads WHERE email IS NOT NULL AND TRIM(email) <> ''"
+        ).fetchall()
+        last_run_row = lf.execute(
+            "SELECT MAX(last_seen_run) AS r FROM leads"
+        ).fetchone()
+        last_run = last_run_row["r"] if last_run_row else ""
+    finally:
+        lf.close()
+
+    db = get_db()
+    imported = updated = 0
+    try:
+        for row in leads:
+            email = (row["email"] or "").strip().lower()
+            if not email:
+                continue
+            name = (row["empresa"] or email).strip()
+            res = db.execute(
+                text("""
+                    INSERT INTO contacts
+                        (name, email, company, role, phone, context, tags,
+                         status, tipo, medio, notes)
+                    VALUES
+                        (:name, :email, :company, '', :phone, :context, :tags,
+                         'nuevo', 'lead', :medio, :notes)
+                    ON CONFLICT (email) DO UPDATE SET
+                        company   = EXCLUDED.company,
+                        phone     = COALESCE(NULLIF(EXCLUDED.phone, ''), contacts.phone),
+                        tags      = EXCLUDED.tags,
+                        context   = EXCLUDED.context,
+                        updated_at = NOW()
+                    RETURNING (xmax = 0) AS inserted
+                """),
+                {
+                    "name": name,
+                    "email": email,
+                    "company": name,
+                    "phone": (row["telefono"] or "").strip(),
+                    "context": _lead_notes(row),
+                    "tags": _lead_tags(row),
+                    "medio": (row["categoria"] or "").strip(),
+                    "notes": _lead_notes(row),
+                },
+            )
+            was_insert = dict_from_row(res.fetchone())["inserted"]
+            if was_insert:
+                imported += 1
+            else:
+                updated += 1
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[leadforge] Error importando: {e}")
+        raise
+    finally:
+        db.close()
+
+    set_setting("leadforge_last_import", datetime.utcnow().isoformat(timespec="seconds"))
+    set_setting("leadforge_last_run", last_run or "")
+    logger.info(f"[leadforge] Import: +{imported} nuevos, {updated} actualizados (run {last_run})")
+    return {"imported": imported, "updated": updated,
+            "total": imported + updated, "last_run": last_run}
+
+
+@app.get("/contacts/leadforge-status")
+def leadforge_status(_: str = Depends(require_auth)):
+    """Estado del puente: leads disponibles en la DB y último import realizado."""
+    lf = _leadforge_connect()
+    if lf is None:
+        return {"available": False, "db_present": False,
+                "last_import": get_setting("leadforge_last_import", ""),
+                "last_run": get_setting("leadforge_last_run", "")}
+    try:
+        total = lf.execute("SELECT COUNT(*) AS n FROM leads").fetchone()["n"]
+        max_run = lf.execute("SELECT MAX(last_seen_run) AS r FROM leads").fetchone()["r"]
+        cats = [dict(r) for r in lf.execute(
+            "SELECT categoria, COUNT(*) AS n FROM leads "
+            "WHERE categoria IS NOT NULL AND TRIM(categoria) <> '' "
+            "GROUP BY categoria ORDER BY n DESC"
+        ).fetchall()]
+    finally:
+        lf.close()
+    return {
+        "available": True, "db_present": True,
+        "total_leads": total, "db_last_run": max_run,
+        "categories": cats,
+        "last_import": get_setting("leadforge_last_import", ""),
+        "last_run": get_setting("leadforge_last_run", ""),
+    }
+
+
+@app.post("/contacts/import-leadforge")
+async def import_leadforge(_: str = Depends(require_auth)):
+    """Dispara la importación manual de leadforge.db → contacts."""
+    try:
+        result = import_leadforge_to_contacts()
+    except Exception as e:
+        raise HTTPException(500, f"Error importando LeadForge: {e}")
+    if result.get("error"):
+        raise HTTPException(404, result["error"])
+    return {"success": True, **result}
+
+
+@app.get("/contacts/by-category")
+def contacts_by_category(categoria: str, _: str = Depends(require_auth)):
+    """
+    Emails de los leads de una categoría (desde leadforge.db, fuente de verdad).
+    Usado para pre-poblar los destinatarios de una campaña segmentada por rubro.
+    """
+    lf = _leadforge_connect()
+    if lf is None:
+        raise HTTPException(404, "leadforge.db no encontrado")
+    try:
+        rows = lf.execute(
+            "SELECT email, empresa FROM leads "
+            "WHERE categoria = :cat AND email IS NOT NULL AND TRIM(email) <> '' "
+            "ORDER BY cantidad_reviews DESC",
+            {"cat": categoria},
+        ).fetchall()
+    finally:
+        lf.close()
+    return {"categoria": categoria,
+            "count": len(rows),
+            "emails": [r["email"] for r in rows],
+            "leads": [dict(r) for r in rows]}
+
 
 @app.get("/contacts/campaign-status")
 def contacts_campaign_status(_: str = Depends(require_auth)):
@@ -1326,10 +1615,6 @@ async def upload_files(files: list[UploadFile] = File(...), _: str = Depends(req
     if not c["supabase_url"] or not c["supabase_service_key"]:
         raise HTTPException(500, "Supabase Storage no configurado — revisa SUPABASE_URL y SUPABASE_SERVICE_KEY")
 
-    supabase = get_supabase()
-    if supabase is None:
-        raise HTTPException(500, "Supabase Storage no inicializado — revisa SUPABASE_URL y SUPABASE_SERVICE_KEY en las variables de entorno")
-
     uploaded = []
     db = get_db()
     try:
@@ -1345,11 +1630,7 @@ async def upload_files(files: list[UploadFile] = File(...), _: str = Depends(req
             storage_path = storage_filename
 
             try:
-                supabase.storage.from_(c["storage_bucket"]).upload(
-                    path=storage_path,
-                    file=contents,
-                    file_options={"content-type": file.content_type or "application/octet-stream"}
-                )
+                _storage_upload(c["storage_bucket"], storage_path, contents, file.content_type)
             except Exception as e:
                 raise HTTPException(502, f"Error subiendo {file.filename} a Storage: {e}")
 
@@ -1394,12 +1675,10 @@ def delete_attachment(att_id: int, _: str = Depends(require_auth)):
         if not row:
             raise HTTPException(404, "Attachment no encontrado")
 
-        supabase = get_supabase()
-        if supabase:
-            try:
-                supabase.storage.from_(c["storage_bucket"]).remove([row["storage_path"]])
-            except Exception as e:
-                logger.warning(f"Error eliminando archivo de Storage: {e}")
+        try:
+            _storage_delete(c["storage_bucket"], [row["storage_path"]])
+        except Exception as e:
+            logger.warning(f"Error eliminando archivo de Storage: {e}")
 
         db.execute(text("DELETE FROM attachments WHERE id=:id"), {"id": att_id})
         db.commit()
@@ -2172,6 +2451,137 @@ async def use_campaign_template(tid: int, request: Request, _: str = Depends(req
         db.close()
 
 
+@app.post("/campaigns/import")
+async def import_campaign(request: Request, _: str = Depends(require_auth)):
+    """Importa una campaña completa desde YAML. Crea un borrador (draft) sin
+    contactos con los emails pre-cargados. Tolera el formato espejo de la DB y
+    alias del ejemplo (sequence, schedule/alternate_days, intent como lista)."""
+    body = await request.json()
+    yaml_text = body.get("yaml", "")
+    if not yaml_text or not yaml_text.strip():
+        raise HTTPException(400, "Archivo YAML vacío")
+    try:
+        data = yaml.safe_load(yaml_text)
+    except yaml.YAMLError as e:
+        raise HTTPException(400, f"YAML inválido: {e}")
+    if not isinstance(data, dict):
+        raise HTTPException(400, "YAML inválido: se esperaba un objeto en la raíz")
+
+    camp = data.get("campaign") or {}
+    if not isinstance(camp, dict):
+        raise HTTPException(400, "YAML inválido: 'campaign' debe ser un objeto")
+
+    # intent: texto o lista -> texto unido por comas
+    intent_raw = camp.get("intent", "")
+    if isinstance(intent_raw, (list, tuple)):
+        intent = ", ".join(str(x).strip() for x in intent_raw if str(x).strip())
+    else:
+        intent = str(intent_raw or "").strip()
+
+    # send_mode: alias 'schedule' y valores tipo 'alternate_days'
+    send_mode = camp.get("send_mode") or camp.get("schedule") or "daily"
+    send_mode = str(send_mode).strip()
+    _MODE_ALIASES = {"alternate_days": "alternate", "every_day": "daily",
+                     "mon_wed_fri": "mon_wed_fri", "tue_thu": "tue_thu"}
+    send_mode = _MODE_ALIASES.get(send_mode, send_mode)
+
+    name       = str(camp.get("name") or "").strip()
+    start_date = str(camp.get("start_date") or "").strip()
+    end_date   = str(camp.get("end_date") or "").strip()
+    tone       = str(camp.get("tone") or "informative").strip()
+    send_time  = str(camp.get("send_time") or "09:00").strip()
+
+    # emails: cada uno con subject/body; day_number o sequence
+    emails_raw = data.get("emails") or []
+    if not isinstance(emails_raw, list) or not emails_raw:
+        raise HTTPException(400, "YAML inválido: se requiere al menos un email")
+    emails = []
+    for i, em in enumerate(emails_raw):
+        if not isinstance(em, dict):
+            raise HTTPException(400, f"Email #{i+1} inválido")
+        emails.append({
+            "day_number": em.get("day_number") or em.get("sequence") or (i + 1),
+            "subject": str(em.get("subject") or "").strip(),
+            "body": str(em.get("body") or "").strip(),
+        })
+    emails.sort(key=lambda e: e["day_number"])
+
+    if not name:       raise HTTPException(400, "Falta 'name' en la campaña")
+    if not intent:     raise HTTPException(400, "Falta 'intent' en la campaña")
+    if not start_date: raise HTTPException(400, "Falta 'start_date' en la campaña")
+
+    n = len(emails)
+    # Las fechas se derivan de start_date + cadencia + cantidad de emails.
+    dates = _get_campaign_dates_count(start_date, send_mode, n)
+    if not dates or len(dates) < n:
+        raise HTTPException(400, f"No se pudieron calcular {n} fechas con modo '{send_mode}'")
+    if not end_date:
+        end_date = dates[-1]
+
+    db = get_db()
+    try:
+        result = db.execute(text("""
+            INSERT INTO campaigns (name, intent, start_date, end_date, send_mode, tone, send_time, status)
+            VALUES (:name,:intent,:start_date,:end_date,:send_mode,:tone,:send_time,'draft')
+            RETURNING id
+        """), {"name": name, "intent": intent, "start_date": start_date,
+               "end_date": end_date, "send_mode": send_mode, "tone": tone, "send_time": send_time})
+        camp_id = result.fetchone()[0]
+
+        for i in range(n):
+            db.execute(text("""
+                INSERT INTO campaign_emails (campaign_id, day_number, subject, body, status, scheduled_at, version, regenerated_count)
+                VALUES (:cid,:day,:subject,:body,'pending',:scheduled_at,1,0)
+            """), {"cid": camp_id, "day": i + 1, "subject": emails[i]["subject"],
+                   "body": emails[i]["body"], "scheduled_at": f"{dates[i]} {send_time}"})
+        db.commit()
+        return {"success": True, "campaign_id": camp_id, "total_emails": n}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
+
+@app.get("/campaigns/{cid}/export")
+def export_campaign(cid: int, _: str = Depends(require_auth)):
+    """Exporta una campaña a YAML (formato espejo de la DB, sin contactos)."""
+    db = get_db()
+    try:
+        camp = dict_from_row(db.execute(text("SELECT * FROM campaigns WHERE id=:id"), {"id": cid}).fetchone())
+        if not camp:
+            raise HTTPException(404, "Campaña no encontrada")
+        emails = rows_to_list(db.execute(text(
+            "SELECT day_number, subject, body FROM campaign_emails WHERE campaign_id=:id ORDER BY day_number"),
+            {"id": cid}).fetchall())
+    finally:
+        db.close()
+
+    payload = {
+        "version": 1,
+        "campaign": {
+            "name": camp.get("name") or "",
+            "intent": camp.get("intent") or "",
+            "start_date": camp.get("start_date") or "",
+            "end_date": camp.get("end_date") or "",
+            "send_mode": camp.get("send_mode") or "daily",
+            "send_time": camp.get("send_time") or "09:00",
+            "tone": camp.get("tone") or "informative",
+        },
+        "emails": [
+            {"day_number": e["day_number"], "subject": e["subject"] or "", "body": e["body"] or ""}
+            for e in emails
+        ],
+    }
+    yaml_text = yaml.safe_dump(payload, allow_unicode=True, sort_keys=False, default_flow_style=False)
+    safe_name = re.sub(r'[^A-Za-z0-9_-]+', '_', (camp.get("name") or f"campaign_{cid}")).strip("_") or f"campaign_{cid}"
+    return Response(
+        content=yaml_text,
+        media_type="application/x-yaml",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}.yaml"'},
+    )
+
+
 @app.get("/campaigns/{cid}")
 def get_campaign(cid: int, _: str = Depends(require_auth)):
     db = get_db()
@@ -2316,6 +2726,101 @@ async def init_campaign(request: Request, _: str = Depends(require_auth)):
         db.close()
 
 
+def _escape_unescaped_control_chars(s: str) -> str:
+    """Escapa saltos de linea/tabs/retornos literales que aparezcan DENTRO de
+    strings JSON (causa tipica del error 'Invalid control character').
+    Respeta los caracteres de control que esten fuera de strings (formato)."""
+    out = []
+    in_string = False
+    escaped = False
+    for ch in s:
+        if in_string:
+            if escaped:
+                out.append(ch)
+                escaped = False
+                continue
+            if ch == '\\':
+                out.append(ch)
+                escaped = True
+                continue
+            if ch == '"':
+                out.append(ch)
+                in_string = False
+                continue
+            # Caracteres de control sin escapar dentro del string -> escaparlos
+            if ch == '\n':
+                out.append('\\n'); continue
+            if ch == '\r':
+                out.append('\\r'); continue
+            if ch == '\t':
+                out.append('\\t'); continue
+            if ord(ch) < 0x20:
+                out.append('\\u%04x' % ord(ch)); continue
+            out.append(ch)
+        else:
+            if ch == '"':
+                in_string = True
+            out.append(ch)
+    return ''.join(out)
+
+
+def parse_ai_json(raw: str) -> dict:
+    """Parsea JSON devuelto por un LLM de forma tolerante.
+
+    Maneja: code fences (```json), texto alrededor del objeto, y caracteres de
+    control literales (saltos de linea/tabs sin escapar dentro de strings, que
+    son la causa de 'Invalid control character at...'). Emojis, acentos UTF-8 y
+    apostrofes (') son JSON valido y se preservan tal cual.
+    """
+    if not raw or not raw.strip():
+        raise json.JSONDecodeError("respuesta vacia de la IA", raw or "", 0)
+    s = raw.strip()
+    # Quitar code fences de markdown
+    s = re.sub(r'^```(?:json)?\s*', '', s)
+    s = re.sub(r'\s*```$', '', s).strip()
+    # Recortar al objeto JSON externo si la IA agrego texto alrededor
+    start, end = s.find('{'), s.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        s = s[start:end + 1]
+
+    # 1) Intento estandar
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        pass
+    # 2) strict=False permite caracteres de control dentro de strings
+    try:
+        return json.loads(s, strict=False)
+    except json.JSONDecodeError:
+        pass
+    # 3) Escapar manualmente los caracteres de control dentro de strings
+    return json.loads(_escape_unescaped_control_chars(s), strict=False)
+
+
+def _extract_subject_body(raw: str) -> dict | None:
+    """Ultimo recurso para un email individual: extrae subject/body con regex
+    tolerante aunque el body tenga comillas (\") sin escapar."""
+    if not raw:
+        return None
+    m_sub = re.search(r'"subject"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+    m_body = re.search(r'"body"\s*:\s*"(.*)"\s*\}?\s*$', raw, re.DOTALL)
+    if not m_body:
+        m_body = re.search(r'"body"\s*:\s*"(.*)', raw, re.DOTALL)
+    if not (m_sub or m_body):
+        return None
+
+    def _unescape(v: str) -> str:
+        return (v.replace('\\n', '\n').replace('\\t', '\t')
+                 .replace('\\r', '\r').replace('\\"', '"').replace('\\\\', '\\'))
+
+    subject = _unescape(m_sub.group(1)) if m_sub else ""
+    body = m_body.group(1) if m_body else ""
+    # Recortar cierre del objeto si quedo pegado al body
+    body = re.sub(r'"\s*\}?\s*$', '', body)
+    body = _unescape(body)
+    return {"subject": subject.strip(), "body": body.strip()}
+
+
 @app.post("/campaigns/{cid}/generate-one")
 async def generate_one_email(cid: int, request: Request, _: str = Depends(require_auth)):
     """Genera UN email de la secuencia usando SSE streaming. El frontend llama de a uno."""
@@ -2420,14 +2925,15 @@ Responde UNICAMENTE con JSON valido (sin texto extra, sin backticks):
                             except Exception:
                                 pass
 
-            # Parsear JSON del contenido completo
-            clean = re.sub(r'^```(?:json)?\s*', '', full_content.strip())
-            clean = re.sub(r'\s*```$', '', clean)
-            # Intentar extraer JSON si hay texto alrededor
-            json_match = re.search(r'\{[\s\S]*"subject"[\s\S]*"body"[\s\S]*\}', clean)
-            if json_match:
-                clean = json_match.group(0)
-            parsed = json.loads(clean)
+            # Parsear JSON del contenido completo (tolerante a saltos de linea,
+            # comillas, emojis y caracteres de control que emite el LLM)
+            try:
+                parsed = parse_ai_json(full_content)
+            except json.JSONDecodeError:
+                # Ultimo recurso: extraer subject/body con regex
+                parsed = _extract_subject_body(full_content)
+                if parsed is None:
+                    raise
             subject = parsed.get("subject","")
             body    = parsed.get("body","")
 
@@ -2562,10 +3068,7 @@ Responde ÚNICAMENTE con JSON válido con esta estructura exacta (sin texto extr
         resp.raise_for_status()
         groq_data = resp.json()
         raw_content = groq_data["choices"][0]["message"]["content"].strip()
-        # Limpiar posibles backticks de markdown
-        raw_content = re.sub(r'^```(?:json)?\s*', '', raw_content)
-        raw_content = re.sub(r'\s*```$', '', raw_content)
-        emails_data = json.loads(raw_content)
+        emails_data = parse_ai_json(raw_content)
         emails_list = emails_data.get("emails", [])
     except httpx.HTTPStatusError as e:
         raise HTTPException(502, f"Groq API error: {e.response.status_code}")
@@ -2644,21 +3147,44 @@ async def approve_email(cid: int, request: Request, _: str = Depends(require_aut
 async def retry_email(cid: int, request: Request, _: str = Depends(require_auth)):
     """Regenera un email específico de la campaña manteniendo contexto y posición."""
     import httpx
-    data     = await request.json()
-    email_id = data.get("email_id")
-    feedback = data.get("feedback", "")
-
-    groq_key = os.getenv("GROQ_API_KEY", "")
-    if not groq_key:
-        raise HTTPException(500, "GROQ_API_KEY no configurada")
+    data       = await request.json()
+    email_id   = data.get("email_id")
+    day_num    = data.get("day_number")
+    feedback   = data.get("feedback", "")
+    edit_subj  = data.get("subject")
+    edit_body  = data.get("body")
 
     db = get_db()
     try:
-        em = dict_from_row(db.execute(text(
-            "SELECT e.*, c.intent, c.tone, c.send_mode, c.start_date, c.end_date FROM campaign_emails e JOIN campaigns c ON c.id=e.campaign_id WHERE e.id=:id AND e.campaign_id=:cid"),
-            {"id": email_id, "cid": cid}).fetchone())
+        # Resolver el email por id o por day_number (el modal de generacion usa day_number)
+        if email_id:
+            em = dict_from_row(db.execute(text(
+                "SELECT e.*, c.intent, c.tone, c.send_mode, c.start_date, c.end_date FROM campaign_emails e JOIN campaigns c ON c.id=e.campaign_id WHERE e.id=:id AND e.campaign_id=:cid"),
+                {"id": email_id, "cid": cid}).fetchone())
+        elif day_num:
+            em = dict_from_row(db.execute(text(
+                "SELECT e.*, c.intent, c.tone, c.send_mode, c.start_date, c.end_date FROM campaign_emails e JOIN campaigns c ON c.id=e.campaign_id WHERE e.day_number=:day AND e.campaign_id=:cid"),
+                {"day": day_num, "cid": cid}).fetchone())
+        else:
+            raise HTTPException(400, "Se requiere email_id o day_number")
         if not em:
             raise HTTPException(404, "Email no encontrado")
+        email_id = em["id"]
+
+        # Edicion manual via campos explicitos subject/body (preferido) o el
+        # formato legacy feedback "EDIT:subject|||body".
+        if edit_subj is not None and edit_body is not None:
+            db.execute(text("""
+                UPDATE campaign_emails
+                SET subject=:s, body=:b, status='pending', version=version+1
+                WHERE id=:id AND campaign_id=:cid"""),
+                {"s": edit_subj, "b": edit_body, "id": email_id, "cid": cid})
+            db.commit()
+            return {"success": True, "subject": edit_subj, "body": edit_body}
+
+        groq_key = os.getenv("GROQ_API_KEY", "")
+        if not groq_key:
+            raise HTTPException(500, "GROQ_API_KEY no configurada")
 
         # Contexto de emails ya generados para coherencia
         others = rows_to_list(db.execute(text(
@@ -2712,9 +3238,12 @@ Genera un nuevo email mejorado para esta posición. Responde SOLO con JSON:
             )
         resp.raise_for_status()
         raw = resp.json()["choices"][0]["message"]["content"].strip()
-        raw = re.sub(r'^```(?:json)?\s*', '', raw)
-        raw = re.sub(r'\s*```$', '', raw)
-        new_data = json.loads(raw)
+        try:
+            new_data = parse_ai_json(raw)
+        except json.JSONDecodeError:
+            new_data = _extract_subject_body(raw)
+            if new_data is None:
+                raise
 
         db.execute(text("""
             UPDATE campaign_emails

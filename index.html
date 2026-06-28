@@ -385,8 +385,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <input id="searchContact" type="text" placeholder="Buscar por nombre, email, empresa o tag..."
       style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:7px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"
       oninput="filterContacts()"/>
+    <button class="btn btn-ghost" id="btnImportLeadforge" onclick="importLeadforge()" title="Importar leads scrapeados por LeadForge">↧ LeadForge</button>
     <button class="btn btn-green" onclick="openNewContact()">+ Nuevo</button>
   </div>
+  <div id="leadforgeStatus" style="font-size:10px;color:var(--text3);margin:-6px 0 12px"></div>
   <div class="card-grid" id="contactGrid"></div>
   <div id="contactForm" style="display:none">
     <div class="section-label" id="contactFormTitle">Nuevo contacto</div>
@@ -745,6 +747,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
       <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Campanas IA</span>
       <div style="flex:1"></div>
+      <input type="file" id="camp-import-file" accept=".yaml,.yml" style="display:none" onchange="importCampaignFile(this.files)">
+      <button class="btn btn-ghost btn-sm" onclick="importCampaignPrompt()">↑ Importar campaña</button>
       <button class="btn btn-green btn-sm" onclick="showCampaignForm()">+ Nueva campana</button>
     </div>
     <div id="campaignCards" style="display:flex;flex-direction:column;gap:10px">
@@ -795,6 +799,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <div>
         <div class="section-label">Contactos de la campana</div>
         <div class="panel">
+          <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Segmentar por categoría (LeadForge)</div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select id="campCategorySelect" style="flex:1;background:var(--bg2);border:1px solid var(--border);color:var(--text2);font-family:var(--mono);font-size:10px;padding:6px 8px;border-radius:var(--r)">
+                <option value="">— elegí una categoría —</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" onclick="selectCampCategory()" style="white-space:nowrap">Agregar rubro</button>
+            </div>
+            <div id="campCategoryHint" style="font-size:10px;color:var(--text3);margin-top:6px"></div>
+          </div>
           <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
             <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Seleccionar de agenda</div>
             <div id="campContactList" style="max-height:180px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:6px"></div>
@@ -940,6 +954,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal('modalPreview')">Cerrar</button>
       <button class="btn btn-green" onclick="closeModal('modalPreview');openSendConfirm()">Enviar este email</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: PREVIEW GALERIA EMAILS DE CAMPAÑA -->
+<div class="modal-backdrop" id="modalCampPreview">
+  <div class="modal" style="max-width:760px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <button class="btn btn-ghost btn-sm" onclick="campPreviewNav(-1)" title="Anterior">←</button>
+      <div style="flex:1;text-align:center;min-width:0">
+        <div id="campPreviewSubject" style="font-size:13px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+        <div id="campPreviewCounter" style="font-size:10px;color:var(--text3)"></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="campPreviewNav(1)" title="Siguiente">→</button>
+    </div>
+    <iframe id="campPreviewFrame" style="width:100%;height:460px;border:1px solid var(--border);border-radius:var(--r);background:#fff"></iframe>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalCampPreview')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -1217,6 +1249,8 @@ let campMode='daily', campTone='informative', campSelectedContacts=new Set();
 let currentCampaignId=null;
 let SESSION_TOKEN = localStorage.getItem('session_token') || '';
 let _pendingAttachments = [];
+let _campPreviewIds = [];
+let _campPreviewIdx = -1;
 
 // AUTH
 async function doLogin(){
@@ -1403,6 +1437,35 @@ async function loadDashboard(){
 async function loadContacts(){
   try{contacts=await(await apiFetch('/contacts')).json();renderContacts(contacts);}
   catch(e){toast('Error cargando contactos','error');}
+  refreshLeadforgeStatus();
+}
+
+// Muestra cuántos leads hay en leadforge.db y el último import realizado.
+async function refreshLeadforgeStatus(){
+  const el=document.getElementById('leadforgeStatus');
+  const btn=document.getElementById('btnImportLeadforge');
+  if(!el)return;
+  try{
+    const st=await(await apiFetch('/contacts/leadforge-status')).json();
+    if(!st.db_present){el.textContent='';if(btn)btn.style.display='none';return;}
+    if(btn)btn.style.display='';
+    const imp=st.last_import?` · último import: ${st.last_import.replace('T',' ')} UTC`:' · sin importar aún';
+    el.textContent=`LeadForge: ${st.total_leads} leads en ${st.db_last_run||'—'}${imp}`;
+  }catch(e){el.textContent='';}
+}
+
+// Dispara la importación manual leadforge.db → contacts.
+async function importLeadforge(){
+  const btn=document.getElementById('btnImportLeadforge');
+  if(btn){btn.disabled=true;btn.textContent='↧ Importando…';}
+  try{
+    const r=await apiFetch('/contacts/import-leadforge',{method:'POST'});
+    const d=await r.json();
+    if(!r.ok){toast(d.detail||'Error importando','error');}
+    else{toast(`LeadForge: +${d.imported} nuevos, ${d.updated} actualizados`,'success');
+      await loadContacts();loadStats();}
+  }catch(e){toast('Error importando LeadForge','error');}
+  finally{if(btn){btn.disabled=false;btn.textContent='↧ LeadForge';}}
 }
 function renderContacts(list){
   const el=document.getElementById('contactGrid');
@@ -2345,6 +2408,43 @@ function initCampContacts(){
       ${c.name}
     </button>`).join('');
   document.getElementById('campSelectedTags').innerHTML='';
+  loadCampCategories();
+}
+
+// Llena el selector de rubros con las categorías presentes en leadforge.db.
+async function loadCampCategories(){
+  const sel=document.getElementById('campCategorySelect');
+  if(!sel)return;
+  try{
+    const st=await(await apiFetch('/contacts/leadforge-status')).json();
+    if(!st.available||!st.categories){sel.parentElement.parentElement.style.display='none';return;}
+    sel.parentElement.parentElement.style.display='';
+    sel.innerHTML='<option value="">— elegí una categoría —</option>'+
+      st.categories.map(c=>`<option value="${c.categoria.replace(/"/g,'&quot;')}">${c.categoria} (${c.n})</option>`).join('');
+  }catch(e){/* leadforge no disponible: dejar el selector oculto */
+    sel.parentElement.parentElement.style.display='none';}
+}
+
+// Agrega en bloque todos los leads de la categoría elegida a la selección.
+async function selectCampCategory(){
+  const sel=document.getElementById('campCategorySelect');
+  const cat=sel.value;
+  if(!cat){toast('Elegí una categoría primero','error');return;}
+  const hint=document.getElementById('campCategoryHint');
+  hint.textContent='Cargando leads…';
+  try{
+    const r=await(await apiFetch('/contacts/by-category?categoria='+encodeURIComponent(cat))).json();
+    (r.emails||[]).forEach(e=>campSelectedContacts.add(e));
+    // Reflejar en los botones de la agenda los que ya están seleccionados.
+    document.querySelectorAll('#campContactList button').forEach(btn=>{
+      const m=btn.getAttribute('onclick').match(/toggleCampContact\('([^']+)'/);
+      if(m&&campSelectedContacts.has(m[1])){
+        btn.style.background='rgba(126,200,80,.15)';btn.style.color='var(--green)';btn.style.borderColor='var(--green)';
+      }
+    });
+    renderCampSelectedTags();
+    hint.textContent=`+${r.count} leads de "${cat}" agregados (${campSelectedContacts.size} en total).`;
+  }catch(e){hint.textContent='';toast('Error cargando la categoría','error');}
 }
 
 function toggleCampContact(email,name,btn){
@@ -2677,7 +2777,7 @@ function toggleGenEdit(){
   }
 }
 
-function saveGenEdit(){
+async function saveGenEdit(){
   const subject = document.getElementById('campGenEditSubject').value.trim();
   const body    = document.getElementById('campGenEditBody').value.trim();
   if(!subject||!body) return toast('Asunto y cuerpo son requeridos','error');
@@ -2687,11 +2787,14 @@ function saveGenEdit(){
   document.getElementById('campGenBodyDisplay').textContent = body;
   document.getElementById('campGenEditArea').style.display = 'none';
   generateGenPreview(body);
-  apiFetch(`/campaigns/${campGenState.campaignId}/retry-email`,{
-    method:'POST',
-    body: JSON.stringify({day_number: day, feedback:`EDIT:${subject}|||${body}`})
-  }).catch(()=>{});
-  toast('Cambios guardados','success');
+  try{
+    const r=await apiFetch(`/campaigns/${campGenState.campaignId}/retry-email`,{
+      method:'POST',
+      body: JSON.stringify({day_number: day, subject, body})
+    });
+    if(!r.ok){let m='Error';try{m=(await r.json()).detail||m;}catch(_){}throw new Error(m);}
+    toast('Cambios guardados','success');
+  }catch(e){toast('Error guardando: '+e.message,'error');}
 }
 
 function cancelGenEdit(){
@@ -2749,11 +2852,53 @@ async function loadCampaigns(){
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
             <span style="font-size:10px;padding:3px 9px;border-radius:10px;border:1px solid;color:${statusColor[c.status]||'var(--text3)'};border-color:${statusColor[c.status]||'var(--text3)'};">${statusLabel[c.status]||c.status}</span>
             <div style="font-size:10px;color:var(--text3)">${c.approved_count||0}/${c.total_emails||0} aprobados</div>
-            <button class="btn btn-red btn-sm" onclick="event.stopPropagation();deleteCampaign(${c.id})" style="font-size:9px;padding:2px 8px">Eliminar</button>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();exportCampaign(${c.id})" style="font-size:9px;padding:2px 8px">Exportar</button>
+              <button class="btn btn-red btn-sm" onclick="event.stopPropagation();deleteCampaign(${c.id})" style="font-size:9px;padding:2px 8px">Eliminar</button>
+            </div>
           </div>
         </div>
       </div>`).join('');
   }catch(e){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Error cargando campanas.</div>';}
+}
+
+// ── Importar / Exportar campañas (YAML) ─────
+function importCampaignPrompt(){
+  document.getElementById('camp-import-file').click();
+}
+
+async function importCampaignFile(files){
+  const input=document.getElementById('camp-import-file');
+  if(!files||!files.length)return;
+  const file=files[0];
+  try{
+    const text=await file.text();
+    const r=await apiFetch('/campaigns/import',{method:'POST',body:JSON.stringify({yaml:text})});
+    if(!r.ok){let m='Error';try{m=(await r.json()).detail||m;}catch(_){}throw new Error(m);}
+    const d=await r.json();
+    toast('Campaña importada ('+(d.total_emails||0)+' emails)','success');
+    loadCampaigns();
+  }catch(e){toast('Error importando: '+e.message,'error');}
+  finally{if(input)input.value='';}
+}
+
+async function exportCampaign(campId){
+  try{
+    const r=await apiFetch('/campaigns/'+campId+'/export');
+    if(!r.ok){let m='Error';try{m=(await r.json()).detail||m;}catch(_){}throw new Error(m);}
+    const blob=await r.blob();
+    // Nombre de archivo desde el header Content-Disposition (fallback campaign_<id>.yaml)
+    let fname='campaign_'+campId+'.yaml';
+    const cd=r.headers.get('Content-Disposition')||'';
+    const m=cd.match(/filename="?([^"]+)"?/);
+    if(m)fname=m[1];
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=fname;
+    document.body.appendChild(a);a.click();a.remove();
+    URL.revokeObjectURL(url);
+    toast('Campaña exportada','success');
+  }catch(e){toast('Error exportando: '+e.message,'error');}
 }
 
 // ── Plantillas pre-aprobadas ───────────────
@@ -2941,6 +3086,7 @@ async function showApprovalView(campId){
     document.getElementById('approvalCampName').textContent=camp.name||'Campana';
 
     const emails=camp.emails||[];
+    _campPreviewIds = emails.filter(e => e.subject||e.body).map(e => e.id);
     const approved=emails.filter(e=>e.status==='approved').length;
     const total=emails.length;
     document.getElementById('approvalProgress').textContent=`${approved}/${total} aprobados`;
@@ -2989,10 +3135,11 @@ async function showApprovalView(campId){
               ${isEmpty
                 ?'<span style="font-size:10px;color:var(--text3)">Sin generar</span><button class="btn btn-ghost btn-sm" onclick="regenFromApproval('+campId+','+em.day_number+')">Generar ↺</button>'
                 :isApproved
-                  ?'<span style="font-size:10px;color:var(--green);padding:3px 9px;border:1px solid var(--green-dim);border-radius:10px">Aprobado ✓</span><button class="btn btn-ghost btn-sm" onclick="unapproveEmail('+campId+','+em.id+')">Quitar aprobacion</button>'
-                  :`<button class="btn btn-green btn-sm" onclick="approveEmailById(${campId},${em.id})">Aprobar ✓</button>
-                    <button class="btn btn-ghost btn-sm" onclick="toggleEmailEdit(${em.id})">Editar</button>
-                    <button class="btn btn-amber btn-sm" onclick="retryEmail(${campId},${em.id})" id="retryBtn_${em.id}">Reintentar ↺</button>`
+                  ?'<span style="font-size:10px;color:var(--green);padding:3px 9px;border:1px solid var(--green-dim);border-radius:10px">Aprobado ✓</span><button class="btn btn-ghost btn-sm" onclick="unapproveEmail('+campId+','+em.id+')">Quitar aprobacion</button><button class="btn btn-ghost btn-sm" onclick="openCampEmailPreview('+em.id+')">Vista previa</button>'
+                    :`<button class="btn btn-green btn-sm" onclick="approveEmailById(${campId},${em.id})">Aprobar ✓</button>
+                      <button class="btn btn-ghost btn-sm" onclick="toggleEmailEdit(${em.id})">Editar</button>
+                      <button class="btn btn-amber btn-sm" onclick="retryEmail(${campId},${em.id})" id="retryBtn_${em.id}">Reintentar ↺</button>
+                      <button class="btn btn-ghost btn-sm" onclick="openCampEmailPreview('+em.id+')">Vista previa</button>`
               }
             </div>
           </div>
@@ -3061,10 +3208,11 @@ async function saveEmailEdit(campId,emailId){
   document.getElementById('bodyDisplay_'+emailId).textContent=body;
   toggleEmailEdit(emailId);
   try{
-    await apiFetch('/campaigns/'+campId+'/approve-email',{method:'POST',body:JSON.stringify({email_id:emailId,action:'pending'})});
+    const r=await apiFetch('/campaigns/'+campId+'/retry-email',{method:'POST',body:JSON.stringify({email_id:emailId,subject,body})});
+    if(!r.ok){let m='Error';try{m=(await r.json()).detail||m;}catch(_){}throw new Error(m);}
     toast('Guardado. Aprueba el email para confirmar.','success');
     showApprovalView(campId);
-  }catch(e){toast('Error guardando','error');}
+  }catch(e){toast('Error guardando: '+e.message,'error');}
 }
 
 async function retryEmail(campId,emailId){
@@ -3146,6 +3294,53 @@ function formatFileSize(bytes){
 }
 
 ['primary','link','bg','text','header-bg','header-fc'].forEach(id=>syncColor('st-'+id,'st-'+id+'-hex'));
+
+function getEmailCurrentContent(emailId){
+  const editArea=document.getElementById('editArea_'+emailId);
+  if(editArea&&editArea.style.display!=='none'){
+    const subject=document.getElementById('editSubject_'+emailId)?.value||'';
+    const body=document.getElementById('editBody_'+emailId)?.value||'';
+    return {subject,body};
+  }
+  const subject=document.getElementById('subject_'+emailId)?.textContent||'';
+  const body=document.getElementById('bodyDisplay_'+emailId)?.textContent||'';
+  return {subject,body};
+}
+
+function openCampEmailPreview(emailId){
+  _campPreviewIdx=_campPreviewIds.indexOf(emailId);
+  if(_campPreviewIdx<0)return toast('Email no encontrado en la campana','error');
+  openModal('modalCampPreview');
+  renderCampPreview();
+}
+
+function campPreviewNav(delta){
+  if(!_campPreviewIds.length)return;
+  _campPreviewIdx=(_campPreviewIdx+delta+_campPreviewIds.length)%_campPreviewIds.length;
+  renderCampPreview();
+}
+
+async function renderCampPreview(){
+  const id=_campPreviewIds[_campPreviewIdx];
+  if(!id)return;
+  const {subject,body}=getEmailCurrentContent(id);
+  document.getElementById('campPreviewSubject').textContent=subject||'(sin asunto)';
+  document.getElementById('campPreviewCounter').textContent='Email '+( _campPreviewIdx+1)+' de '+_campPreviewIds.length;
+  const frame=document.getElementById('campPreviewFrame');
+  frame.srcdoc='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#888;font-family:sans-serif;font-size:13px">Generando vista previa...</div>';
+  try{
+    const r=await apiFetch('/preview-email',{method:'POST',body:JSON.stringify({body})});
+    const d=await r.json();
+    frame.srcdoc=d.html;
+  }catch(e){toast('Error generando vista previa','error');frame.srcdoc='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#c55;font-family:sans-serif;font-size:13px">Error al generar la vista previa.</div>';}
+}
+
+document.addEventListener('keydown',function(e){
+  if(document.getElementById('modalCampPreview')?.classList.contains('visible')){
+    if(e.key==='ArrowLeft'){e.preventDefault();campPreviewNav(-1);}
+    if(e.key==='ArrowRight'){e.preventDefault();campPreviewNav(1);}
+  }
+});
 
 function formatDate(d){if(!d)return'-';try{const dt=new Date(d),now=new Date(),diff=now-dt;if(diff<86400000)return dt.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});return dt.toLocaleDateString('es',{day:'2-digit',month:'short'});}catch(e){return(d||'').substring(0,10);}}
 
