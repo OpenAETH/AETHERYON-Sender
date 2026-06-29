@@ -1,7 +1,10 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from typing import Optional
 import os
+import logging
+
+logger = logging.getLogger("config")
 
 class AppConfig(BaseSettings):
     resend_api_key: str = ""
@@ -28,28 +31,25 @@ class AppConfig(BaseSettings):
         extra="ignore",
     )
 
-    @field_validator('database_url')
-    @classmethod
-    def validate_database_url(cls, v):
-        if not v:
-            raise ValueError('DATABASE_URL es requerida')
-        if not v.startswith('postgresql://'):
-            raise ValueError('DATABASE_URL debe usar PostgreSQL')
-        return v
+    @model_validator(mode="after")
+    def apply_fallbacks(self):
+        # sender_email no tiene env propia en producción: usar SMTP_USER / IMAP_USER
+        if not self.sender_email:
+            self.sender_email = os.getenv("SMTP_USER", "") or os.getenv("IMAP_USER", "")
 
-    @field_validator('sender_email')
-    @classmethod
-    def validate_sender_email(cls, v):
-        if not v:
-            raise ValueError('SENDER_EMAIL es requerida')
-        return v
-
-    @field_validator('secret_key')
-    @classmethod
-    def validate_secret_key(cls, v):
-        if not v:
+        # Autogenerar secret_key si no viene seteada
+        if not self.secret_key:
             import secrets
-            return secrets.token_hex(32)
-        return v
+            self.secret_key = secrets.token_hex(32)
+
+        # Advertencias no fatales: la app puede arrancar y servir igual
+        if not self.database_url:
+            logger.warning("DATABASE_URL no configurada")
+        elif not self.database_url.startswith("postgresql://"):
+            logger.warning("DATABASE_URL no usa PostgreSQL")
+        if not self.sender_email:
+            logger.warning("SENDER_EMAIL/SMTP_USER no configurados: el envío de correo no funcionará hasta cargarlos")
+
+        return self
 
 config = AppConfig()
