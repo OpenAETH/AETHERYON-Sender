@@ -175,10 +175,29 @@ select:-webkit-autofill{
 .ctx-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:none;line-height:1.6;caret-color:var(--green)}
 .ctx-input:focus{border-color:var(--border2)}
 .dest-cell{cursor:help;border-bottom:1px dotted var(--text3)}
-.chat-msg{max-width:82%;padding:10px 13px;border-radius:var(--r2);font-size:12px;line-height:1.6;white-space:pre-wrap;word-wrap:break-word}
-.chat-msg.user{align-self:flex-end;background:var(--green);color:#0c0f0a}
+.chat-msg{max-width:82%;padding:10px 13px;border-radius:var(--r2);font-size:12px;line-height:1.6;word-wrap:break-word}
+.chat-msg.user{align-self:flex-end;background:var(--green);color:#0c0f0a;white-space:pre-wrap}
 .chat-msg.bot{align-self:flex-start;background:var(--bg3);border:1px solid var(--border);color:var(--text2)}
 .chat-msg.bot.streaming::after{content:'▋';animation:blink 1s steps(2) infinite;color:var(--green)}
+.chat-msg.bot p{margin:.35em 0}
+.chat-msg.bot p:first-child{margin-top:0}
+.chat-msg.bot p:last-child{margin-bottom:0}
+.chat-msg.bot pre{background:#151915;border:1px solid var(--border);border-radius:var(--r);padding:10px;overflow-x:auto;font-size:11px;line-height:1.5;margin:.5em 0}
+.chat-msg.bot code{font-family:var(--mono);font-size:11px;background:rgba(126,200,80,.08);padding:1px 5px;border-radius:3px}
+.chat-msg.bot pre code{background:none;padding:0;border-radius:0}
+.chat-msg.bot a{color:var(--green);text-decoration:underline}
+.chat-msg.bot blockquote{border-left:3px solid var(--green-dim);margin:.5em 0;padding:4px 12px;color:var(--text3);font-style:italic}
+.chat-msg.bot ul,.chat-msg.bot ol{margin:.35em 0;padding-left:1.5em}
+.chat-msg.bot li{margin:.15em 0}
+.chat-msg.bot hr{border:none;border-top:1px solid var(--border);margin:.6em 0}
+.chat-msg.bot h1,.chat-msg.bot h2,.chat-msg.bot h3,.chat-msg.bot h4{font-family:var(--serif);color:var(--text);margin:.6em 0 .2em}
+.chat-msg.bot h1{font-size:16px}
+.chat-msg.bot h2{font-size:14px}
+.chat-msg.bot h3{font-size:13px}
+.chat-msg.bot table{border-collapse:collapse;margin:.5em 0;font-size:11px;width:100%}
+.chat-msg.bot th,.chat-msg.bot td{border:1px solid var(--border);padding:4px 8px;text-align:left}
+.chat-msg.bot th{background:var(--bg2);color:var(--text3);font-size:9px;text-transform:uppercase;letter-spacing:.1em}
+.chat-msg.bot img{max-width:100%;border-radius:var(--r);margin:.4em 0}
 @keyframes blink{0%,50%{opacity:1}50.01%,100%{opacity:0}}
 
 .preview-frame{width:100%;height:400px;border:1px solid var(--border);border-radius:var(--r2);background:#fff}
@@ -2131,7 +2150,8 @@ function appendChatBubble(role,text){
   const wrap=document.getElementById('chatMessages');
   const div=document.createElement('div');
   div.className='chat-msg '+(role==='user'?'user':'bot');
-  div.textContent=text;
+  if(role==='bot') div.innerHTML=marked.parse(text,{breaks:true});
+  else div.textContent=text;
   wrap.appendChild(div);
   wrap.scrollTop=wrap.scrollHeight;
   return div;
@@ -2177,7 +2197,7 @@ async function sendChat(){
         if(!clean||clean==='[DONE]')continue;
         try{acc+=JSON.parse(clean).choices?.[0]?.delta?.content||'';}catch{}
       }
-      bubble.textContent=acc;
+      bubble.innerHTML=marked.parse(acc,{breaks:true});
       document.getElementById('chatMessages').scrollTop=document.getElementById('chatMessages').scrollHeight;
     }
     bubble.classList.remove('streaming');
@@ -3497,5 +3517,6 @@ function formatDate(d){if(!d)return'-';try{const dt=new Date(d),now=new Date(),d
 
 window.addEventListener('DOMContentLoaded',checkAuth);
 </script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </body>
 </html>

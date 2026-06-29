@@ -10,6 +10,9 @@ from fastapi.responses import JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from sqlalchemy import create_engine, text
+from db import db_select_one, db_select_all, db_insert
+from config import config
+from db import db_select_one, db_select_all, db_insert
 from sqlalchemy.orm import sessionmaker, scoped_session
 import os, imaplib, email as email_lib
 from dotenv import load_dotenv
@@ -714,7 +717,7 @@ def fetch_inbox_sync(limit=500):
                     try: body = msg.get_payload(decode=True).decode("utf-8", errors="replace")
                     except: body = ""
                 try:
-                    db.execute(
+session.execute(
                         text("""INSERT INTO inbox_cache (message_id,imap_uid,from_email,from_name,subject,body,date)
                                 VALUES (:mid,:uid,:from_email,:from_name,:subj,:body,:date)
                                 ON CONFLICT (message_id) DO NOTHING"""),
