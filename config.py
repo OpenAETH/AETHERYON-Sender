@@ -1,4 +1,5 @@
-from pydantic import BaseSettings, Field, validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 from typing import Optional
 import os
 
@@ -19,13 +20,16 @@ class AppConfig(BaseSettings):
     token_ttl_hours: int = 8
     cookie_secure: bool = False
     database_url: str = ""
-    
-    class Config:
-        env_file = "./.env"
-        env_prefix = ""
-        case_sensitive = False
-        
-    @validator('database_url')
+
+    model_config = SettingsConfigDict(
+        env_file="./.env",
+        env_prefix="",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    @field_validator('database_url')
+    @classmethod
     def validate_database_url(cls, v):
         if not v:
             raise ValueError('DATABASE_URL es requerida')
@@ -33,13 +37,15 @@ class AppConfig(BaseSettings):
             raise ValueError('DATABASE_URL debe usar PostgreSQL')
         return v
 
-    @validator('sender_email')
+    @field_validator('sender_email')
+    @classmethod
     def validate_sender_email(cls, v):
         if not v:
             raise ValueError('SENDER_EMAIL es requerida')
         return v
 
-    @validator('secret_key')
+    @field_validator('secret_key')
+    @classmethod
     def validate_secret_key(cls, v):
         if not v:
             import secrets
