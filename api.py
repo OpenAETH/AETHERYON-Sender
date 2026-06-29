@@ -717,7 +717,7 @@ def fetch_inbox_sync(limit=500):
                     try: body = msg.get_payload(decode=True).decode("utf-8", errors="replace")
                     except: body = ""
                 try:
-session.execute(
+                    db.execute(
                         text("""INSERT INTO inbox_cache (message_id,imap_uid,from_email,from_name,subject,body,date)
                                 VALUES (:mid,:uid,:from_email,:from_name,:subj,:body,:date)
                                 ON CONFLICT (message_id) DO NOTHING"""),
