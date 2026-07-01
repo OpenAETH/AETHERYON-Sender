@@ -12,6 +12,15 @@ services:
       - .env
     environment:
       - PORT=8000
+      # La DB canónica de LeadForge se lee en vivo desde el bind-mount de abajo.
+      # api.py respeta LEADFORGE_DB (default: leadforge.db junto a api.py).
+      - LEADFORGE_DB=/leadforge/leadforge.db
+    # Bind-mount de la raíz de LeadForge (read-only). Se monta el DIRECTORIO, no el
+    # archivo: build_db.py hace unlink+create en modo rebuild y un mount de archivo
+    # quedaría apuntando a un inode viejo. Así el local (:8000) ve siempre la DB
+    # fresca sin rebuild. El deploy de Render usa su propia copia horneada.
+    volumes:
+      - /mnt/d/LeadForge:/leadforge:ro
     # Healthcheck: si la app deja de responder, Docker marca el contenedor unhealthy
     # y (con restart: unless-stopped) lo reinicia.
     healthcheck:

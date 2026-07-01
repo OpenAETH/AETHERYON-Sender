@@ -126,10 +126,17 @@ Seguimiento de envíos con detección automática de respuestas por hilo (remite
 `GET /supervision`
 
 ### 🔗 Integración LeadForge (leadforge.db → contactos)
-LeadForge (scraper) deja un **SQLite acumulativo** (`leadforge.db`) en la raíz de este
-repo. La app lo importa a la tabla `contacts` por **UPSERT por email**, preservando los
-campos del CRM ya editados (status, notas, seguimiento).
+LeadForge (scraper) mantiene un **SQLite acumulativo** (`leadforge.db`) cuya **fuente de
+verdad vive en `D:\LeadForge\leadforge.db`**. El `.db` de este repo es solo una **copia de
+deploy** que LeadForge sube por `git push` para sincronizar Render. La app lo importa a la
+tabla `contacts` por **UPSERT por email**, preservando los campos del CRM ya editados
+(status, notas, seguimiento).
 
+- **Local (:8000)**: lee la DB canónica **en vivo** vía bind-mount. `docker-compose.yml`
+  monta `D:\LeadForge` y setea `LEADFORGE_DB=/leadforge/leadforge.db`, así cada run de
+  LeadForge deja la DB fresca sin rebuild del contenedor.
+- **Render (remoto)**: sin disco persistente, lee la copia de deploy horneada en la imagen;
+  el `git push` de ese `.db` dispara el redeploy.
 - **Auto-sync al arrancar**: en cada boot (local) o deploy (Render con `.db` nuevo vía push).
 - **Manual**: botón **↧ LeadForge** en la Agenda.
 - **Segmentación por categoría**: el formulario de campaña ofrece un selector de rubro
@@ -138,7 +145,6 @@ campos del CRM ya editados (status, notas, seguimiento).
 `GET /contacts/leadforge-status` · `POST /contacts/import-leadforge` · `GET /contacts/by-category?categoria=…`
 
 > Override de la ruta con la env `LEADFORGE_DB` (default: `leadforge.db` junto a `api.py`).
-> El `.db` viaja en el repo: local lo lee del folder, remoto lo recibe por `git push`.
 
 ### 🧠 Memoria del agente
 Registro cronológico de eventos (emails enviados, contactos agregados, notas manuales). Se inyecta como contexto en prompts de IA.
