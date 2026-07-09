@@ -254,6 +254,15 @@ def _storage_signed_url(bucket: str, path: str, expires_in: int = 1800) -> str:
         path_part = f"/storage/v1{path_part}"
     return f"{base}{path_part}"
 
+def _storage_public_url(bucket: str, path: str) -> str:
+    """URL pública permanente de un objeto (requiere bucket público en Supabase).
+    No expira — apta para <img src> en emails, a diferencia de las signed URLs."""
+    c = _storage_cfg()
+    if not c:
+        raise RuntimeError("Supabase Storage no configurado")
+    base = c["supabase_url"].rstrip("/")
+    return f"{base}/storage/v1/object/public/{bucket}/{path}"
+
 def _storage_download(bucket: str, path: str) -> bytes:
     """Descarga los bytes de un archivo de Supabase Storage vía REST."""
     c = _storage_cfg()
@@ -525,6 +534,9 @@ def build_html_email(body_text: str, style_cfg: dict = None) -> str:
     header_fc = s.get("header_color",   "#7ec850")
     sname     = s.get("sender_name",    cfg()["sender_name"])
     sig_html  = s.get("signature_html", get_setting("signature_html", ""))
+    logo_url  = s.get("logo_url",       get_setting("style_logo_url", ""))
+    footer_tx = s.get("footer_text",    get_setting("style_footer_text", ""))
+    banner_md = s.get("banner_mode",    get_setting("style_banner_mode", "text"))
     body_html = md_to_html(body_text).replace("LINKCOLOR", link_col).replace("PRIMARY_COLOR", primary)
 
     sig_block = ""
@@ -543,6 +555,55 @@ def build_html_email(body_text: str, style_cfg: dict = None) -> str:
 
     footer_name = sname or "Asistente Ejecutivo"
 
+    # ── Banner: 3 modos (texto / logo cuadrado / banner full-width) ──
+    # Sin logo cargado, cualquier modo de imagen cae a texto.
+    eff_mode = banner_md if (banner_md in ("logo", "banner") and logo_url) else "text"
+
+    if eff_mode == "banner":
+        # Imagen a todo el ancho (600px), sin padding ni fondo — es el header entero.
+        header_td = (
+            '<td style="padding:0;border-radius:10px 10px 0 0;overflow:hidden">'
+            '<img src="' + logo_url + '" alt="' + (sname or "") + '"'
+            ' width="600" style="width:100%;max-width:600px;display:block;border:0;'
+            'outline:none;text-decoration:none;height:auto;border-radius:10px 10px 0 0"/>'
+            '</td>'
+        )
+    elif eff_mode == "logo":
+        # Logo (cuadrado o rectangular) contenido dentro del header con su fondo.
+        header_td = (
+            '<td style="background-color:' + header_bg + ';border-radius:10px 10px 0 0;'
+            'padding:22px 36px;border-bottom:3px solid ' + primary + '">'
+            '<img src="' + logo_url + '" alt="' + (sname or "") + '"'
+            ' style="max-height:56px;max-width:220px;display:block;border:0;outline:none;'
+            'text-decoration:none;height:auto"/>'
+            '</td>'
+        )
+    else:
+        header_td = (
+            '<td style="background-color:' + header_bg + ';border-radius:10px 10px 0 0;'
+            'padding:26px 36px;border-bottom:3px solid ' + primary + '">'
+            '<span style="font-family:Georgia,serif;font-size:21px;font-weight:700;'
+            'color:' + header_fc + ';letter-spacing:-0.3px;line-height:1">'
+            + (sname or "") +
+            '</span>'
+            '</td>'
+        )
+
+    # ── Footer: texto personalizado con acento primario, o el genérico por defecto ──
+    if footer_tx:
+        footer_inner = (
+            '<div style="border-top:2px solid ' + primary + ';padding-top:12px;'
+            'font-size:12px;color:#8a8a8a;font-family:Arial,sans-serif;line-height:1.6">'
+            + footer_tx.replace(chr(10), "<br>") +
+            '</div>'
+        )
+    else:
+        footer_inner = (
+            '<p style="margin:0;font-size:12px;color:#aaa;font-family:Arial,sans-serif">'
+            'Enviado desde <strong style="color:#888">' + footer_name + '</strong>.'
+            '</p>'
+        )
+
     return (
         '<!DOCTYPE html>'
         '<html lang="es" xmlns="http://www.w3.org/1999/xhtml">'
@@ -559,26 +620,19 @@ def build_html_email(body_text: str, style_cfg: dict = None) -> str:
         '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"'
         ' style="max-width:600px;width:100%">'
         '<tr>'
-        '<td style="background-color:' + header_bg + ';border-radius:10px 10px 0 0;padding:24px 36px">'
-        '<span style="font-family:Georgia,serif;font-size:21px;font-weight:700;'
-        'color:' + header_fc + ';letter-spacing:-0.3px;line-height:1">'
-        + (sname or "") +
-        '</span>'
-        '</td>'
+        + header_td +
         '</tr>'
         '<tr>'
-        '<td style="background-color:' + bg + ';padding:36px 36px 28px 36px;'
-        'font-family:' + font + ';font-size:' + fsize + ';color:' + text_col + ';line-height:1.75">'
+        '<td style="background-color:' + bg + ';padding:40px 40px 30px 40px;'
+        'font-family:' + font + ';font-size:' + fsize + ';color:' + text_col + ';line-height:1.8">'
         + body_html +
         '</td>'
         '</tr>'
         + sig_block +
         '<tr>'
         '<td style="background-color:#f8f8f8;border-radius:0 0 10px 10px;'
-        'border-top:1px solid #e4e4e4;padding:16px 36px">'
-        '<p style="margin:0;font-size:12px;color:#aaa;font-family:Arial,sans-serif">'
-        'Enviado desde <strong style="color:#888">' + footer_name + '</strong>.'
-        '</p>'
+        'border-top:1px solid #e4e4e4;padding:18px 36px">'
+        + footer_inner +
         '</td>'
         '</tr>'
         '</table>'
@@ -757,6 +811,9 @@ def _build_style() -> dict:
         "header_color":   get_setting("style_header_color",   "#7ec850"),
         "sender_name":    c["sender_name"],
         "signature_html": get_setting("signature_html",       ""),
+        "logo_url":       get_setting("style_logo_url",       ""),
+        "footer_text":    get_setting("style_footer_text",    ""),
+        "banner_mode":    get_setting("style_banner_mode",    "text"),
     }
 
 def process_scheduled_emails(now_dt: datetime = None) -> dict:
@@ -821,6 +878,7 @@ def process_scheduled_emails(now_dt: datetime = None) -> dict:
                     send_resend(to, em["subject"], em["body"], body_html, attachment_ids=att_ids)
                     ok_count += 1
                     results["sent"] += 1
+                    _log_campaign_send(db, em["id"], em["campaign_id"], to, "sent")
                     results["details"].append({
                         "camp_name": em["camp_name"],
                         "day": em["day_number"],
@@ -831,6 +889,7 @@ def process_scheduled_emails(now_dt: datetime = None) -> dict:
                 except Exception as e:
                     fail_count += 1
                     results["failed"] += 1
+                    _log_campaign_send(db, em["id"], em["campaign_id"], to, "failed", str(e))
                     results["details"].append({
                         "camp_name": em["camp_name"],
                         "day": em["day_number"],
@@ -1137,6 +1196,9 @@ async def preview_email(request: Request, _: str = Depends(require_auth)):
         "header_bg":      get_setting("style_header_bg","#0c0f0a"),
         "header_color":   get_setting("style_header_color","#7ec850"),
         "signature_html": get_setting("signature_html",""),
+        "logo_url":       get_setting("style_logo_url",""),
+        "footer_text":    get_setting("style_footer_text",""),
+        "banner_mode":    get_setting("style_banner_mode","text"),
     }
     for k in style: style[k] = data.get(k, style[k])
     style["sender_name"] = data.get("sender_name", cfg()["sender_name"])
@@ -1555,6 +1617,18 @@ async def create_interaction(cid: int, request: Request, _: str = Depends(requir
 # ─────────────────────────────────────────────
 
 
+def _log_campaign_send(db, campaign_email_id, campaign_id, to, status="sent", error=None):
+    """Registra un envío de campaña por destinatario en campaign_email_sends.
+    Trazabilidad: ¿qué email de qué campaña, a quién, cuándo, ok/falló?"""
+    db.execute(
+        text("""INSERT INTO campaign_email_sends
+                (campaign_email_id, campaign_id, contact_email, status, error, sent_at)
+                VALUES (:ceid, :cid, :to, :status, :error, NOW())"""),
+        {"ceid": campaign_email_id, "cid": campaign_id, "to": to,
+         "status": status, "error": error}
+    )
+
+
 def _log_sent(db, to, subject, body, body_html, intent, campaign_id, attachment_ids=None):
     result = db.execute(text("SELECT name FROM contacts WHERE email=:email"), {"email": to})
     row = dict_from_row(result.fetchone())
@@ -1676,6 +1750,34 @@ async def upload_files(files: list[UploadFile] = File(...), _: str = Depends(req
         raise HTTPException(500, f"Error guardando metadata: {e}")
     finally:
         db.close()
+
+
+@app.post("/upload-logo")
+async def upload_logo(file: UploadFile = File(...), _: str = Depends(require_auth)):
+    """Sube una imagen de logo/banner a Storage y devuelve su URL pública permanente.
+    Se guarda bajo prefijo 'branding/' con nombre fijo por tipo para evitar acumular
+    versiones huérfanas. Requiere que el bucket sea público en Supabase."""
+    c = cfg()
+    if not c["supabase_url"] or not c["supabase_service_key"]:
+        raise HTTPException(500, "Supabase Storage no configurado — revisa SUPABASE_URL y SUPABASE_SERVICE_KEY")
+
+    ct = (file.content_type or "").lower()
+    if not ct.startswith("image/"):
+        raise HTTPException(400, "El archivo debe ser una imagen (PNG, JPG, SVG, etc.)")
+
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(413, "La imagen excede 5 MB")
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'png'
+    # Nombre único por subida: cache-busting y evita servir una versión vieja cacheada.
+    storage_path = f"branding/logo_{uuid.uuid4().hex}.{ext}"
+    try:
+        _storage_upload(c["storage_bucket"], storage_path, contents, file.content_type)
+        url = _storage_public_url(c["storage_bucket"], storage_path)
+    except Exception as e:
+        raise HTTPException(502, f"Error subiendo la imagen a Storage: {e}")
+    return {"url": url, "path": storage_path}
 
 
 @app.get("/attachments")
@@ -2478,6 +2580,61 @@ async def use_campaign_template(tid: int, request: Request, _: str = Depends(req
         db.close()
 
 
+@app.get("/campaigns/template-example")
+def campaign_template_example(_: str = Depends(require_auth)):
+    """Descarga una plantilla YAML de ejemplo, comentada, lista para rellenar y
+    reimportar por POST /campaigns/import. DEBE declararse antes de /campaigns/{cid}."""
+    example = """# ============================================================
+#  Plantilla de campaña — Emailer Agent
+#  Rellená los campos y reimportá con "Importar campaña".
+#  Los contactos NO van acá: se eligen al programar la campaña.
+# ============================================================
+version: 1
+
+campaign:
+  name: "Mi campaña de ejemplo"        # Nombre visible de la campaña
+  intent: "Presentar el producto y agendar una reunión"  # Objetivo (texto libre)
+  start_date: "2026-07-10"             # Fecha del primer envío (YYYY-MM-DD)
+  end_date: ""                          # Opcional: se calcula desde la cadencia si se deja vacío
+  send_mode: "daily"                   # daily | alternate | mon_wed_fri | tue_thu
+  send_time: "09:00"                   # Hora de envío (HH:MM, en UTC)
+  tone: "informative"                  # informative | aggressive
+
+# Secuencia de emails. Se envía uno por fecha según send_mode.
+# Podés usar Markdown en el body (**negrita**, listas, [links](url)).
+emails:
+  - day_number: 1
+    subject: "Hola, una idea para {empresa}"
+    body: |
+      Hola,
+
+      Primer email de la secuencia. Presentá el tema principal.
+
+      Saludos.
+  - day_number: 2
+    subject: "Seguimiento: ¿lo viste?"
+    body: |
+      Hola de nuevo,
+
+      Segundo email. Reforzá el valor y sumá un llamado a la acción.
+
+      Saludos.
+  - day_number: 3
+    subject: "Última nota sobre esto"
+    body: |
+      Hola,
+
+      Tercer email. Cierre cordial con una propuesta concreta.
+
+      Saludos.
+"""
+    return Response(
+        content=example,
+        media_type="application/x-yaml",
+        headers={"Content-Disposition": 'attachment; filename="campaign-ejemplo.yaml"'},
+    )
+
+
 @app.post("/campaigns/import")
 async def import_campaign(request: Request, _: str = Depends(require_auth)):
     """Importa una campaña completa desde YAML. Crea un borrador (draft) sin
@@ -2633,6 +2790,28 @@ def get_campaign(cid: int, _: str = Depends(require_auth)):
     finally:
         db.close()
 
+@app.get("/campaigns/{cid}/sends")
+def get_campaign_sends(cid: int, _: str = Depends(require_auth)):
+    """Trazabilidad: log de envíos por destinatario de una campaña.
+    Responde ¿qué campaña? ¿qué email (asunto/cuerpo)? ¿a quién? ¿cuándo? ¿ok/falló?"""
+    db = get_db()
+    try:
+        camp = dict_from_row(db.execute(
+            text("SELECT id, name FROM campaigns WHERE id=:id"), {"id": cid}).fetchone())
+        if not camp:
+            raise HTTPException(404, "Campaña no encontrada")
+        sends = rows_to_list(db.execute(text("""
+            SELECT s.id, s.campaign_email_id AS email_id, ce.day_number, ce.subject, ce.body,
+                   s.contact_email, s.status, s.error, s.sent_at
+            FROM campaign_email_sends s
+            JOIN campaign_emails ce ON ce.id = s.campaign_email_id
+            WHERE s.campaign_id = :cid
+            ORDER BY s.sent_at DESC
+        """), {"cid": cid}).fetchall())
+        return {"campaign_id": cid, "campaign_name": camp["name"], "sends": sends}
+    finally:
+        db.close()
+
 @app.delete("/campaigns/{cid}")
 def delete_campaign(cid: int, _: str = Depends(require_auth)):
     db = get_db()
@@ -2695,6 +2874,58 @@ def remove_campaign_attachment(cid: int, att_id: int, _: str = Depends(require_a
         db.execute(text(
             "DELETE FROM campaign_attachments WHERE campaign_id=:cid AND attachment_id=:aid"
         ), {"cid": cid, "aid": att_id})
+        db.commit()
+        return {"success": True}
+    finally:
+        db.close()
+
+
+# ─────────────────────────────────────────────
+# ROUTES — CAMPAIGN CONTACTS (editar destinatarios de campaña activa)
+# ─────────────────────────────────────────────
+
+@app.post("/campaigns/{cid}/contacts")
+async def add_campaign_contacts(cid: int, request: Request, _: str = Depends(require_auth)):
+    """Agrega destinatarios a una campaña, solo si aún quedan envíos pendientes."""
+    data = await request.json()
+    emails = [e.strip() for e in data.get("emails", []) if e and e.strip()]
+    if not emails:
+        raise HTTPException(400, "Se requiere al menos un email")
+
+    db = get_db()
+    try:
+        if not dict_from_row(db.execute(text("SELECT id FROM campaigns WHERE id=:id"), {"id": cid}).fetchone()):
+            raise HTTPException(404, "Campaña no encontrada")
+        # Guard: debe haber al menos un email aprobado sin enviar (envíos por venir).
+        pending = dict_from_row(db.execute(text(
+            "SELECT COUNT(*) AS n FROM campaign_emails WHERE campaign_id=:cid AND status='approved' AND sent_at IS NULL"
+        ), {"cid": cid}).fetchone())
+        if not pending or pending["n"] == 0:
+            raise HTTPException(400, "No quedan envíos pendientes: no se pueden agregar destinatarios")
+        for em in emails:
+            db.execute(text(
+                "INSERT INTO campaign_contacts (campaign_id, email) VALUES (:cid, :email) ON CONFLICT DO NOTHING"
+            ), {"cid": cid, "email": em})
+        db.commit()
+        return {"success": True, "added": len(emails)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
+
+@app.delete("/campaigns/{cid}/contacts/{email:path}")
+def remove_campaign_contact(cid: int, email: str, _: str = Depends(require_auth)):
+    """Quita un destinatario de los envíos futuros de la campaña.
+    El historial en campaign_email_sends (envíos ya realizados) queda intacto."""
+    db = get_db()
+    try:
+        db.execute(text(
+            "DELETE FROM campaign_contacts WHERE campaign_id=:cid AND email=:email"
+        ), {"cid": cid, "email": email})
         db.commit()
         return {"success": True}
     finally:
@@ -3351,8 +3582,10 @@ async def send_campaign_now(cid: int, _: str = Depends(require_auth)):
                     send_resend(to, em["subject"], em["body"], body_html, attachment_ids=att_ids)
                     results.append({"email_day": em["day_number"], "to": to, "ok": True})
                     email_ok = True
+                    _log_campaign_send(db, em["id"], cid, to, "sent")
                 except Exception as e:
                     results.append({"email_day": em["day_number"], "to": to, "ok": False, "error": str(e)})
+                    _log_campaign_send(db, em["id"], cid, to, "failed", str(e))
             if email_ok:
                 db.execute(text("UPDATE campaign_emails SET sent_at=:now, send_status='sent' WHERE id=:id"),
                            {"now": now_dt.isoformat(), "id": em["id"]})

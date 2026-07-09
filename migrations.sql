@@ -93,3 +93,33 @@ CREATE TABLE IF NOT EXISTS campaign_attachments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_campaign_attachments_camp ON campaign_attachments(campaign_id);
+
+-- ============================================================
+--  Migración: trazabilidad de envíos de campaña, por destinatario
+--  Ejecutar en: Supabase → SQL Editor → New Query
+--  Idempotente: seguro de correr varias veces.
+-- ============================================================
+
+-- ── Registro por destinatario de cada envío de campaña ──
+-- Antes solo se marcaba campaign_emails.sent_at (agregado, a nivel del email
+-- completo). Esta tabla responde ¿a quién? ¿cuándo? ¿ok/falló? por envío.
+-- ON DELETE CASCADE: al borrar la campaña o el email, se borra su historial.
+CREATE TABLE IF NOT EXISTS campaign_email_sends (
+    id                SERIAL PRIMARY KEY,
+    campaign_email_id INTEGER NOT NULL REFERENCES campaign_emails(id) ON DELETE CASCADE,
+    campaign_id       INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    contact_email     TEXT NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'sent',   -- 'sent' | 'failed'
+    error             TEXT,
+    sent_at           TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ces_campaign ON campaign_email_sends(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_ces_email    ON campaign_email_sends(campaign_email_id);
+CREATE INDEX IF NOT EXISTS idx_ces_contact  ON campaign_email_sends(contact_email);
+
+-- ── Estilos de email nuevos (banner/footer) ──
+-- No requieren esquema: se guardan como filas key/value en la tabla `settings`
+-- vía set_setting(). Documentados aquí para referencia:
+--   style_logo_url    → URL de logo para el banner (fallback: nombre remitente)
+--   style_footer_text → texto personalizado del footer (fallback: "Enviado desde …")

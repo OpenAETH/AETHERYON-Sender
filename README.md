@@ -109,6 +109,8 @@ Flujo completo con revisión humana:
 6. Enviar    → automático (scheduler cada 60s) o manual
 ```
 
+Importación/exportación: descargá una plantilla YAML de ejemplo (`GET /campaigns/template-example`), rellenala y reimportala. También podés exportar campañas existentes en el mismo formato.
+
 | Modo | Frecuencia |
 |------|-----------|
 | `daily` | Todos los días |
@@ -214,25 +216,38 @@ Colores, fuentes, firma HTML. Vista previa en vivo. Persistido en DB (`settings`
 </details>
 
 <details>
-<summary><strong>🚀 Campañas</strong> (13+ endpoints)</summary>
+<summary><strong>🚀 Campañas</strong> (28 endpoints)</summary>
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | GET | `/campaigns` | Lista campañas con conteos |
 | GET | `/campaigns/schedule` | Agenda de envío con estados |
+| GET | `/campaigns/schedule-email/{email_id}` | Detalle de email programado |
+| POST | `/campaigns/schedule-email/{email_id}/reschedule` | Reprogramar email |
+| POST | `/campaigns/schedule-email/{email_id}/cancel` | Cancelar email programado |
 | GET | `/campaigns/templates` | Lista plantillas pre-aprobadas |
+| GET | `/campaigns/template-example` | Descarga plantilla YAML de ejemplo comentada |
+| POST | `/campaigns/templates/{tid}/use` | Instancia una plantilla |
 | POST | `/campaigns/generate` | Genera campaña completa con Groq |
 | POST | `/campaigns/init` | Crea estructura vacía (generación uno a uno) |
+| POST | `/campaigns/import` | Importa campaña desde YAML |
 | POST | `/campaigns/process-scheduled` | Procesa emails programados vencidos |
-| GET | `/campaigns/{id}` | Detalle con emails y contactos |
-| DELETE | `/campaigns/{id}` | Elimina campaña y sus datos |
-| POST | `/campaigns/{id}/generate-one` | Genera un email (SSE streaming) |
-| POST | `/campaigns/{id}/approve-email` | Aprueba o rechaza un email |
-| POST | `/campaigns/{id}/retry-email` | Regenera un email con feedback |
-| POST | `/campaigns/{id}/finalize` | Valida y marca como `scheduled` |
-| POST | `/campaigns/{id}/send-now` | Envía todos los emails aprobados |
-| POST | `/campaigns/{id}/save-as-template` | Guarda como plantilla |
-| POST | `/campaigns/templates/{tid}/use` | Instancia una plantilla |
+| GET | `/campaigns/{cid}` | Detalle con emails y contactos |
+| GET | `/campaigns/{cid}/export` | Exporta campaña a YAML |
+| GET | `/campaigns/{cid}/sends` | Estado de envíos de una campaña |
+| DELETE | `/campaigns/{cid}` | Elimina campaña y sus datos |
+| POST | `/campaigns/{cid}/generate-one` | Genera un email (SSE streaming) |
+| POST | `/campaigns/{cid}/approve-email` | Aprueba o rechaza un email |
+| POST | `/campaigns/{cid}/retry-email` | Regenera un email con feedback |
+| POST | `/campaigns/{cid}/finalize` | Valida y marca como `scheduled` |
+| POST | `/campaigns/{cid}/send-now` | Envía todos los emails aprobados |
+| POST | `/campaigns/{cid}/save-as-template` | Guarda como plantilla |
+| GET | `/campaigns/{cid}/attachments` | Lista adjuntos de campaña |
+| POST | `/campaigns/{cid}/attachments` | Agrega adjunto a campaña |
+| DELETE | `/campaigns/{cid}/attachments/{att_id}` | Quita adjunto de campaña |
+| POST | `/campaigns/{cid}/contacts` | Agrega contacto a campaña |
+| DELETE | `/campaigns/{cid}/contacts/{email}` | Quita contacto de campaña |
+| GET | `/contacts/campaign-status` | Estado de campañas por contacto |
 </details>
 
 <details>
