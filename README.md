@@ -28,7 +28,7 @@ Asistente ejecutivo de comunicaciones vía email con backend FastAPI, frontend S
 | Base de datos | PostgreSQL via Supabase (SQLAlchemy 2.0 + psycopg2) |
 | Envío de emails | Resend API |
 | Bandeja de entrada | IMAP SSL |
-| Generación IA | Groq (Llama 3.3 70b) |
+| Generación IA | Groq (modelo configurable; por defecto Llama 3.3 70b) |
 | Deploy | Render.com |
 
 ---
@@ -110,6 +110,8 @@ Flujo completo con revisión humana:
 ```
 
 Importación/exportación: descargá una plantilla YAML de ejemplo (`GET /campaigns/template-example`), rellenala y reimportala. También podés exportar campañas existentes en el mismo formato.
+
+**Modelo de IA configurable:** el modelo usado tanto por el Asistente como por la generación/regeneración de emails se elige desde el **Panel de Configuración** (setting `ai_model`) y se aplica de inmediato a las nuevas generaciones. Por defecto `llama-3.3-70b-versatile`. El selector solo ofrece modelos de Groq confiables para redacción (sin razonamiento): `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `openai/gpt-oss-120b`, `openai/gpt-oss-20b`. El parser tolera code fences y bloques de razonamiento (`<think>`) por si se usa un modelo que los emita.
 
 | Modo | Frecuencia |
 |------|-----------|

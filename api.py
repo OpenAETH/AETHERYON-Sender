@@ -3149,6 +3149,7 @@ REGLAS:
 - {"Primer email: presentacion, gancho inicial, presentar propuesta" if day_number == 1 else ""}
 - {"Ultimo email: cierre, urgencia maxima, CTA final definitivo" if day_number == total else ""}
 - Formato Markdown: **negrita**, *italica*, ## titulos, listas con -
+- Toda URL debe ir SIEMPRE en formato Markdown con texto descriptivo: [Texto descriptivo](https://url.com) — nunca pegues la URL cruda. Ej: [AETH Portal](https://aeth-portal.onrender.com/)
 - NO incluir Para/De/Asunto en el cuerpo
 - Cuerpo completo y elaborado (minimo 150 palabras)
 
@@ -3300,6 +3301,7 @@ REGLAS:
 - Mantén coherencia narrativa progresiva entre emails
 - Varía el ángulo y CTA en cada email
 - Usa formato Markdown: **negrita**, *italica*, ## títulos, listas con -
+- Toda URL debe ir SIEMPRE en formato Markdown con texto descriptivo: [Texto descriptivo](https://url.com) — nunca pegues la URL cruda. Ej: [AETH Portal](https://aeth-portal.onrender.com/)
 - Cada email debe tener asunto y cuerpo distintos
 - NO incluyas encabezados como Para:/De:/Asunto: en el cuerpo
 
@@ -3477,7 +3479,9 @@ Cuerpo: {em['body']}
 
 {'FEEDBACK DEL USUARIO: ' + feedback if feedback else ''}
 
-Genera un nuevo email mejorado para esta posición. Responde SOLO con JSON:
+Genera un nuevo email mejorado para esta posición.
+Toda URL debe ir SIEMPRE en formato Markdown con texto descriptivo: [Texto descriptivo](https://url.com) — nunca pegues la URL cruda. Ej: [AETH Portal](https://aeth-portal.onrender.com/)
+Responde SOLO con JSON:
 {{"subject": "Nuevo asunto", "body": "Nuevo cuerpo en Markdown"}}"""
 
         # Edicion manual: feedback con formato "EDIT:subject|||body"

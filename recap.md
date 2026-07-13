@@ -27,6 +27,18 @@ Bitácora de trabajo para iterar sobre el código. Anotaciones de Claude para re
 
 ## Historial de cambios
 
+### 2026-07-13 — Fix emails vacíos + selector de modelo sin efecto
+**Problema:** el emailer generaba emails **sin texto visible y sin error en consola**.
+**Causa raíz (dos bugs independientes):**
+1. **El selector de modelo no afectaba la generación de emails.** Los 3 endpoints de email (`generate_one_email` `api.py:~3163`, `generate_campaign` `api.py:~3317`, `regenerate_email` `api.py:~3493`) tenían el modelo *hardcodeado* a `llama-3.3-70b-versatile` e ignoraban el setting `ai_model`. Solo el chat (`/ai/generate`) lo respetaba.
+2. **Los modelos de razonamiento rompían el parser en silencio.** Probado en vivo contra Groq: `qwen/qwen3-32b` y `groq/compound` emiten bloques `<think>`/`<Think>` **dentro de `content`**. `parse_ai_json` (`api.py:~3025`) recortaba del primer `{` al último `}`; si el `<think>` contenía un ejemplo tipo JSON, la porción abarcaba dos objetos → `json.loads` lanzaba `Extra data` → el fallback `_extract_subject_body` devolvía subject/body vacíos, sin error visible.
+**Fix:**
+1. Los 3 endpoints usan `get_setting("ai_model", "llama-3.3-70b-versatile")` (reutiliza `get_setting` `api.py:341`, igual que el chat). El selector por fin aplica.
+2. `parse_ai_json` elimina bloques `<think>...</think>` (case-insensitive, multilínea) antes de recortar el objeto. Los fences ```` ```json ```` ya se manejaban.
+3. Default del fallback del chat alineado a `llama-3.3-70b-versatile` (antes `groq/compound`).
+4. `index.html`: selector reducido a modelos confiables sin razonamiento (`llama-3.3-70b-versatile` recomendado, `llama-3.1-8b-instant`, `openai/gpt-oss-120b`, `openai/gpt-oss-20b`); se quitaron `qwen/qwen3-32b` y `groq/compound`. Defaults JS cambiados a `llama-3.3-70b-versatile`.
+**Nota:** los settings viven en Postgres/Supabase (no en `leadforge.db`). Un `ai_model` guardado de antes sigue aplicándose hasta guardar uno nuevo, pero ahora es seguro porque el parser limpia los bloques de razonamiento.
+
 ### 2026-06-19 — Fix envío de emails con adjuntos (Supabase Storage)
 **Problema:** al adjuntar un archivo (p. ej. PDF), el email **no se enviaba**.
 **Causa raíz:** `send_resend()` (`api.py:~559`) generaba una *signed URL* con `_storage_signed_url()` y se la pasaba a Resend como `attachment.path`. La URL estaba mal construida: Supabase devuelve `signedURL` como ruta relativa a la raíz de Storage (`/object/sign/...`) y el código anteponía solo el host, **omitiendo el prefijo obligatorio `/storage/v1`**. La URL daba 404; Resend fallaba al descargarla en el momento del envío y **reventaba el email completo** (el fallo ocurría dentro de `resend.Emails.send()`, fuera del `try/except` que solo logueaba un warning).
