@@ -729,11 +729,10 @@ select:-webkit-autofill{
     <div class="ctx-hint">Modelo usado por el Asistente y por la redaccion de emails con IA. Se aplica de inmediato a las nuevas generaciones.</div>
     <label class="ctx-label">Modelo activo</label>
     <select class="ctx-input" id="cfg-ai-model">
-      <option value="groq/compound">groq/compound — agentico (busqueda + herramientas)</option>
-      <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile — potente</option>
+      <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile — potente (recomendado)</option>
       <option value="llama-3.1-8b-instant">llama-3.1-8b-instant — rapido</option>
-      <option value="openai/gpt-oss-120b">openai/gpt-oss-120b</option>
-      <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
+      <option value="openai/gpt-oss-120b">openai/gpt-oss-120b — rapido y economico</option>
+      <option value="openai/gpt-oss-20b">openai/gpt-oss-20b — el mas rapido</option>
     </select>
   </div>
   <div class="ctx-block">
@@ -2189,7 +2188,7 @@ async function loadConfigPanel(){
   }catch(e){}
   try{
     const s=await(await apiFetch('/settings')).json();
-    document.getElementById('cfg-ai-model').value=s.ai_model||'groq/compound';
+    document.getElementById('cfg-ai-model').value=s.ai_model||'llama-3.3-70b-versatile';
     document.getElementById('cfg-sender-name').value=s.sender_name||'';
   }catch(e){}
 }
@@ -2214,7 +2213,7 @@ function saveChatHistory(){try{localStorage.setItem('chatHistory',JSON.stringify
 function initChat(){
   renderChat();
   apiFetch('/settings').then(r=>r.json()).then(s=>{
-    document.getElementById('chatModelLabel').textContent=s.ai_model||'groq/compound';
+    document.getElementById('chatModelLabel').textContent=s.ai_model||'llama-3.3-70b-versatile';
   }).catch(()=>{});
 }
 function appendChatBubble(role,text){

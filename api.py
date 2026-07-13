@@ -2085,7 +2085,7 @@ async def ai_generate(request: Request, _: str = Depends(require_auth)):
     headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
     # El modelo se configura desde el Panel de Configuración (setting `ai_model`);
     # el frontend puede sobreescribirlo por request enviando `model`.
-    model = data.get("model") or get_setting("ai_model", "groq/compound")
+    model = data.get("model") or get_setting("ai_model", "llama-3.3-70b-versatile")
     payload = {"model": model, "stream": stream, "messages": messages}
 
     if stream:
@@ -3033,6 +3033,10 @@ def parse_ai_json(raw: str) -> dict:
     if not raw or not raw.strip():
         raise json.JSONDecodeError("respuesta vacia de la IA", raw or "", 0)
     s = raw.strip()
+    # Quitar bloques de razonamiento que algunos modelos (qwen, compound) emiten
+    # dentro de `content`. Sin esto, el <think> puede contener un ejemplo tipo JSON
+    # y el recorte al objeto externo abarca dos objetos -> 'Extra data'.
+    s = re.sub(r'(?is)<think>.*?</think>', '', s).strip()
     # Quitar code fences de markdown
     s = re.sub(r'^```(?:json)?\s*', '', s)
     s = re.sub(r'\s*```$', '', s).strip()
@@ -3151,6 +3155,8 @@ REGLAS:
 Responde UNICAMENTE con JSON valido (sin texto extra, sin backticks):
 {{"subject": "Asunto del email", "body": "Cuerpo completo en Markdown..."}}"""
 
+    model = get_setting("ai_model", "llama-3.3-70b-versatile")
+
     async def stream_email():
         full_content = ""
         try:
@@ -3160,7 +3166,7 @@ Responde UNICAMENTE con JSON valido (sin texto extra, sin backticks):
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
                     json={
-                        "model": "llama-3.3-70b-versatile",
+                        "model": model,
                         "stream": True,
                         "temperature": 0.85,
                         "max_tokens": 2000,
@@ -3308,13 +3314,14 @@ Responde ÚNICAMENTE con JSON válido con esta estructura exacta (sin texto extr
   ]
 }}"""
 
+    model = get_setting("ai_model", "llama-3.3-70b-versatile")
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "llama-3.3-70b-versatile",
+                    "model": model,
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"Genera la secuencia de {n} emails para la campaña. Responde solo con el JSON."}
@@ -3486,11 +3493,12 @@ Genera un nuevo email mejorado para esta posición. Responde SOLO con JSON:
                 db_e.close()
             return {"success": True, "subject": subj_edit, "body": body_edit}
 
+        model = get_setting("ai_model", "llama-3.3-70b-versatile")
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json={"model": "llama-3.3-70b-versatile",
+                json={"model": model,
                       "messages": [{"role": "user", "content": prompt}],
                       "temperature": 0.9, "max_tokens": 2000}
             )
