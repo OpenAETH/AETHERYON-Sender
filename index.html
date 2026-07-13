@@ -1952,12 +1952,22 @@ async function previewEmail(){
   try{const r=await apiFetch('/preview-email',{method:'POST',body:JSON.stringify({body:bodyText})});const d=await r.json();document.getElementById('previewFrame').srcdoc=d.html;openModal('modalPreview');}catch(e){toast('Error preview','error');}
 }
 
+// Une el campo destinatario (que puede traer varias direcciones separadas por
+// coma/;/salto) con los chips, separa, limpia y deduplica preservando orden.
+function parseRecipients(mainTo, extras){
+  const out=[], seen=new Set();
+  const add=v=>{const e=(v||'').trim();if(e&&!seen.has(e)){seen.add(e);out.push(e);}};
+  (mainTo||'').split(/[,;\n]+/).forEach(add);
+  [...(extras||[])].forEach(add);
+  return out;
+}
+
 async function openSendConfirm(){
   const bodyText=document.getElementById('composedBody').textContent.trim();
   if(!bodyText||bodyText.includes('aparecera aqui'))return toast('Genera un email primero','error');
   const mainTo=document.getElementById('c-to').value.trim(),subject=document.getElementById('c-subject').value.trim();
-  // Destinatarios = campo de texto + contactos agregados (chips).
-  const allRecipients=[mainTo,...extraRecipients].filter((v,i,a)=>v&&a.indexOf(v)===i);
+  // Destinatarios = campo de texto (puede traer varias separadas por , ; o salto) + chips.
+  const allRecipients=parseRecipients(mainTo, extraRecipients);
   if(!allRecipients.length||!subject)return toast('Completa destinatario y asunto','error');
   try{const d=await(await apiFetch('/config')).json();document.getElementById('m-via').textContent=(d.sender_name||d.sender_email||'');}catch(e){}
   document.getElementById('m-to').textContent=allRecipients.length>1?`${allRecipients[0]} +${allRecipients.length-1} mas`:allRecipients[0];
@@ -1973,7 +1983,7 @@ async function openSendConfirm(){
 async function confirmSend(){
   const btn=document.getElementById('btnConfirmSend');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Enviando...';
   const mainTo=document.getElementById('c-to').value.trim();
-  const allRecipients=[mainTo,...extraRecipients].filter((v,i,a)=>v&&a.indexOf(v)===i);
+  const allRecipients=parseRecipients(mainTo, extraRecipients);
   try{
     const r=await apiFetch('/send-email',{method:'POST',body:JSON.stringify({
       recipients:allRecipients,

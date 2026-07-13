@@ -1655,7 +1655,16 @@ def _log_sent(db, to, subject, body, body_html, intent, campaign_id, attachment_
 async def send_email(request: Request, _: str = Depends(require_auth)):
     data    = await request.json()
     recipients_raw = data.get("recipients") or ([data.get("to","")] if data.get("to") else [])
-    recipients = [r.strip() for r in recipients_raw if r.strip()]
+    # Expandir por si un elemento trae varias direcciones pegadas (coma/;/salto)
+    # y deduplicar preservando orden. Evita mandar toda la lista como un solo `to`.
+    recipients = []
+    _seen = set()
+    for r in recipients_raw:
+        for addr in re.split(r'[,;\n]+', r or ""):
+            addr = addr.strip()
+            if addr and addr not in _seen:
+                _seen.add(addr)
+                recipients.append(addr)
     subject     = data.get("subject","").strip()
     body        = data.get("body","").strip()
     intent      = data.get("intent","general")
