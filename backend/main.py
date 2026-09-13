@@ -84,6 +84,15 @@ app.include_router(supervision.router)
 app.include_router(inbox.router)
 app.include_router(ai.router)
 
+
+@app.get("/__build")
+async def build_info():
+    """Verificación rápida de deploy — sin login, para confirmar con un
+    simple curl/GET que el servidor está corriendo el build esperado
+    (no una versión anterior cacheada por Docker o por un deploy viejo)."""
+    from backend.config import APP_BUILD
+    return JSONResponse({"build": APP_BUILD}, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
 # ─────────────────────────────────────────────
 # FRONTEND (SPA) — index.html vive en la raíz del repo, se copia a static/
 # ─────────────────────────────────────────────
@@ -127,7 +136,7 @@ async def head_frontend():
 @app.get("/")
 async def serve_frontend():
     if INDEX_PATH and os.path.exists(INDEX_PATH):
-        return FileResponse(INDEX_PATH, media_type="text/html")
+        return FileResponse(INDEX_PATH, media_type="text/html", headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
     return JSONResponse({"error": "Frontend no encontrado"}, status_code=404)
 
 
@@ -136,7 +145,7 @@ async def serve_spa(full_path: str):
     if any(full_path.startswith(p) for p in API_PATHS):
         raise HTTPException(404, "Not found")
     if INDEX_PATH and os.path.exists(INDEX_PATH):
-        return FileResponse(INDEX_PATH, media_type="text/html")
+        return FileResponse(INDEX_PATH, media_type="text/html", headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
     return JSONResponse({"error": "Frontend no encontrado"}, status_code=404)
 
 

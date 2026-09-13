@@ -14,6 +14,12 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# Marcador de build — visible en la UI (pie del sidebar) y en /api/status.
+# Sirve para confirmar que el navegador esta corriendo el codigo que
+# efectivamente se desplego, y no una version anterior cacheada por Docker
+# o por un deploy viejo en Render. Actualizar con cada entrega.
+APP_BUILD = "2026-09-13.5"
+
 # Raíz del repo (padre del paquete backend/), para resolver index.html y static/.
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

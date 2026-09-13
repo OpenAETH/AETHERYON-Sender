@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, Request
 
 from backend.api.deps import require_auth
-from backend.config import cfg
+from backend.config import cfg, APP_BUILD
 from backend.services import settings_service
 
 router = APIRouter(tags=["settings"], dependencies=[Depends(require_auth)])
@@ -13,6 +13,7 @@ def api_status():
     c = cfg()
     return {
         "status": "AETHERYON Outreach Sender",
+        "build": APP_BUILD,
         "smtp_user": c["sender_email"] or "NO CONFIG",
         "imap_host": c["imap_host"] or "NO CONFIG",
         "provider": "resend",
