@@ -939,8 +939,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <div class="info">Para: <b id="m-to"></b></div>
     <div class="info">Asunto: <b id="m-subject"></b></div>
     <div class="info">Via: <b id="m-via" style="color:var(--green)"></b></div>
+    <div class="info">Modo: <b id="m-content-type" style="color:var(--green)"></b></div>
     <div class="info" id="m-attachments" style="display:none"></div>
-    <div class="warn">El email se enviara formateado en HTML con los estilos configurados. Esta accion no se puede deshacer.</div>
+    <div class="warn" id="m-warn">El email se enviara formateado en HTML con los estilos configurados. Esta accion no se puede deshacer.</div>
     <div style="display:flex;gap:6px;align-items:center;margin:12px 0;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r)">
       <input type="email" id="m-test-email" placeholder="tu-email@empresa.com" style="flex:1;background:transparent;border:none;outline:none;color:var(--text);font-family:var(--mono);font-size:12px"/>
       <button class="btn btn-blue btn-sm" id="btnSendTest" onclick="sendTestFromModal()">Enviar prueba</button>
@@ -1569,14 +1570,16 @@ function editTemplate(id){
   document.getElementById('templateForm').scrollIntoView({behavior:'smooth'});
 }
 function cancelTemplateForm(){document.getElementById('templateForm').style.display='none';editingTemplateId=null;}
-// Igual que en Redacción: si pegan un template HTML en el textarea (que ya
-// preserva el texto tal cual), solo hace falta pasar el modo a 'html'.
+// Igual que en Redacción: el textarea ya preserva el texto plano pegado tal
+// cual, solo hace falta detectar si es HTML fuente y pasar el modo a 'html'.
+// Se mira unicamente text/plain — el text/html del portapapeles puede ser
+// una vista con resaltado de sintaxis (spans de color por caracter) en vez
+// del template real, si el origen fue un editor de codigo.
 function handleTemplatePaste(event){
   const cd = event.clipboardData || window.clipboardData;
   if(!cd) return;
-  const htmlData = cd.getData('text/html') || '';
   const plainData = cd.getData('text/plain') || '';
-  if(looksLikeDesignedHtml(htmlData) || looksLikeHtmlSource(plainData)){
+  if(looksLikeHtmlSource(plainData)){
     setTemplateContentType('html');
     toast('HTML detectado — cambiamos a modo "HTML pegado"','success');
   }
@@ -1878,18 +1881,13 @@ function applyLoadedEmail(){
   toast('Email cargado. Podés editarlo y enviar.','success');
 }
 
-function looksLikeDesignedHtml(html){
-  if(!html) return false;
-  const h = html.trim();
-  if(!h) return false;
-  if(/<!DOCTYPE/i.test(h)) return true;
-  if(/<html[\s>]/i.test(h)) return true;
-  if(/<table[\s>]/i.test(h)) return true;
-  if(/<style[\s>]/i.test(h)) return true;
-  if(/<body[\s>]/i.test(h)) return true;
-  const styledTags = (h.match(/<[a-z][^>]*style\s*=/ig)||[]).length;
-  return styledTags >= 3;
-}
+// Detecta código HTML fuente a partir del texto plano del portapapeles.
+// A propósito NO se usa el `text/html` del portapapeles: cuando el origen
+// es un editor de código o un visor con resaltado de sintaxis, ese
+// `text/html` es una "foto" decorativa del código (cada caracter envuelto
+// en <span style="color:..."> con fondo tipo Solarized, StartFragment,
+// etc.) — no el template real. El `text/plain` siempre trae el código
+// limpio tal cual lo copiaste.
 function looksLikeHtmlSource(text){
   if(!text) return false;
   const t = text.trim();
@@ -1904,16 +1902,12 @@ function looksLikeHtmlSource(text){
 function handleComposePaste(event){
   const cd = event.clipboardData || window.clipboardData;
   if(!cd) return;
-  const htmlData = cd.getData('text/html') || '';
   const plainData = cd.getData('text/plain') || '';
-  let candidate = null;
-  if(looksLikeDesignedHtml(htmlData)) candidate = htmlData.trim();
-  else if(looksLikeHtmlSource(plainData)) candidate = plainData.trim();
-  if(candidate){
+  if(looksLikeHtmlSource(plainData)){
     event.preventDefault();
     setComposeContentType('html');
     const box=document.getElementById('composedBodyHtml');
-    box.value=candidate;
+    box.value=plainData.trim();
     box.focus();
     toast('HTML detectado — cambiamos a modo "HTML pegado"','success');
   }
@@ -1956,6 +1950,16 @@ async function openSendConfirm(){
   try{const d=await(await apiFetch('/config')).json();document.getElementById('m-via').textContent=(d.sender_name||d.sender_email||'');document.getElementById('m-test-email').value=d.sender_email||'';}catch(e){}
   document.getElementById('m-to').textContent=to;
   document.getElementById('m-subject').textContent=subject;
+  const modeEl=document.getElementById('m-content-type'), warnEl=document.getElementById('m-warn');
+  if(composeContentType==='html'){
+    modeEl.textContent='HTML pegado — se enviara tal cual, sin modificar';
+    modeEl.style.color='var(--blue)';
+    warnEl.textContent='El email se enviara exactamente como esta pegado, sin envolverlo en la plantilla de AETHERYON. Esta accion no se puede deshacer.';
+  }else{
+    modeEl.textContent='Markdown — se envuelve en la plantilla de AETHERYON';
+    modeEl.style.color='var(--green)';
+    warnEl.textContent='El email se enviara formateado en HTML con los estilos configurados. Esta accion no se puede deshacer.';
+  }
   const attEl=document.getElementById('m-attachments');
   if(_pendingAttachments.length){
     attEl.style.display='block';
