@@ -253,6 +253,29 @@ def html_to_text(html: str) -> str:
     return text.strip()
 
 
+_STRONG_HTML_RE = re.compile(r"<!DOCTYPE\s+html|<html[\s>]|<body[\s>]|<style[\s>]", re.IGNORECASE)
+
+
+def looks_like_full_html_document(text: str) -> bool:
+    """Señal fuerte de que `text` ya es un documento HTML completo (no
+    Markdown): DOCTYPE, <html>, <body> o un bloque <style>. Cualquier
+    template HTML real exportado de un editor de emails trae al menos una
+    de estas — un texto en Markdown normal, casi nunca."""
+    if not text:
+        return False
+    return bool(_STRONG_HTML_RE.search(text.strip()))
+
+
+def is_html_mode(body: str, content_type: str) -> bool:
+    """Decisión única y compartida de si `body` debe tratarse como HTML
+    completo (sin envolver, sin pasar por Markdown) — ya sea porque el
+    modo lo pide explícitamente, o porque el contenido es inequívocamente
+    un documento HTML completo aunque haya llegado marcado como 'markdown'.
+    Todo lo que decide 'HTML o no' (armado del email Y su texto plano de
+    respaldo) usa esta misma función, para que nunca queden desincronizados."""
+    return (content_type or "markdown") == "html" or looks_like_full_html_document(body)
+
+
 def assemble(body: str, content_type: str, style_cfg: dict = None) -> str:
     """Arma el HTML final del email según el modo de Redacción:
     - 'markdown' (por defecto): el cuerpo se interpreta como Markdown liviano
@@ -260,7 +283,13 @@ def assemble(body: str, content_type: str, style_cfg: dict = None) -> str:
     - 'html': el cuerpo YA es un template diseñado y completo (pegado por el
       usuario) — se envía tal cual, sin reprocesar ni envolver, para respetar
       el diseño exactamente como fue pegado.
+
+    Red de seguridad: si igual llega marcado como 'markdown' pero el
+    contenido es inequívocamente un documento HTML completo (DOCTYPE/html/
+    body/style), se lo respeta como HTML de todos modos — así una falla de
+    estado en el frontend (o un cliente de API externo) nunca termina
+    mandando código HTML escapado y sin renderizar dentro de la plantilla.
     """
-    if (content_type or "markdown") == "html":
+    if is_html_mode(body, content_type):
         return body or ""
     return build_html_email(body, style_cfg)

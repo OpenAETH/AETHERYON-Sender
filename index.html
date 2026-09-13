@@ -487,8 +487,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
             <button class="btn btn-ghost btn-sm" id="btnRegenerate" onclick="composeEmail()">Regenerar</button>
           </div>
         </div>
-        <div class="generated-body" id="composedBody" contenteditable="true" spellcheck="true">
-          <span style="color:var(--text3);font-style:normal;font-family:var(--mono);font-size:11px">El email generado aparecera aqui en Markdown. Puedes editarlo libremente.</span>
+        <div class="generated-body" id="composedBody" contenteditable="true" spellcheck="true" onpaste="handleComposePaste(event)">
+          <span style="color:var(--text3);font-style:normal;font-family:var(--mono);font-size:11px">El email generado aparecera aqui en Markdown. Puedes editarlo libremente, o directamente pegar un template HTML y lo detectamos solos.</span>
         </div>
         <textarea id="composedBodyHtml" spellcheck="false" placeholder="Pega aca el HTML completo de tu template ya disenado. Se enviara tal cual, sin reprocesar — podes usar variables como {{first_name}}, {{company}}, {{role}}, {{sender_name}} y {{cta_url}}."
           style="display:none;width:100%;min-height:320px;background:var(--bg);border:none;border-top:1px solid var(--border);outline:none;resize:vertical;font-family:var(--mono);font-size:11px;color:var(--text);padding:14px;line-height:1.6"></textarea>
@@ -531,7 +531,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
             <button type="button" class="btn btn-ghost btn-sm" id="btnTplModeHtml" style="border:none;border-radius:0;border-left:1px solid var(--border)" onclick="setTemplateContentType('html')">HTML pegado</button>
           </div>
         </div>
-        <textarea id="tf-body" rows="12" placeholder="Markdown: **negrita**, ## titulos, listas con -. O activa 'HTML pegado' y pega tu template completo ya disenado. Variables: {{first_name}} {{company}} {{role}} {{sender_name}} {{cta_url}}"
+        <textarea id="tf-body" rows="12" onpaste="handleTemplatePaste(event)" placeholder="Markdown: **negrita**, ## titulos, listas con -. O pega directamente tu template HTML ya disenado — lo detectamos solos. Variables: {{first_name}} {{company}} {{role}} {{sender_name}} {{cta_url}}"
           style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;font-family:var(--mono);font-size:12px;color:var(--text);resize:vertical"></textarea>
       </div>
       <div class="panel-footer">
@@ -1569,6 +1569,18 @@ function editTemplate(id){
   document.getElementById('templateForm').scrollIntoView({behavior:'smooth'});
 }
 function cancelTemplateForm(){document.getElementById('templateForm').style.display='none';editingTemplateId=null;}
+// Igual que en Redacción: si pegan un template HTML en el textarea (que ya
+// preserva el texto tal cual), solo hace falta pasar el modo a 'html'.
+function handleTemplatePaste(event){
+  const cd = event.clipboardData || window.clipboardData;
+  if(!cd) return;
+  const htmlData = cd.getData('text/html') || '';
+  const plainData = cd.getData('text/plain') || '';
+  if(looksLikeDesignedHtml(htmlData) || looksLikeHtmlSource(plainData)){
+    setTemplateContentType('html');
+    toast('HTML detectado — cambiamos a modo "HTML pegado"','success');
+  }
+}
 function setTemplateContentType(mode){
   templateContentType=mode;
   const btnMd=document.getElementById('btnTplModeMarkdown'), btnHtml=document.getElementById('btnTplModeHtml');
@@ -1866,6 +1878,46 @@ function applyLoadedEmail(){
   toast('Email cargado. Podés editarlo y enviar.','success');
 }
 
+function looksLikeDesignedHtml(html){
+  if(!html) return false;
+  const h = html.trim();
+  if(!h) return false;
+  if(/<!DOCTYPE/i.test(h)) return true;
+  if(/<html[\s>]/i.test(h)) return true;
+  if(/<table[\s>]/i.test(h)) return true;
+  if(/<style[\s>]/i.test(h)) return true;
+  if(/<body[\s>]/i.test(h)) return true;
+  const styledTags = (h.match(/<[a-z][^>]*style\s*=/ig)||[]).length;
+  return styledTags >= 3;
+}
+function looksLikeHtmlSource(text){
+  if(!text) return false;
+  const t = text.trim();
+  if(!t) return false;
+  if(/^<!DOCTYPE/i.test(t)) return true;
+  if(/^<html[\s>]/i.test(t)) return true;
+  const tagMatches = t.match(/<\/?(html|head|body|table|tr|td|div|style|meta|title)[\s>\/]/ig);
+  return !!(tagMatches && tagMatches.length >= 2);
+}
+// Pegar un template ya disenado en el editor Markdown lo detecta y cambia
+// solo a modo "HTML pegado" — no hace falta acordarse de tocar el toggle antes.
+function handleComposePaste(event){
+  const cd = event.clipboardData || window.clipboardData;
+  if(!cd) return;
+  const htmlData = cd.getData('text/html') || '';
+  const plainData = cd.getData('text/plain') || '';
+  let candidate = null;
+  if(looksLikeDesignedHtml(htmlData)) candidate = htmlData.trim();
+  else if(looksLikeHtmlSource(plainData)) candidate = plainData.trim();
+  if(candidate){
+    event.preventDefault();
+    setComposeContentType('html');
+    const box=document.getElementById('composedBodyHtml');
+    box.value=candidate;
+    box.focus();
+    toast('HTML detectado — cambiamos a modo "HTML pegado"','success');
+  }
+}
 function getComposeBody(){
   return composeContentType==='html'
     ? document.getElementById('composedBodyHtml').value.trim()

@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from backend.config import cfg
 from backend.db.connection import get_db, dict_from_row, rows_to_list
-from backend.domain.email_content import assemble, html_to_text
+from backend.domain.email_content import assemble, html_to_text, is_html_mode
 from backend.domain.templates import build_context, render
 from backend.providers import resend_provider, storage_provider
 from backend.services.settings_service import build_style
@@ -74,7 +74,7 @@ def render_for_recipient(subject: str, body: str, to_email: str, db, cta_url: st
     rendered_subject, _ = render(subject or "", context)
     rendered_body, _ = render(body or "", context)
     html = assemble(rendered_body, content_type, style)
-    plain = html_to_text(html) if content_type == "html" else rendered_body
+    plain = html_to_text(html) if is_html_mode(rendered_body, content_type) else rendered_body
     return {"subject": rendered_subject, "body": plain, "html": html}
 
 

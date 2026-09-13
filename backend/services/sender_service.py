@@ -17,7 +17,7 @@ from sqlalchemy import text
 from backend.config import DEFAULT_RATE_LIMIT_PER_RUN, DEFAULT_MAX_ATTEMPTS, DEFAULT_RETRY_BACKOFF_MINUTES
 from backend.db.connection import get_db, dict_from_row, rows_to_list
 from backend.domain import scheduling
-from backend.domain.email_content import assemble, html_to_text
+from backend.domain.email_content import assemble, html_to_text, is_html_mode
 from backend.domain.templates import build_context, render
 from backend.providers import resend_provider
 from backend.services import ai_service
@@ -799,7 +799,7 @@ def process_due(campaign_id: int = None) -> dict:
                 body, _ = render(row["body"] or "", context)
                 content_type = row.get("content_type") or "markdown"
                 html = assemble(body, content_type, style)
-                body_plain = html_to_text(html) if content_type == "html" else body
+                body_plain = html_to_text(html) if is_html_mode(body, content_type) else body
 
                 resp = resend_provider.send(to, subject, body_plain, html, attachments=attachments_cache[cid])
                 email_id = resp.id if hasattr(resp, "id") else None
