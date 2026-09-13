@@ -5,22 +5,22 @@
 <title>Asistente Ejecutivo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0c0f0a;--bg2:#131710;--bg3:#1a1f18;--bg4:#212820;
-  --border:rgba(155,195,120,0.1);--border2:rgba(155,195,120,0.22);--border3:rgba(155,195,120,0.38);
-  --green:#7ec850;--green-dim:#3d6020;--green-glow:rgba(126,200,80,0.1);
-  --text:#deeacc;--text2:#7d9468;--text3:#435438;
-  --amber:#c8943a;--red:#c05050;--blue:#5090c8;
-  --mono:'DM Mono',monospace;--serif:'Playfair Display',serif;
+  --bg:#090c11;--bg2:#0f131a;--bg3:#161c25;--bg4:#1d2530;
+  --border:rgba(120,175,205,0.10);--border2:rgba(120,175,205,0.22);--border3:rgba(120,175,205,0.38);
+  --green:#45d1c4;--green-dim:#1d5f58;--green-glow:rgba(69,209,196,0.10);
+  --text:#dbe7ec;--text2:#7891a0;--text3:#3f5464;
+  --amber:#c8943a;--red:#c05a5a;--blue:#5a8fd6;
+  --mono:'JetBrains Mono','DM Mono',ui-monospace,Consolas,monospace;--serif:'JetBrains Mono','DM Mono',ui-monospace,monospace;
   --r:9px;--r2:14px;
 }
 html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;line-height:1.5}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-  background:radial-gradient(ellipse 50% 35% at 15% 5%,rgba(126,200,80,.05) 0%,transparent 70%),
-             radial-gradient(ellipse 35% 50% at 85% 95%,rgba(126,200,80,.03) 0%,transparent 60%)}
+  background:radial-gradient(ellipse 50% 35% at 15% 5%,rgba(69,209,196,.05) 0%,transparent 70%),
+             radial-gradient(ellipse 35% 50% at 85% 95%,rgba(69,209,196,.03) 0%,transparent 60%)}
 
 .shell{display:flex;min-height:100vh;position:relative;z-index:1}
 .sidebar{width:200px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:1.25rem 0}
@@ -208,14 +208,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   .field{flex-direction:column;align-items:stretch;gap:5px}
   .field-key{width:auto;padding-top:0}
 
-  /* CRM: acordeon vertical */
-  #crm-kanban{flex-direction:column;overflow-x:visible}
-  .kanban-col{flex:1 1 auto;width:100%}
-  .kanban-col-head{cursor:pointer}
-  .k-caret{display:inline-block}
-  .kanban-col.collapsed .k-caret{transform:rotate(-90deg)}
-  .kanban-col.collapsed .kanban-cards{display:none}
-
   /* Tablas a tarjetas */
   .sup-header,.sched-header{display:none}
   .sup-row,.sched-row{display:flex;flex-direction:column;gap:5px;padding:12px 14px}
@@ -271,8 +263,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 <nav class="sidebar">
   <div class="brand" style="display:flex;align-items:flex-start;justify-content:space-between">
     <div>
-      <h1>Asistente<br>Ejecutivo</h1>
-      <p>Comunicaciones</p>
+      <h1>AETHERYON<br>Outreach Sender</h1>
+      <p>Comunicaciones profesionales</p>
     </div>
     <button onclick="doLogout()" title="Cerrar sesion"
       style="background:transparent;border:none;cursor:pointer;color:var(--text3);padding:2px;line-height:1;font-size:16px;transition:color .15s"
@@ -287,22 +279,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="3" stroke="currentColor" stroke-width="1.2"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     Agenda
   </div>
-  <div class="nav-item" onclick="go('crm')">
-    <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="3" height="12" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="6.5" y="2" width="3" height="8" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="11" y="2" width="3" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>
-    CRM
-  </div>
   <div class="nav-item" onclick="go('compose')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M2 12L4 10l7-7 2 2-7 7-2 2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M9 3l2 2" stroke="currentColor" stroke-width="1.2"/></svg>
-    Redactar
+    Redaccion
+  </div>
+  <div class="nav-item" onclick="go('templates')">
+    <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="8" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="6" y="5" width="8" height="10" rx="1" fill="var(--bg)" stroke="currentColor" stroke-width="1.2"/><path d="M8 8h4M8 10.5h4M8 13h2.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+    Templates
+  </div>
+  <span class="nav-section">Cron Sender</span>
+  <div class="nav-item" onclick="go('campaigns')">
+    <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M8 4.5v3.7l2.6 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Programacion
+  </div>
+  <div class="nav-item" onclick="go('supervision')">
+    <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+    Supervision
   </div>
   <div class="nav-item" onclick="go('inbox')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M2 6l6 4 6-4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     Bandeja
-  </div>
-  <span class="nav-section">Gestion</span>
-  <div class="nav-item" onclick="go('supervision')">
-    <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-    Supervision
   </div>
   <div class="nav-item" onclick="go('memory')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h8M2 12h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
@@ -318,10 +314,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     Estilo y Firma
   </div>
 
-  <div class="nav-item" onclick="go('campaigns')">
-    <svg viewBox="0 0 16 16" fill="none"><path d="M2 3h12v2H2zM2 7h8v2H2zM2 11h10v2H2z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><circle cx="13" cy="8" r="2.5" stroke="currentColor" stroke-width="1.1"/><path d="M12 7.5l1 1 1.5-1.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    Campanas
-  </div>
   <div class="nav-item" onclick="go('settings')">
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     SMTP / IMAP
@@ -385,10 +377,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <input id="searchContact" type="text" placeholder="Buscar por nombre, email, empresa o tag..."
       style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:7px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"
       oninput="filterContacts()"/>
-    <button class="btn btn-ghost" id="btnImportLeadforge" onclick="importLeadforge()" title="Importar leads scrapeados por LeadForge">↧ LeadForge</button>
+    <input type="file" id="agendaImportFile" accept=".csv" style="display:none" onchange="importAudience(this.files[0])"/>
+    <button class="btn btn-ghost" onclick="document.getElementById('agendaImportFile').click()" title="Importar un CSV de audiencia (LeadForge, Apollo, u otra fuente externa)">↧ Importar CSV</button>
     <button class="btn btn-green" onclick="openNewContact()">+ Nuevo</button>
   </div>
-  <div id="leadforgeStatus" style="font-size:10px;color:var(--text3);margin:-6px 0 12px"></div>
+  <div id="importStatus" style="font-size:10px;color:var(--text3);margin:-6px 0 12px"></div>
   <div class="card-grid" id="contactGrid"></div>
   <div id="contactForm" style="display:none">
     <div class="section-label" id="contactFormTitle">Nuevo contacto</div>
@@ -400,28 +393,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <div class="field"><span class="field-key">Telefono</span><input type="text" id="cf-phone" placeholder="+54 9 11..."/></div>
       <div class="field"><span class="field-key">Contexto</span><textarea id="cf-context" rows="3" placeholder="Historial, intereses, notas relevantes..."></textarea></div>
       <div class="field"><span class="field-key">Tags</span><input type="text" id="cf-tags" placeholder="cliente, inversor, proveedor..."/></div>
-      <div class="field"><span class="field-key">Estado</span><select id="cf-status"><option value="nuevo">Nuevo</option><option value="contactado">Contactado</option><option value="en conversacion">En conversacion</option><option value="interesado">Interesado</option><option value="cerrado">Cerrado</option></select></div>
+      <div class="field"><span class="field-key">Segmento</span><select id="cf-status"><option value="nuevo">Nuevo</option><option value="activo">Activo</option><option value="archivado">Archivado</option></select></div>
       <div class="field"><span class="field-key">Tipo</span><select id="cf-tipo"><option value="prensa">Prensa</option><option value="partner">Partner</option><option value="cliente">Cliente</option></select></div>
       <div class="field"><span class="field-key">Medio</span><input type="text" id="cf-medio" placeholder="Canal o medio de contacto"/></div>
       <div class="field"><span class="field-key">Seguimiento</span><input type="date" id="cf-next_followup"/></div>
-      <div class="field"><span class="field-key">Notas CRM</span><textarea id="cf-notes" rows="2" placeholder="Notas del pipeline..."></textarea></div>
+      <div class="field"><span class="field-key">Notas</span><textarea id="cf-notes" rows="2" placeholder="Notas sobre este destinatario..."></textarea></div>
       <div class="panel-footer">
         <button class="btn btn-ghost btn-sm" onclick="cancelContact()">Cancelar</button>
         <button class="btn btn-green btn-sm" onclick="saveContact()" id="btnSaveContact">Guardar</button>
       </div>
     </div>
   </div>
-</div>
-
-<!-- CRM -->
-<div class="view" id="view-crm">
-  <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
-    <input id="crm-search" type="text" placeholder="Buscar por nombre, empresa, medio o notas..."
-      style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:7px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"
-      oninput="filterCRM()"/>
-    <button class="btn btn-green" onclick="openNewContact();go('agenda')">+ Nuevo</button>
-  </div>
-  <div id="crm-kanban" style="display:flex;gap:12px;overflow-x:auto;align-items:flex-start;padding-bottom:8px"></div>
 </div>
 
 <!-- COMPOSE -->
@@ -495,18 +477,68 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       </div>
       <div class="panel">
         <div class="panel-header">
-          <span class="panel-title">Borrador — formato Markdown</span>
-          <div style="display:flex;gap:6px">
+          <span class="panel-title" id="composePanelTitle">Borrador — Markdown</span>
+          <div style="display:flex;gap:10px;align-items:center">
+            <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+              <button type="button" class="btn btn-ghost btn-sm" id="btnModeMarkdown" style="border:none;border-radius:0;color:var(--green);background:var(--green-glow)" onclick="setComposeContentType('markdown')">Markdown</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="btnModeHtml" style="border:none;border-radius:0;border-left:1px solid var(--border)" onclick="setComposeContentType('html')">HTML pegado</button>
+            </div>
             <button class="btn btn-ghost btn-sm" onclick="previewEmail()">Vista HTML</button>
-            <button class="btn btn-ghost btn-sm" onclick="composeEmail()">Regenerar</button>
+            <button class="btn btn-ghost btn-sm" id="btnRegenerate" onclick="composeEmail()">Regenerar</button>
           </div>
         </div>
         <div class="generated-body" id="composedBody" contenteditable="true" spellcheck="true">
           <span style="color:var(--text3);font-style:normal;font-family:var(--mono);font-size:11px">El email generado aparecera aqui en Markdown. Puedes editarlo libremente.</span>
         </div>
+        <textarea id="composedBodyHtml" spellcheck="false" placeholder="Pega aca el HTML completo de tu template ya disenado. Se enviara tal cual, sin reprocesar — podes usar variables como {{first_name}}, {{company}}, {{role}}, {{sender_name}} y {{cta_url}}."
+          style="display:none;width:100%;min-height:320px;background:var(--bg);border:none;border-top:1px solid var(--border);outline:none;resize:vertical;font-family:var(--mono);font-size:11px;color:var(--text);padding:14px;line-height:1.6"></textarea>
         <div class="panel-footer">
           <button class="btn btn-ghost btn-sm" onclick="clearCompose()">Limpiar</button>
           <button class="btn btn-green btn-sm" onclick="openSendConfirm()">Revisar y enviar -&gt;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TEMPLATES -->
+<div class="view" id="view-templates">
+  <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
+    <input id="searchTemplate" type="text" placeholder="Buscar plantilla por nombre o categoria..."
+      style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:7px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"
+      oninput="filterTemplates()"/>
+    <select id="templateStatusFilter" onchange="loadTemplates()" style="background:var(--bg2);border:1px solid var(--border);color:var(--text2);font-family:var(--mono);font-size:11px;padding:7px 10px;border-radius:var(--r)">
+      <option value="">Todas</option>
+      <option value="active">Activas</option>
+      <option value="archived">Archivadas</option>
+    </select>
+    <button class="btn btn-green" onclick="openNewTemplate()">+ Nueva plantilla</button>
+  </div>
+  <div class="card-grid" id="templateGrid"></div>
+
+  <div id="templateForm" style="display:none">
+    <div class="section-label" id="templateFormTitle">Nueva plantilla</div>
+    <div class="panel">
+      <div class="field"><span class="field-key">Nombre</span><input type="text" id="tf-name" placeholder="Ej: Bienvenida - primer contacto"/></div>
+      <div class="field"><span class="field-key">Categoria</span><input type="text" id="tf-category" placeholder="Ej: onboarding, seguimiento, oferta..."/></div>
+      <div class="field"><span class="field-key">Asunto</span><input type="text" id="tf-subject" placeholder="Asunto (podes usar {{first_name}}, {{company}}...)"/></div>
+      <div class="field"><span class="field-key">CTA URL</span><input type="text" id="tf-cta" placeholder="https://... (opcional, disponible como {{cta_url}})"/></div>
+      <div class="field" style="border-bottom:none;flex-direction:column;align-items:stretch">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span class="field-key" style="width:auto;padding-top:0">Contenido</span>
+          <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+            <button type="button" class="btn btn-ghost btn-sm" id="btnTplModeMarkdown" style="border:none;border-radius:0;color:var(--green);background:var(--green-glow)" onclick="setTemplateContentType('markdown')">Markdown</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btnTplModeHtml" style="border:none;border-radius:0;border-left:1px solid var(--border)" onclick="setTemplateContentType('html')">HTML pegado</button>
+          </div>
+        </div>
+        <textarea id="tf-body" rows="12" placeholder="Markdown: **negrita**, ## titulos, listas con -. O activa 'HTML pegado' y pega tu template completo ya disenado. Variables: {{first_name}} {{company}} {{role}} {{sender_name}} {{cta_url}}"
+          style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;font-family:var(--mono);font-size:12px;color:var(--text);resize:vertical"></textarea>
+      </div>
+      <div class="panel-footer">
+        <button class="btn btn-ghost btn-sm" onclick="cancelTemplateForm()">Cancelar</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="previewTemplateForm()">Vista previa</button>
+          <button class="btn btn-green btn-sm" onclick="saveTemplate()" id="btnSaveTemplate">Guardar</button>
         </div>
       </div>
     </div>
@@ -612,8 +644,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
           <div class="cfg-field">
             <label>Color principal</label>
             <div style="display:flex;align-items:center;gap:8px">
-              <input type="color" id="st-primary" value="#7ec850" style="width:28px;height:24px;border:none;background:none;cursor:pointer;padding:0"/>
-              <input type="text" id="st-primary-hex" placeholder="#7ec850" style="flex:1"/>
+              <input type="color" id="st-primary" value="#178a7e" style="width:28px;height:24px;border:none;background:none;cursor:pointer;padding:0"/>
+              <input type="text" id="st-primary-hex" placeholder="#178a7e" style="flex:1"/>
             </div>
           </div>
           <div class="cfg-field">
@@ -640,15 +672,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
           <div class="cfg-field">
             <label>Fondo del header</label>
             <div style="display:flex;align-items:center;gap:8px">
-              <input type="color" id="st-header-bg" value="#0c0f0a" style="width:28px;height:24px;border:none;background:none;cursor:pointer;padding:0"/>
-              <input type="text" id="st-header-bg-hex" placeholder="#0c0f0a" style="flex:1"/>
+              <input type="color" id="st-header-bg" value="#0a0f14" style="width:28px;height:24px;border:none;background:none;cursor:pointer;padding:0"/>
+              <input type="text" id="st-header-bg-hex" placeholder="#0a0f14" style="flex:1"/>
             </div>
           </div>
           <div class="cfg-field">
             <label>Color texto header</label>
             <div style="display:flex;align-items:center;gap:8px">
-              <input type="color" id="st-header-fc" value="#7ec850" style="width:28px;height:24px;border:none;background:none;cursor:pointer;padding:0"/>
-              <input type="text" id="st-header-fc-hex" placeholder="#7ec850" style="flex:1"/>
+              <input type="color" id="st-header-fc" value="#4dd8c4" style="width:28px;height:24px;border:none;background:none;cursor:pointer;padding:0"/>
+              <input type="text" id="st-header-fc-hex" placeholder="#4dd8c4" style="flex:1"/>
             </div>
           </div>
           <div class="cfg-field full">
@@ -736,23 +768,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:6px 14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text3);cursor:pointer;transition:all .15s">
       Agenda de Envío
     </button>
-    <button id="campTab-templates" onclick="switchCampTab('templates')"
-      style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:6px 14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text3);cursor:pointer;transition:all .15s">
-      Preaprobadas
-    </button>
   </div>
 
   <!-- LISTA -->
   <div id="campaignListView">
     <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
-      <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Campanas IA</span>
+      <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Comunicaciones programadas</span>
       <div style="flex:1"></div>
       <input type="file" id="camp-import-file" accept=".yaml,.yml" style="display:none" onchange="importCampaignFile(this.files)">
-      <button class="btn btn-ghost btn-sm" onclick="importCampaignPrompt()">↑ Importar campaña</button>
-      <button class="btn btn-green btn-sm" onclick="showCampaignForm()">+ Nueva campana</button>
+      <button class="btn btn-ghost btn-sm" onclick="importCampaignPrompt()">↑ Importar YAML</button>
+      <button class="btn btn-green btn-sm" onclick="showCampaignForm()">+ Nueva comunicacion</button>
     </div>
     <div id="campaignCards" style="display:flex;flex-direction:column;gap:10px">
-      <div style="color:var(--text3);font-size:11px;padding:1rem">Cargando campanas...</div>
+      <div style="color:var(--text3);font-size:11px;padding:1rem">Cargando...</div>
     </div>
   </div>
 
@@ -800,12 +828,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <div class="section-label">Contactos de la campana</div>
         <div class="panel">
           <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
-            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Segmentar por categoría (LeadForge)</div>
+            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Segmentar por tag</div>
             <div style="display:flex;gap:6px;align-items:center">
               <select id="campCategorySelect" style="flex:1;background:var(--bg2);border:1px solid var(--border);color:var(--text2);font-family:var(--mono);font-size:10px;padding:6px 8px;border-radius:var(--r)">
-                <option value="">— elegí una categoría —</option>
+                <option value="">— elegí un tag —</option>
               </select>
-              <button class="btn btn-ghost btn-sm" onclick="selectCampCategory()" style="white-space:nowrap">Agregar rubro</button>
+              <button class="btn btn-ghost btn-sm" onclick="selectCampCategory()" style="white-space:nowrap">Agregar</button>
             </div>
             <div id="campCategoryHint" style="font-size:10px;color:var(--text3);margin-top:6px"></div>
           </div>
@@ -833,12 +861,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   <!-- REVISION DE CAMPANA -->
   <div id="campaignApprovalView" style="display:none">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" onclick="showCampaignList()">&#8592; Campanas</button>
+      <button class="btn btn-ghost btn-sm" onclick="showCampaignList()">&#8592; Volver</button>
       <span style="font-family:var(--serif);font-size:15px;color:var(--text)" id="approvalCampName"></span>
       <div style="flex:1"></div>
       <span style="font-size:11px;color:var(--text3)" id="approvalProgress"></span>
-      <button class="btn btn-ghost btn-sm" id="btnSaveTemplate" onclick="saveAsTemplate()" style="display:none">Guardar como plantilla</button>
-      <button class="btn btn-green btn-sm" id="btnFinalizeCamp" onclick="finalizeCampaign()" style="display:none">Confirmar campana &#x2713;</button>
+      <button class="btn btn-green btn-sm" id="btnFinalizeCamp" onclick="finalizeCampaign()" style="display:none">Confirmar y programar &#x2713;</button>
     </div>
     <div id="approvalEmailList" style="display:flex;flex-direction:column;gap:10px"></div>
   </div>
@@ -868,7 +895,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <button onclick="filterSchedule('all')" id="sf-all" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px;border-color:var(--green);color:var(--green)">Todos</button>
         <button onclick="filterSchedule('delayed')" id="sf-delayed" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Demorados</button>
         <button onclick="filterSchedule('scheduled')" id="sf-scheduled" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Agendados</button>
+        <button onclick="filterSchedule('retrying')" id="sf-retrying" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Reintentando</button>
+        <button onclick="filterSchedule('paused')" id="sf-paused" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Pausados</button>
         <button onclick="filterSchedule('sent')" id="sf-sent" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Enviados</button>
+        <button onclick="filterSchedule('failed')" id="sf-failed" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Fallidos</button>
         <button onclick="filterSchedule('cancelled')" id="sf-cancelled" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:10px">Cancelados</button>
         <div style="flex:1"></div>
         <input id="schedSearchEmail" type="text" placeholder="Buscar campaña/asunto..."
@@ -896,19 +926,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     </div>
   </div>
 
-  <!-- PLANTILLAS PRE-APROBADAS -->
-  <div id="campaignTemplatesView" style="display:none">
-    <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center;flex-wrap:wrap">
-      <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Plantillas pre-aprobadas</span>
-      <div style="flex:1"></div>
-      <button class="btn btn-ghost btn-sm" onclick="loadTemplates()">⟳ Actualizar</button>
-    </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Secuencias ya escritas y aprobadas. Usá una para programar el envío a nuevos contactos.</div>
-    <div id="templateCards" style="display:flex;flex-direction:column;gap:10px">
-      <div style="color:var(--text3);font-size:11px;padding:1rem">Cargando plantillas...</div>
-    </div>
-  </div>
-
 </div>
 
 </div><!-- /content -->
@@ -924,6 +941,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <div class="info">Via: <b id="m-via" style="color:var(--green)"></b></div>
     <div class="info" id="m-attachments" style="display:none"></div>
     <div class="warn">El email se enviara formateado en HTML con los estilos configurados. Esta accion no se puede deshacer.</div>
+    <div style="display:flex;gap:6px;align-items:center;margin:12px 0;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r)">
+      <input type="email" id="m-test-email" placeholder="tu-email@empresa.com" style="flex:1;background:transparent;border:none;outline:none;color:var(--text);font-family:var(--mono);font-size:12px"/>
+      <button class="btn btn-blue btn-sm" id="btnSendTest" onclick="sendTestFromModal()">Enviar prueba</button>
+    </div>
     <div class="modal-btns">
       <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal('modalSend')">Cancelar</button>
       <button class="btn btn-green" style="flex:2;justify-content:center" id="btnConfirmSend" onclick="confirmSend()">Enviar ahora</button>
@@ -954,6 +975,34 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal('modalPreview')">Cerrar</button>
       <button class="btn btn-green" onclick="closeModal('modalPreview');openSendConfirm()">Enviar este email</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: USAR PLANTILLA → PROGRAMAR EN CRON SENDER -->
+<div class="modal-backdrop" id="modalUseTemplate">
+  <div class="modal" style="max-width:520px">
+    <h2 style="margin-bottom:6px">Programar envio</h2>
+    <div class="info" id="ut-template-name" style="margin-bottom:14px"></div>
+    <div style="margin-bottom:12px">
+      <div class="field-key" style="margin-bottom:6px;padding-top:0">Destinatarios de la Agenda</div>
+      <div id="ut-contact-list" style="max-height:140px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+      <textarea id="ut-extra-emails" rows="2" placeholder="Emails adicionales que no esten en la Agenda, uno por linea" style="width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:8px;font-family:var(--mono);font-size:11px;color:var(--text);resize:vertical"></textarea>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+      <div>
+        <div class="field-key" style="margin-bottom:4px;padding-top:0">Fecha y hora (tu horario local)</div>
+        <input type="datetime-local" id="ut-scheduled-at" style="width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:7px;color:var(--text);font-family:var(--mono);font-size:12px"/>
+      </div>
+      <div>
+        <div class="field-key" style="margin-bottom:4px;padding-top:0">CTA URL (opcional)</div>
+        <input type="text" id="ut-cta" placeholder="https://..." style="width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:7px;color:var(--text);font-family:var(--mono);font-size:12px"/>
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:14px">El Cron Sender la toma automaticamente en la fecha y hora elegida — no hace falta que quedes conectado.</div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal('modalUseTemplate')">Cancelar</button>
+      <button class="btn btn-green" style="flex:2;justify-content:center" id="btnConfirmUseTemplate" onclick="confirmUseTemplate()">Programar</button>
     </div>
   </div>
 </div>
@@ -1084,62 +1133,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- MODAL: USAR PLANTILLA PRE-APROBADA -->
-<div class="modal-backdrop" id="modalUseTemplate" style="z-index:60">
-  <div class="modal" style="max-width:680px;width:calc(100% - 2rem)">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
-      <div style="flex:1">
-        <div style="font-family:var(--serif);font-size:18px;font-weight:400;color:var(--text)">Usar plantilla</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:3px" id="useTmplSubtitle"></div>
-      </div>
-      <button class="btn btn-ghost btn-sm" onclick="closeModal('modalUseTemplate')">Cerrar</button>
-    </div>
-    <div class="resp-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px">
-      <div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Contactos</span>
-          <span id="useTmplSelCount" style="font-size:10px;color:var(--green)"></span>
-        </div>
-        <input type="text" id="useTmplSearch" placeholder="Buscar por nombre, email, empresa, tag..." oninput="renderUseTmplContacts()"
-          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;font-family:var(--mono);font-size:11px;color:var(--text);outline:none;margin-bottom:8px;caret-color:var(--green)"/>
-        <div id="useTmplContactList" style="max-height:150px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
-        <textarea id="useTmplExtraEmails" rows="2" placeholder="emails adicionales, uno por linea"
-          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:vertical"></textarea>
-        <div id="useTmplSelectedTags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px"></div>
-      </div>
-      <div>
-        <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Programación</div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:11px;color:var(--text3);width:56px">Inicio</span>
-            <input type="date" id="useTmplStart" onchange="updateUseTmplPreview()"
-              style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"/>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:11px;color:var(--text3);width:56px">Hora</span>
-            <input type="time" id="useTmplTime" value="09:00"
-              style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"/>
-          </div>
-        </div>
-        <div style="margin-top:10px">
-          <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Modo de envío</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-            <div class="intent-btn" id="utm-daily" onclick="setUseTmplMode('daily')">Diario</div>
-            <div class="intent-btn" id="utm-alternate" onclick="setUseTmplMode('alternate')">Día por medio</div>
-            <div class="intent-btn" id="utm-mon_wed_fri" onclick="setUseTmplMode('mon_wed_fri')">Lun-Mié-Vie</div>
-            <div class="intent-btn" id="utm-tue_thu" onclick="setUseTmplMode('tue_thu')">Mar-Jue</div>
-          </div>
-        </div>
-        <div id="useTmplPreview" style="font-size:11px;color:var(--text3);margin-top:12px"></div>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <div style="flex:1"></div>
-      <button class="btn btn-green" id="btnUseTmplSchedule" onclick="scheduleFromTemplate()">Programar envío</button>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL: CONFIRMACIÓN GENÉRICA -->
 <div class="modal-backdrop" id="modalConfirm" style="z-index:70">
   <div class="modal" style="max-width:440px">
@@ -1232,17 +1225,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 <script>
 const API = '';
 let contacts=[], inboxItems=[], currentIntent='profesional';
+let composeContentType='markdown';
 let editingContactId=null, selectedInboxMsg=null;
-let crmSearch='';
-let crmCampaigns={};
-let crmDragId=null;
-const CRM_COLS=[
-  {key:'nuevo',label:'Nuevo',color:'#4e6880'},
-  {key:'contactado',label:'Contactado',color:'var(--amber)'},
-  {key:'en conversacion',label:'En conversacion',color:'#c87a3a'},
-  {key:'interesado',label:'Interesado',color:'var(--blue)'},
-  {key:'cerrado',label:'Cerrado',color:'var(--green)'},
-];
+let senderStatusByEmail={};
 let extraRecipients = new Set();
 let multiSelectedContacts = new Set();
 let campMode='daily', campTone='informative', campSelectedContacts=new Set();
@@ -1364,9 +1349,9 @@ function resolvePrompt(ok){
   if(_promptResolver){_promptResolver(ok?val:null);_promptResolver=null;}
 }
 
-const pageMap={dashboard:'Dashboard',agenda:'Agenda',crm:'CRM',compose:'Redactar',inbox:'Bandeja',
+const pageMap={dashboard:'Dashboard',agenda:'Agenda',compose:'Redaccion',templates:'Templates',inbox:'Bandeja',
   supervision:'Supervision',memory:'Memoria',context:'Contexto',estilo:'Estilo',
-  settings:'SMTP / IMAP',campaigns:'Campanas'};
+  settings:'SMTP / IMAP',campaigns:'Cron Sender'};
 
 function toggleSidebar(){document.body.classList.toggle('nav-open');}
 
@@ -1382,7 +1367,7 @@ function go(view){
   });
   document.getElementById('pageTitle').textContent=pageMap[view]||view;
   if(view==='agenda')     loadContacts();
-  if(view==='crm')        loadCRM();
+  if(view==='templates')  loadTemplates();
   if(view==='inbox')      loadInbox();
   if(view==='supervision')loadSupervision();
   if(view==='memory')     loadMemory();
@@ -1435,54 +1420,51 @@ async function loadDashboard(){
 }
 
 async function loadContacts(){
-  try{contacts=await(await apiFetch('/contacts')).json();renderContacts(contacts);}
+  try{contacts=await(await apiFetch('/contacts')).json();}
   catch(e){toast('Error cargando contactos','error');}
-  refreshLeadforgeStatus();
+  try{senderStatusByEmail=await(await apiFetch('/contacts/sender-status')).json();}catch(e){senderStatusByEmail={};}
+  renderContacts(contacts);
+  const el=document.getElementById('importStatus');
+  if(el)el.textContent=`${contacts.length} contacto(s) en la Agenda`;
 }
 
-// Muestra cuántos leads hay en leadforge.db y el último import realizado.
-async function refreshLeadforgeStatus(){
-  const el=document.getElementById('leadforgeStatus');
-  const btn=document.getElementById('btnImportLeadforge');
-  if(!el)return;
+// Sube un CSV (LeadForge, Apollo, o cualquier lista externa) por multipart a /agenda/import.
+async function importAudience(file){
+  if(!file)return;
+  const el=document.getElementById('importStatus');
+  if(el)el.textContent='Importando…';
   try{
-    const st=await(await apiFetch('/contacts/leadforge-status')).json();
-    if(!st.db_present){el.textContent='';if(btn)btn.style.display='none';return;}
-    if(btn)btn.style.display='';
-    const imp=st.last_import?` · último import: ${st.last_import.replace('T',' ')} UTC`:' · sin importar aún';
-    el.textContent=`LeadForge: ${st.total_leads} leads en ${st.db_last_run||'—'}${imp}`;
-  }catch(e){el.textContent='';}
-}
-
-// Dispara la importación manual leadforge.db → contacts.
-async function importLeadforge(){
-  const btn=document.getElementById('btnImportLeadforge');
-  if(btn){btn.disabled=true;btn.textContent='↧ Importando…';}
-  try{
-    const r=await apiFetch('/contacts/import-leadforge',{method:'POST'});
+    const fd=new FormData();fd.append('file',file);
+    const r=await apiFetch('/agenda/import',{method:'POST',body:fd});
     const d=await r.json();
-    if(!r.ok){toast(d.detail||'Error importando','error');}
-    else{toast(`LeadForge: +${d.imported} nuevos, ${d.updated} actualizados`,'success');
-      await loadContacts();loadStats();}
-  }catch(e){toast('Error importando LeadForge','error');}
-  finally{if(btn){btn.disabled=false;btn.textContent='↧ LeadForge';}}
+    if(!r.ok)throw new Error(d.detail||'Error importando');
+    toast(`Importación: +${d.imported} nuevos, ${d.updated} actualizados`,'success');
+    if(d.errors&&d.errors.length)toast(`${d.errors.length} fila(s) con errores (ver consola)`,'error');
+    if(d.errors)console.warn('Errores de importación:',d.errors);
+    document.getElementById('agendaImportFile').value='';
+    await loadContacts();loadStats();
+  }catch(e){toast('Error: '+e.message,'error');if(el)el.textContent='';}
 }
 function renderContacts(list){
   const el=document.getElementById('contactGrid');
   if(!list.length){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">No hay contactos.</div>';return;}
-  el.innerHTML=list.map(c=>`
+  el.innerHTML=list.map(c=>{
+    const badges=senderBadgesHTML(c);
+    return `
     <div class="contact-card">
       <div class="cc-name">${c.name}</div>
       <div class="cc-email">${c.email}</div>
       <div class="cc-meta">${[c.company,c.role].filter(Boolean).join(' · ')}</div>
       ${c.context?`<div style="margin-top:8px;font-size:11px;color:var(--text3);line-height:1.5">${c.context.substring(0,80)}${c.context.length>80?'...':''}</div>`:''}
+      ${badges?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">${badges}</div>`:''}
       <div class="cc-tags">${(c.tags||'').split(',').filter(Boolean).map(t=>`<span class="tag">${t.trim()}</span>`).join('')}</div>
       <div style="display:flex;gap:6px;margin-top:10px">
         <button class="btn btn-ghost btn-sm" onclick="composeToContact(${c.id})">Redactar</button>
         <button class="btn btn-ghost btn-sm" onclick="editContact(${c.id})">Editar</button>
+        <button class="btn btn-ghost btn-sm" title="Archivar" onclick="archiveContact(${c.id})">&#8856;</button>
         <button class="btn btn-red btn-sm" onclick="deleteContact(${c.id})">x</button>
       </div>
-    </div>`).join('');
+    </div>`;}).join('');
 }
 function filterContacts(){
   const q=document.getElementById('searchContact').value.toLowerCase();
@@ -1501,109 +1483,179 @@ async function saveContact(){
     const r=await apiFetch(url,{method,body:JSON.stringify(data)});
     if(!r.ok){const e=await r.json();throw new Error(e.detail||'Error');}
     toast(editingContactId?'Actualizado':'Guardado','success');cancelContact();await loadContacts();loadStats();
-    if(document.getElementById('view-crm').classList.contains('active'))renderCRM();
   }catch(e){toast('Error: '+e.message,'error');}
   finally{btn.disabled=false;btn.textContent='Guardar';}
 }
 async function deleteContact(id){if(!await uiConfirm({title:'Eliminar contacto',message:'El contacto y su historial de interacciones se eliminarán permanentemente.',okText:'Eliminar'}))return;await apiFetch('/contacts/'+id,{method:'DELETE'});toast('Eliminado');loadContacts();loadStats();}
 function composeToContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;document.getElementById('c-to').value=c.email;matchContact();updateToTag();go('compose');}
 
-// ── CRM (kanban por estados) ──────────────────────────────
-async function loadCRM(){
-  try{
-    if(!contacts.length)contacts=await(await apiFetch('/contacts')).json();
-    try{crmCampaigns=await(await apiFetch('/contacts/campaign-status')).json();}
-    catch(e){crmCampaigns={};}
-    renderCRM();
-  }catch(e){toast('Error cargando CRM','error');}
+// ── Agenda: estado de envio del Cron Sender por contacto (no es un pipeline) ──
+const SENDER_STATE_LABEL={sent:'Enviado',scheduled:'Programado',delayed:'Demorado',cancelled:'Cancelado'};
+function senderBadgesHTML(c){
+  const items=senderStatusByEmail[c.email];
+  if(!items||!items.length)return '';
+  return items.map(it=>{
+    const lbl=SENDER_STATE_LABEL[it.state]||it.state;
+    return `<span class="camp-badge cs-${it.state}" title="${it.name} — ${lbl}">&#128226; ${it.name}</span>`;
+  }).join('');
 }
-function filterCRM(){crmSearch=document.getElementById('crm-search').value.toLowerCase();renderCRM();}
-function crmStatusKey(c){const k=(c.status||'nuevo');return CRM_COLS.some(x=>x.key===k)?k:'nuevo';}
-function renderCRM(){
-  const q=crmSearch;
-  const list=contacts.filter(c=>(c.status||'')!=='archivado' && (!q||c.name.toLowerCase().includes(q)||(c.company||'').toLowerCase().includes(q)||(c.medio||'').toLowerCase().includes(q)||(c.notes||'').toLowerCase().includes(q)));
-  const board=document.getElementById('crm-kanban');
-  board.innerHTML=CRM_COLS.map(col=>{
-    const cards=list.filter(c=>crmStatusKey(c)===col.key);
-    return `<div class="kanban-col">
-      <div class="kanban-col-head" style="color:${col.color}" onclick="this.parentElement.classList.toggle('collapsed')">
-        <span><span class="k-caret">&#9662;</span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${col.color};margin-right:6px"></span>${col.label}</span>
-        <span class="k-count">${cards.length}</span>
+async function archiveContact(id){
+  const c=contacts.find(x=>x.id===id);if(!c)return;
+  try{
+    const r=await apiFetch('/contacts/'+id+'/status',{method:'PATCH',body:JSON.stringify({status:'archivado'})});
+    if(!r.ok)throw new Error('Error');
+    toast(`${c.name} archivado`,'success');
+    loadContacts();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+// ────────────────────────────────────────────────────────
+// TEMPLATES — crear, editar, duplicar, activar, archivar, usar
+// ────────────────────────────────────────────────────────
+let templates=[], editingTemplateId=null, templateContentType='markdown';
+let usingTemplateId=null, useTemplateSelected=new Set();
+
+async function loadTemplates(){
+  try{
+    const status=document.getElementById('templateStatusFilter').value;
+    templates=await(await apiFetch('/templates'+(status?('?status='+status):''))).json();
+    renderTemplates(templates);
+  }catch(e){toast('Error cargando plantillas','error');}
+}
+function filterTemplates(){
+  const q=document.getElementById('searchTemplate').value.toLowerCase();
+  renderTemplates(templates.filter(t=>t.name.toLowerCase().includes(q)||(t.category||'').toLowerCase().includes(q)));
+}
+function renderTemplates(list){
+  const el=document.getElementById('templateGrid');
+  if(!list.length){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">No hay plantillas todavia. Creá la primera con "+ Nueva plantilla".</div>';return;}
+  el.innerHTML=list.map(t=>{
+    const vars=(t.variables||[]).map(v=>`<span class="tag">{{${v}}}</span>`).join('');
+    const archived=t.status==='archived';
+    return `<div class="contact-card" style="${archived?'opacity:.5':''}">
+      <div class="cc-name">${t.name}</div>
+      <div class="cc-email">${t.subject||'(sin asunto)'}</div>
+      <div class="cc-meta">${[t.category,t.content_type==='html'?'HTML pegado':'Markdown'].filter(Boolean).join(' · ')}</div>
+      ${vars?`<div class="cc-tags">${vars}</div>`:''}
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-green btn-sm" onclick="openUseTemplate(${t.id})" ${archived?'disabled':''}>Usar</button>
+        <button class="btn btn-ghost btn-sm" onclick="editTemplate(${t.id})">Editar</button>
+        <button class="btn btn-ghost btn-sm" onclick="duplicateTemplate(${t.id})">Duplicar</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleTemplateStatus(${t.id},'${archived?'active':'archived'}')">${archived?'Activar':'Archivar'}</button>
+        <button class="btn btn-red btn-sm" onclick="deleteTemplate(${t.id})">x</button>
       </div>
-      <div class="kanban-cards" data-col="${col.key}" ondragover="crmDragOver(event)" ondragleave="crmDragLeave(event)" ondrop="crmDrop(event,'${col.key}')">${cards.map(crmCardHTML).join('')}</div>
     </div>`;
   }).join('');
 }
-const CAMP_STATE_LABEL={sent:'Enviada',scheduled:'Programada',delayed:'Demorada',cancelled:'Cancelada'};
-function campBadgesHTML(c){
-  const camps=crmCampaigns[c.email];
-  if(!camps||!camps.length)return '';
-  return camps.map(cp=>{
-    const lbl=CAMP_STATE_LABEL[cp.state]||cp.state;
-    return `<span class="camp-badge cs-${cp.state}" title="Campana: ${cp.name} — ${lbl}">&#128226; ${cp.name}</span>`;
-  }).join('');
+function openNewTemplate(){
+  editingTemplateId=null;
+  ['name','category','subject','cta','body'].forEach(f=>{const el=document.getElementById('tf-'+f);if(el)el.value='';});
+  setTemplateContentType('markdown');
+  document.getElementById('templateFormTitle').textContent='Nueva plantilla';
+  document.getElementById('templateForm').style.display='block';
+  document.getElementById('templateForm').scrollIntoView({behavior:'smooth'});
 }
-function crmCardHTML(c){
-  const meta=[c.medio,c.company].filter(Boolean).join(' · ');
-  const idx=CRM_COLS.findIndex(x=>x.key===crmStatusKey(c));
-  const first=idx<=0, last=idx>=CRM_COLS.length-1;
-  const camps=campBadgesHTML(c);
-  return `<div class="k-card" draggable="true" ondragstart="crmDragStart(event,${c.id})" ondragend="crmDragEnd(event)" onclick="crmEdit(${c.id})">
-    <div class="k-actions">
-      ${first?'':`<button class="k-act" title="Retroceder estado" onclick="event.stopPropagation();retreatStatus(${c.id})">&#9664;</button>`}
-      ${last?'':`<button class="k-act" title="Avanzar estado" onclick="event.stopPropagation();advanceStatus(${c.id})">&#9654;</button>`}
-      <button class="k-act k-arch" title="Archivar" onclick="event.stopPropagation();archiveContact(${c.id})">&#8856;</button>
-    </div>
-    <div class="cc-name" style="font-size:13px;margin-bottom:2px">${c.name}</div>
-    ${meta?`<div class="cc-meta">${meta}</div>`:''}
-    ${camps?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:7px">${camps}</div>`:''}
-    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:7px;align-items:center">
-      ${c.tipo?`<span class="tag">${c.tipo}</span>`:''}
-      ${c.next_followup?`<span class="tag" style="border-color:var(--border)">&#128197; ${c.next_followup}</span>`:''}
-    </div>
-    ${c.notes?`<div style="margin-top:7px;font-size:10px;color:var(--text3);line-height:1.5">${c.notes.substring(0,75)}${c.notes.length>75?'...':''}</div>`:''}
-  </div>`;
+function editTemplate(id){
+  const t=templates.find(x=>x.id===id);if(!t)return;
+  editingTemplateId=id;
+  document.getElementById('tf-name').value=t.name||'';
+  document.getElementById('tf-category').value=t.category||'';
+  document.getElementById('tf-subject').value=t.subject||'';
+  document.getElementById('tf-cta').value=t.default_cta_url||'';
+  document.getElementById('tf-body').value=t.body||'';
+  setTemplateContentType(t.content_type||'markdown');
+  document.getElementById('templateFormTitle').textContent='Editar plantilla';
+  document.getElementById('templateForm').style.display='block';
+  document.getElementById('templateForm').scrollIntoView({behavior:'smooth'});
 }
-function crmEdit(id){editContact(id);go('agenda');}
-async function setStatus(id,next,msg){
-  const c=contacts.find(x=>x.id===id);if(!c||c.status===next)return;
+function cancelTemplateForm(){document.getElementById('templateForm').style.display='none';editingTemplateId=null;}
+function setTemplateContentType(mode){
+  templateContentType=mode;
+  const btnMd=document.getElementById('btnTplModeMarkdown'), btnHtml=document.getElementById('btnTplModeHtml');
+  if(mode==='html'){btnHtml.style.color='var(--green)';btnHtml.style.background='var(--green-glow)';btnMd.style.color='';btnMd.style.background='';}
+  else{btnMd.style.color='var(--green)';btnMd.style.background='var(--green-glow)';btnHtml.style.color='';btnHtml.style.background='';}
+}
+async function saveTemplate(){
+  const data={
+    name:document.getElementById('tf-name').value.trim(),
+    category:document.getElementById('tf-category').value.trim(),
+    subject:document.getElementById('tf-subject').value.trim(),
+    default_cta_url:document.getElementById('tf-cta').value.trim(),
+    body:document.getElementById('tf-body').value,
+    content_type:templateContentType,
+  };
+  if(!data.name)return toast('El nombre es obligatorio','error');
+  const btn=document.getElementById('btnSaveTemplate');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span>';
   try{
-    const r=await apiFetch('/contacts/'+id+'/status',{method:'PATCH',body:JSON.stringify({status:next})});
-    if(!r.ok)throw new Error('Error');
-    c.status=next;renderCRM();toast(msg||`${c.name} → ${next}`,'success');
+    const url='/templates'+(editingTemplateId?('/'+editingTemplateId):''), method=editingTemplateId?'PUT':'POST';
+    const r=await apiFetch(url,{method,body:JSON.stringify(data)});
+    if(!r.ok){const e=await r.json();throw new Error(e.detail||'Error');}
+    toast(editingTemplateId?'Plantilla actualizada':'Plantilla creada','success');
+    cancelTemplateForm();loadTemplates();
   }catch(e){toast('Error: '+e.message,'error');}
+  finally{btn.disabled=false;btn.textContent='Guardar';}
 }
-function advanceStatus(id){
-  const c=contacts.find(x=>x.id===id);if(!c)return;
-  const keys=CRM_COLS.map(x=>x.key);
-  const i=keys.indexOf(crmStatusKey(c));
-  if(i>=keys.length-1)return;
-  setStatus(id,keys[i+1]);
+async function previewTemplateForm(){
+  const body=document.getElementById('tf-body').value;
+  if(!body.trim())return toast('Escribi o pega contenido primero','error');
+  try{
+    const r=await apiFetch('/preview-email',{method:'POST',body:JSON.stringify({body,subject:document.getElementById('tf-subject').value.trim(),content_type:templateContentType})});
+    const d=await r.json();document.getElementById('previewFrame').srcdoc=d.html;openModal('modalPreview');
+  }catch(e){toast('Error preview','error');}
 }
-function retreatStatus(id){
-  const c=contacts.find(x=>x.id===id);if(!c)return;
-  const keys=CRM_COLS.map(x=>x.key);
-  const i=keys.indexOf(crmStatusKey(c));
-  if(i<=0)return;
-  setStatus(id,keys[i-1]);
+async function duplicateTemplate(id){
+  try{const r=await apiFetch('/templates/'+id+'/duplicate',{method:'POST',body:JSON.stringify({})});if(!r.ok)throw new Error();toast('Plantilla duplicada','success');loadTemplates();}
+  catch(e){toast('Error duplicando','error');}
 }
-function archiveContact(id){
-  const c=contacts.find(x=>x.id===id);
-  setStatus(id,'archivado',c?`${c.name} archivado`:'Archivado');
+async function toggleTemplateStatus(id,status){
+  try{const r=await apiFetch('/templates/'+id+'/'+status,{method:'POST'});if(!r.ok)throw new Error();toast(status==='archived'?'Plantilla archivada':'Plantilla activada','success');loadTemplates();}
+  catch(e){toast('Error','error');}
 }
-// ── CRM drag & drop (desktop) ──
-function crmDragStart(e,id){crmDragId=id;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',String(id));}catch(_){}}
-function crmDragEnd(e){crmDragId=null;document.querySelectorAll('.kanban-cards.drag-over').forEach(el=>el.classList.remove('drag-over'));}
-function crmDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';e.currentTarget.classList.add('drag-over');}
-function crmDragLeave(e){e.currentTarget.classList.remove('drag-over');}
-function crmDrop(e,colKey){
-  e.preventDefault();e.currentTarget.classList.remove('drag-over');
-  const id=crmDragId;crmDragId=null;
-  if(id==null)return;
-  const c=contacts.find(x=>x.id===id);if(!c)return;
-  if(crmStatusKey(c)===colKey)return;
-  const col=CRM_COLS.find(x=>x.key===colKey);
-  setStatus(id,colKey,`${c.name} → ${col?col.label:colKey}`);
+async function deleteTemplate(id){
+  if(!await uiConfirm({title:'Eliminar plantilla',message:'Esta accion no se puede deshacer.',okText:'Eliminar'}))return;
+  try{await apiFetch('/templates/'+id,{method:'DELETE'});toast('Eliminada','success');loadTemplates();}catch(e){toast('Error','error');}
+}
+
+// Usar plantilla → instancia un envio programado en el Cron Sender.
+async function openUseTemplate(id){
+  usingTemplateId=id;
+  const t=templates.find(x=>x.id===id);if(!t)return;
+  useTemplateSelected=new Set();
+  if(!contacts.length){try{contacts=await(await apiFetch('/contacts')).json();}catch(e){}}
+  document.getElementById('ut-template-name').innerHTML='Plantilla: <b>'+t.name+'</b>';
+  document.getElementById('ut-contact-list').innerHTML=contacts.map(c=>
+    `<button type="button" class="tag" style="cursor:pointer;padding:5px 10px;font-size:10px" onclick="toggleUseTemplateContact('${c.email}',this)">${c.name}</button>`
+  ).join('');
+  document.getElementById('ut-extra-emails').value='';
+  document.getElementById('ut-cta').value=t.default_cta_url||'';
+  document.getElementById('ut-scheduled-at').value='';
+  openModal('modalUseTemplate');
+}
+function toggleUseTemplateContact(email,btn){
+  if(useTemplateSelected.has(email)){useTemplateSelected.delete(email);btn.style.background='';btn.style.color='';btn.style.borderColor='';}
+  else{useTemplateSelected.add(email);btn.style.background='rgba(69,209,196,.15)';btn.style.color='var(--green)';btn.style.borderColor='var(--green)';}
+}
+async function confirmUseTemplate(){
+  const extra=document.getElementById('ut-extra-emails').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const recipients=[...useTemplateSelected,...extra].filter((v,i,a)=>v&&a.indexOf(v)===i);
+  const localVal=document.getElementById('ut-scheduled-at').value;
+  if(!recipients.length)return toast('Elegi al menos un destinatario','error');
+  if(!localVal)return toast('Elegi fecha y hora','error');
+  // datetime-local es hora del navegador; new Date() la toma como local y toISOString() la pasa a UTC.
+  const utcDate=new Date(localVal);
+  const scheduledAt=utcDate.toISOString().slice(0,16).replace('T',' ');
+  const btn=document.getElementById('btnConfirmUseTemplate');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span>';
+  try{
+    const r=await apiFetch('/templates/'+usingTemplateId+'/use',{method:'POST',body:JSON.stringify({
+      contacts:recipients, scheduled_at:scheduledAt, cta_url:document.getElementById('ut-cta').value.trim()
+    })});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'Error');
+    toast('Envio programado en el Cron Sender','success');
+    closeModal('modalUseTemplate');
+    loadStats();
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{btn.disabled=false;btn.textContent='Programar';}
 }
 
 function openMultiModal(){
@@ -1726,6 +1778,7 @@ const intentPrompts={
 };
 
 async function composeEmail(){
+  setComposeContentType('markdown');
   const to=document.getElementById('c-to').value.trim();
   const subject=document.getElementById('c-subject').value.trim();
   const prompt=document.getElementById('c-prompt').value.trim();
@@ -1765,7 +1818,7 @@ async function composeEmail(){
   finally{btn.disabled=false;btn.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar con Groq';}
 }
 
-function clearCompose(){document.getElementById('composedBody').innerHTML='<span style="color:var(--text3);font-style:normal;font-family:var(--mono);font-size:11px">El email generado aparecera aqui.</span>';_pendingAttachments=[];renderComposeAttachments();}
+function clearCompose(){document.getElementById('composedBody').innerHTML='<span style="color:var(--text3);font-style:normal;font-family:var(--mono);font-size:11px">El email generado aparecera aqui.</span>';document.getElementById('composedBodyHtml').value='';setComposeContentType('markdown');_pendingAttachments=[];renderComposeAttachments();}
 
 async function openLoadEmailModal(){
   openModal('modalLoadEmail');
@@ -1813,18 +1866,42 @@ function applyLoadedEmail(){
   toast('Email cargado. Podés editarlo y enviar.','success');
 }
 
+function getComposeBody(){
+  return composeContentType==='html'
+    ? document.getElementById('composedBodyHtml').value.trim()
+    : document.getElementById('composedBody').textContent.trim();
+}
+function setComposeContentType(mode){
+  composeContentType=mode;
+  const mdBox=document.getElementById('composedBody'), htmlBox=document.getElementById('composedBodyHtml');
+  const btnMd=document.getElementById('btnModeMarkdown'), btnHtml=document.getElementById('btnModeHtml');
+  const title=document.getElementById('composePanelTitle'), regenBtn=document.getElementById('btnRegenerate');
+  if(mode==='html'){
+    mdBox.style.display='none';htmlBox.style.display='block';
+    btnHtml.style.color='var(--green)';btnHtml.style.background='var(--green-glow)';
+    btnMd.style.color='';btnMd.style.background='';
+    title.textContent='Template HTML pegado';
+    regenBtn.style.display='none';
+  }else{
+    mdBox.style.display='block';htmlBox.style.display='none';
+    btnMd.style.color='var(--green)';btnMd.style.background='var(--green-glow)';
+    btnHtml.style.color='';btnHtml.style.background='';
+    title.textContent='Borrador — Markdown';
+    regenBtn.style.display='';
+  }
+}
 async function previewEmail(){
-  const bodyText=document.getElementById('composedBody').textContent.trim();
-  if(!bodyText||bodyText.includes('aparecera aqui'))return toast('Genera un email primero','error');
-  try{const r=await apiFetch('/preview-email',{method:'POST',body:JSON.stringify({body:bodyText})});const d=await r.json();document.getElementById('previewFrame').srcdoc=d.html;openModal('modalPreview');}catch(e){toast('Error preview','error');}
+  const bodyText=getComposeBody();
+  if(!bodyText||bodyText.includes('aparecera aqui'))return toast('Escribi o pega un email primero','error');
+  try{const r=await apiFetch('/preview-email',{method:'POST',body:JSON.stringify({body:bodyText,subject:document.getElementById('c-subject').value.trim(),content_type:composeContentType})});const d=await r.json();document.getElementById('previewFrame').srcdoc=d.html;openModal('modalPreview');}catch(e){toast('Error preview','error');}
 }
 
 async function openSendConfirm(){
-  const bodyText=document.getElementById('composedBody').textContent.trim();
-  if(!bodyText||bodyText.includes('aparecera aqui'))return toast('Genera un email primero','error');
+  const bodyText=getComposeBody();
+  if(!bodyText||bodyText.includes('aparecera aqui'))return toast('Escribi o pega un email primero','error');
   const to=document.getElementById('c-to').value.trim(),subject=document.getElementById('c-subject').value.trim();
   if(!to||!subject)return toast('Completa destinatario y asunto','error');
-  try{const d=await(await apiFetch('/config')).json();document.getElementById('m-via').textContent=(d.sender_name||d.sender_email||'');}catch(e){}
+  try{const d=await(await apiFetch('/config')).json();document.getElementById('m-via').textContent=(d.sender_name||d.sender_email||'');document.getElementById('m-test-email').value=d.sender_email||'';}catch(e){}
   document.getElementById('m-to').textContent=to;
   document.getElementById('m-subject').textContent=subject;
   const attEl=document.getElementById('m-attachments');
@@ -1835,6 +1912,25 @@ async function openSendConfirm(){
   openModal('modalSend');
 }
 
+async function sendTestFromModal(){
+  const to=document.getElementById('m-test-email').value.trim();
+  if(!to)return toast('Ingresa un email para la prueba','error');
+  const btn=document.getElementById('btnSendTest');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span>';
+  try{
+    const r=await apiFetch('/send-test',{method:'POST',body:JSON.stringify({
+      to,
+      subject:'[PRUEBA] '+document.getElementById('c-subject').value.trim(),
+      body:getComposeBody(),
+      content_type:composeContentType,
+      attachment_ids:_pendingAttachments.map(a=>a.id)
+    })});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'Error');
+    toast('Prueba enviada a '+to,'success');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{btn.disabled=false;btn.textContent='Enviar prueba';}
+}
+
 async function confirmSend(){
   const btn=document.getElementById('btnConfirmSend');btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Enviando...';
   const mainTo=document.getElementById('c-to').value.trim();
@@ -1843,7 +1939,8 @@ async function confirmSend(){
     const r=await apiFetch('/send-email',{method:'POST',body:JSON.stringify({
       recipients:allRecipients,
       subject:document.getElementById('c-subject').value.trim(),
-      body:document.getElementById('composedBody').textContent.trim(),
+      body:getComposeBody(),
+      content_type:composeContentType,
       intent:currentIntent,
       attachment_ids:_pendingAttachments.map(a=>a.id)
     })});
@@ -2039,7 +2136,7 @@ async function loadContext(){try{const d=await(await apiFetch('/context')).json(
 async function saveContext(){try{await apiFetch('/context',{method:'POST',body:JSON.stringify({entity:document.getElementById('ctx-entity').value.trim(),mission:document.getElementById('ctx-mission').value.trim(),extra:document.getElementById('ctx-extra').value.trim()})});toast('Contexto guardado','success');loadDashboard();}catch(e){toast('Error','error');}}
 
 function syncColor(inputId,hexId){const picker=document.getElementById(inputId),hex=document.getElementById(hexId);if(!picker||!hex)return;picker.addEventListener('input',()=>hex.value=picker.value);hex.addEventListener('input',()=>{if(/^#[0-9a-f]{6}$/i.test(hex.value))picker.value=hex.value;});}
-async function loadStyle(){try{const d=await(await apiFetch('/settings')).json();const set=(id,k,def)=>{const el=document.getElementById(id);if(el)el.value=d[k]||def;};set('st-font','style_font_family',"Georgia,'Times New Roman',serif");set('st-size','style_font_size','16px');['primary','link','bg','text','header-bg','header-fc'].forEach(n=>{const key={'primary':'style_primary_color','link':'style_link_color','bg':'style_bg_color','text':'style_text_color','header-bg':'style_header_bg','header-fc':'style_header_color'}[n];const def={'primary':'#7ec850','link':'#2563eb','bg':'#ffffff','text':'#1a1a1a','header-bg':'#0c0f0a','header-fc':'#7ec850'}[n];set('st-'+n,key,def);set('st-'+n+'-hex',key,def);});set('st-sig','signature_html','');}catch(e){}}
+async function loadStyle(){try{const d=await(await apiFetch('/settings')).json();const set=(id,k,def)=>{const el=document.getElementById(id);if(el)el.value=d[k]||def;};set('st-font','style_font_family',"Georgia,'Times New Roman',serif");set('st-size','style_font_size','16px');['primary','link','bg','text','header-bg','header-fc'].forEach(n=>{const key={'primary':'style_primary_color','link':'style_link_color','bg':'style_bg_color','text':'style_text_color','header-bg':'style_header_bg','header-fc':'style_header_color'}[n];const def={'primary':'#178a7e','link':'#2563eb','bg':'#ffffff','text':'#1a1a1a','header-bg':'#0a0f14','header-fc':'#4dd8c4'}[n];set('st-'+n,key,def);set('st-'+n+'-hex',key,def);});set('st-sig','signature_html','');}catch(e){}}
 async function saveStyle(){const data={style_font_family:document.getElementById('st-font').value,style_font_size:document.getElementById('st-size').value,style_primary_color:document.getElementById('st-primary-hex').value||document.getElementById('st-primary').value,style_link_color:document.getElementById('st-link-hex').value||document.getElementById('st-link').value,style_bg_color:document.getElementById('st-bg-hex').value||document.getElementById('st-bg').value,style_text_color:document.getElementById('st-text-hex').value||document.getElementById('st-text').value,style_header_bg:document.getElementById('st-header-bg-hex').value||document.getElementById('st-header-bg').value,style_header_color:document.getElementById('st-header-fc-hex').value||document.getElementById('st-header-fc').value,signature_html:document.getElementById('st-sig').value};try{await apiFetch('/settings',{method:'POST',body:JSON.stringify(data)});toast('Estilos guardados','success');}catch(e){toast('Error','error');}}
 async function previewStyle(){const sampleBody=`# Hola
 
@@ -2066,7 +2163,7 @@ let campGenState = {
 
 // ── Tab switcher ───────────────────────────
 function switchCampTab(tab){
-  const tabs = ['list','schedule','templates'];
+  const tabs = ['list','schedule'];
   tabs.forEach(t=>{
     const btn = document.getElementById('campTab-'+t);
     if(btn){
@@ -2074,12 +2171,11 @@ function switchCampTab(tab){
       btn.style.color = t===tab ? 'var(--green)' : 'var(--text3)';
     }
   });
-  // Ocultar todas las sub-vistas de campañas
+  // Ocultar todas las sub-vistas de comunicaciones programadas
   document.getElementById('campaignListView').style.display = 'none';
   document.getElementById('campaignFormView').style.display = 'none';
   document.getElementById('campaignApprovalView').style.display = 'none';
   document.getElementById('campaignScheduleView').style.display = 'none';
-  document.getElementById('campaignTemplatesView').style.display = 'none';
 
   if(tab === 'list'){
     document.getElementById('campaignListView').style.display = 'block';
@@ -2087,9 +2183,6 @@ function switchCampTab(tab){
   } else if(tab === 'schedule'){
     document.getElementById('campaignScheduleView').style.display = 'block';
     loadSchedule();
-  } else if(tab === 'templates'){
-    document.getElementById('campaignTemplatesView').style.display = 'block';
-    loadTemplates();
   }
 }
 
@@ -2121,7 +2214,7 @@ async function loadSchedule(){
 
 function filterSchedule(f){
   scheduleFilter = f;
-  ['all','delayed','scheduled','sent','cancelled'].forEach(id=>{
+  ['all','delayed','scheduled','retrying','paused','sent','failed','cancelled'].forEach(id=>{
     const btn = document.getElementById('sf-'+id);
     if(!btn) return;
     const active = id===f;
@@ -2167,11 +2260,14 @@ function renderSchedule(){
 
   if(!items.length){
     const msgs = {
-      all:       'No hay campañas programadas o enviadas.',
-      delayed:   '✓ No hay emails demorados.',
-      scheduled: 'No hay emails pendientes de envío.',
-      sent:      'No hay emails enviados aún.',
-      cancelled: 'No hay emails cancelados.',
+      all:       'No hay comunicaciones programadas o enviadas.',
+      delayed:   '✓ No hay envios demorados.',
+      scheduled: 'No hay envios pendientes.',
+      retrying:  'No hay envios reintentando.',
+      paused:    'No hay comunicaciones pausadas.',
+      sent:      'No hay envios enviados aun.',
+      failed:    '✓ No hay envios fallidos.',
+      cancelled: 'No hay envios cancelados.',
     };
     el.innerHTML = `<div style="padding:2rem;color:var(--text3);font-size:11px;text-align:center">${msgs[scheduleFilter]||'Sin datos.'}</div>`;
     return;
@@ -2179,15 +2275,18 @@ function renderSchedule(){
 
   el.innerHTML = items.map(item => {
     const stateMap = {
-      sent:      {icon:'✓', label:'Enviado',   cls:'sched-state-sent'},
-      scheduled: {icon:'◷', label:'Agendado',  cls:'sched-state-scheduled'},
-      delayed:   {icon:'⚠', label:'Demorado',  cls:'sched-state-delayed'},
-      cancelled: {icon:'✕', label:'Cancelado', cls:'', style:'color:var(--text3)'},
+      sent:      {icon:'✓', label:'Enviado',      cls:'sched-state-sent'},
+      scheduled: {icon:'◷', label:'Agendado',     cls:'sched-state-scheduled'},
+      delayed:   {icon:'⚠', label:'Demorado',     cls:'sched-state-delayed'},
+      retrying:  {icon:'↻', label:'Reintentando', cls:'', style:'color:var(--amber)'},
+      paused:    {icon:'⏸', label:'Pausado',      cls:'', style:'color:var(--blue)'},
+      failed:    {icon:'✕', label:'Fallido',      cls:'', style:'color:var(--red)'},
+      cancelled: {icon:'✕', label:'Cancelado',    cls:'', style:'color:var(--text3)'},
     };
     const st = stateMap[item.state] || stateMap.scheduled;
     const sentInfo = item.sent_at
       ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">env: ${formatSchedDate(item.sent_at)}</div>`
-      : '';
+      : (item.sent ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">${item.sent}/${item.total} enviados</div>` : '');
 
     // Botón ocultar solo para enviados/cancelados
     const hideBtn = (item.state === 'sent' || item.state === 'cancelled')
@@ -2201,17 +2300,23 @@ function renderSchedule(){
       actions = `
         <button class="btn btn-amber btn-sm" style="font-size:9px;padding:3px 9px" onclick="sendSingleDelayed(${item.id})">Enviar ahora</button>
         <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openRescheduleModal(${item.id},'${item.scheduled_at}')">Reprogramar</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="pauseSequence(${item.campaign_id})">Pausar</button>
         <button class="btn btn-red btn-sm" style="font-size:9px;padding:3px 9px" onclick="cancelScheduledEmail(${item.id})">Cancelar</button>`;
-    } else if(item.state === 'scheduled'){
+    } else if(item.state === 'scheduled' || item.state === 'retrying'){
       actions = `
         <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openRescheduleModal(${item.id},'${item.scheduled_at}')">Reprogramar</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="pauseSequence(${item.campaign_id})">Pausar</button>
         <button class="btn btn-red btn-sm" style="font-size:9px;padding:3px 9px" onclick="cancelScheduledEmail(${item.id})">Cancelar</button>`;
+    } else if(item.state === 'paused'){
+      actions = `<button class="btn btn-green btn-sm" style="font-size:9px;padding:3px 9px" onclick="resumeSequence(${item.campaign_id})">Reanudar</button>`;
+    } else if(item.state === 'failed'){
+      actions = `<button class="btn btn-amber btn-sm" style="font-size:9px;padding:3px 9px" onclick="retryFailedSequence(${item.campaign_id})">Reintentar</button>`;
     } else if(item.state === 'sent'){
       actions = `<button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openSchedEmailModal(${item.id})">Ver email</button>`;
     }
 
     return `<div class="sched-row" id="srow_${item.id}">
-      <span data-label="Campana" style="color:var(--text2);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${item.camp_name}" onclick="openSchedEmailModal(${item.id})">${item.camp_name}</span>
+      <span data-label="Comunicacion" style="color:var(--text2);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${item.camp_name}" onclick="openSchedEmailModal(${item.id})">${item.camp_name}</span>
       <span data-label="Dia" style="color:var(--text3);text-align:center">#${item.day_number}</span>
       <span data-label="Asunto" style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${item.subject||''}" onclick="openSchedEmailModal(${item.id})">${item.subject||'<em style="color:var(--text3)">sin asunto</em>'}</span>
       <div data-label="Envio">
@@ -2222,6 +2327,23 @@ function renderSchedule(){
       <div data-label="Acciones" style="display:flex;justify-content:flex-end;align-items:center;gap:4px;flex-wrap:wrap">${actions}${hideBtn}</div>
     </div>`;
   }).join('');
+}
+
+async function pauseSequence(campaignId){
+  try{const r=await apiFetch(`/campaigns/${campaignId}/pause`,{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Error');toast('Comunicacion pausada','success');await loadSchedule();}
+  catch(e){toast('Error: '+e.message,'error');}
+}
+async function resumeSequence(campaignId){
+  try{const r=await apiFetch(`/campaigns/${campaignId}/resume`,{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Error');toast('Comunicacion reanudada','success');await loadSchedule();}
+  catch(e){toast('Error: '+e.message,'error');}
+}
+async function retryFailedSequence(campaignId){
+  try{
+    const r=await apiFetch('/campaigns/retry-failed',{method:'POST',body:JSON.stringify({campaign_id:campaignId})});
+    const d=await r.json();if(!r.ok)throw new Error(d.detail||'Error');
+    toast(`${d.requeued} envio(s) reencolado(s) — se reintentaran en el proximo ciclo`,'success');
+    await loadSchedule();
+  }catch(e){toast('Error: '+e.message,'error');}
 }
 
 function hideSchedItem(id){
@@ -2361,7 +2483,7 @@ async function openSchedEmailModal(emailId){
 
     // Preview HTML
     try{
-      const pr = await apiFetch('/preview-email',{method:'POST',body:JSON.stringify({body: em.body||''})});
+      const pr = await apiFetch('/preview-email',{method:'POST',body:JSON.stringify({body: em.body||'', subject: em.subject||'', content_type: em.content_type||'markdown'})});
       const pd = await pr.json();
       document.getElementById('schedEmailPreview').srcdoc = pd.html;
     }catch(e){}
@@ -2376,9 +2498,8 @@ function showCampaignList(){
   document.getElementById('campaignFormView').style.display='none';
   document.getElementById('campaignApprovalView').style.display='none';
   document.getElementById('campaignScheduleView').style.display='none';
-  document.getElementById('campaignTemplatesView').style.display='none';
   // Resync tab indicator
-  ['list','schedule','templates'].forEach(t=>{
+  ['list','schedule'].forEach(t=>{
     const btn=document.getElementById('campTab-'+t);
     if(btn){btn.style.borderBottomColor=t==='list'?'var(--green)':'transparent';btn.style.color=t==='list'?'var(--green)':'var(--text3)';}
   });
@@ -2390,7 +2511,6 @@ function showCampaignForm(){
   document.getElementById('campaignFormView').style.display='block';
   document.getElementById('campaignApprovalView').style.display='none';
   document.getElementById('campaignScheduleView').style.display='none';
-  document.getElementById('campaignTemplatesView').style.display='none';
   const today=new Date().toISOString().split('T')[0];
   document.getElementById('camp-start').value=today;
   const end=new Date();end.setDate(end.getDate()+14);
@@ -2411,40 +2531,36 @@ function initCampContacts(){
   loadCampCategories();
 }
 
-// Llena el selector de rubros con las categorías presentes en leadforge.db.
+// Arma el selector de tags a partir de la Agenda ya cargada (no depende de LeadForge).
 async function loadCampCategories(){
   const sel=document.getElementById('campCategorySelect');
   if(!sel)return;
-  try{
-    const st=await(await apiFetch('/contacts/leadforge-status')).json();
-    if(!st.available||!st.categories){sel.parentElement.parentElement.style.display='none';return;}
-    sel.parentElement.parentElement.style.display='';
-    sel.innerHTML='<option value="">— elegí una categoría —</option>'+
-      st.categories.map(c=>`<option value="${c.categoria.replace(/"/g,'&quot;')}">${c.categoria} (${c.n})</option>`).join('');
-  }catch(e){/* leadforge no disponible: dejar el selector oculto */
-    sel.parentElement.parentElement.style.display='none';}
+  if(!contacts.length){try{contacts=await(await apiFetch('/contacts')).json();}catch(e){}}
+  const tagSet={};
+  contacts.forEach(c=>(c.tags||'').split(',').map(t=>t.trim()).filter(Boolean).forEach(t=>{tagSet[t]=(tagSet[t]||0)+1;}));
+  const tags=Object.keys(tagSet).sort();
+  if(!tags.length){sel.parentElement.parentElement.style.display='none';return;}
+  sel.parentElement.parentElement.style.display='';
+  sel.innerHTML='<option value="">— elegí un tag —</option>'+
+    tags.map(t=>`<option value="${t.replace(/"/g,'&quot;')}">${t} (${tagSet[t]})</option>`).join('');
 }
 
-// Agrega en bloque todos los leads de la categoría elegida a la selección.
+// Agrega en bloque los contactos de la Agenda que tengan el tag elegido.
 async function selectCampCategory(){
   const sel=document.getElementById('campCategorySelect');
-  const cat=sel.value;
-  if(!cat){toast('Elegí una categoría primero','error');return;}
+  const tag=sel.value;
+  if(!tag){toast('Elegí un tag primero','error');return;}
   const hint=document.getElementById('campCategoryHint');
-  hint.textContent='Cargando leads…';
-  try{
-    const r=await(await apiFetch('/contacts/by-category?categoria='+encodeURIComponent(cat))).json();
-    (r.emails||[]).forEach(e=>campSelectedContacts.add(e));
-    // Reflejar en los botones de la agenda los que ya están seleccionados.
-    document.querySelectorAll('#campContactList button').forEach(btn=>{
-      const m=btn.getAttribute('onclick').match(/toggleCampContact\('([^']+)'/);
-      if(m&&campSelectedContacts.has(m[1])){
-        btn.style.background='rgba(126,200,80,.15)';btn.style.color='var(--green)';btn.style.borderColor='var(--green)';
-      }
-    });
-    renderCampSelectedTags();
-    hint.textContent=`+${r.count} leads de "${cat}" agregados (${campSelectedContacts.size} en total).`;
-  }catch(e){hint.textContent='';toast('Error cargando la categoría','error');}
+  const matches=contacts.filter(c=>(c.tags||'').split(',').map(t=>t.trim()).includes(tag));
+  matches.forEach(c=>campSelectedContacts.add(c.email));
+  document.querySelectorAll('#campContactList button').forEach(btn=>{
+    const m=btn.getAttribute('onclick').match(/toggleCampContact\('([^']+)'/);
+    if(m&&campSelectedContacts.has(m[1])){
+      btn.style.background='rgba(69,209,196,.15)';btn.style.color='var(--green)';btn.style.borderColor='var(--green)';
+    }
+  });
+  renderCampSelectedTags();
+  hint.textContent=`+${matches.length} contactos con tag "${tag}" agregados (${campSelectedContacts.size} en total).`;
 }
 
 function toggleCampContact(email,name,btn){
@@ -2901,182 +3017,12 @@ async function exportCampaign(campId){
   }catch(e){toast('Error exportando: '+e.message,'error');}
 }
 
-// ── Plantillas pre-aprobadas ───────────────
-const SEND_MODE_LABELS={daily:'Diario',alternate:'Día por medio',mon_wed_fri:'Lun-Mié-Vie',tue_thu:'Mar-Jue'};
-
-async function loadTemplates(){
-  const el=document.getElementById('templateCards');
-  el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Cargando...</div>';
-  try{
-    const tmpls=await(await apiFetch('/campaigns/templates')).json();
-    if(!tmpls.length){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">No hay plantillas. Aprobá una campaña y guardala como plantilla.</div>';return;}
-    el.innerHTML=tmpls.map(t=>{
-      const cadence=`${SEND_MODE_LABELS[t.send_mode]||t.send_mode||''} · ${t.send_time||'09:00'}`;
-      const intent=(t.intent||'').replace(/</g,'&lt;');
-      return `
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
-          <div style="flex:1;min-width:200px">
-            <div style="font-family:var(--serif);font-size:15px;color:var(--text);margin-bottom:4px">${(t.name||'').replace(/</g,'&lt;')}</div>
-            <div style="font-size:11px;color:var(--text3)">${t.total_emails||0} emails · ${cadence}</div>
-            <div style="font-size:11px;color:var(--text2);margin-top:4px">${intent.substring(0,90)}${intent.length>90?'...':''}</div>
-          </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
-            <button class="btn btn-green btn-sm" onclick="openUseTemplate(${t.id})">Usar →</button>
-            <button class="btn btn-red btn-sm" onclick="deleteTemplate(${t.id})" style="font-size:9px;padding:2px 8px">Eliminar</button>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-  }catch(e){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Error cargando plantillas.</div>';}
-}
-
-async function deleteTemplate(tid){
-  const ok=await uiConfirm({title:'Eliminar plantilla',message:'Esta plantilla se eliminará permanentemente. Las campañas ya programadas a partir de ella no se ven afectadas.',okText:'Eliminar'});
-  if(!ok)return;
-  try{
-    await apiFetch('/campaigns/'+tid,{method:'DELETE'});
-    toast('Plantilla eliminada');
-    loadTemplates();
-  }catch(e){toast('Error eliminando','error');}
-}
-
-// ── Modal "Usar plantilla" ─────────────────
-let useTmplState={id:null,count:0,mode:'daily',contacts:new Set()};
-
-function nextValidStart(mode){
-  // Para cadencias con días fijos, arranca en el próximo día válido; si no, mañana.
-  const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+1);
-  const okDays={mon_wed_fri:[1,3,5],tue_thu:[2,4]}[mode];
-  if(okDays){let guard=0;while(!okDays.includes(d.getDay())&&guard<14){d.setDate(d.getDate()+1);guard++;}}
-  return d.toISOString().split('T')[0];
-}
-
-async function openUseTemplate(tid){
-  try{
-    const t=await(await apiFetch('/campaigns/'+tid)).json();
-    const count=(t.emails||[]).length;
-    useTmplState={id:tid,count,mode:t.send_mode||'daily',contacts:new Set()};
-    document.getElementById('useTmplSubtitle').textContent=`${(t.name||'').replace(/ \(plantilla\)$/,'')} · ${count} emails`;
-    document.getElementById('useTmplTime').value=t.send_time||'09:00';
-    document.getElementById('useTmplExtraEmails').value='';
-    document.getElementById('useTmplStart').value=nextValidStart(useTmplState.mode);
-    setUseTmplMode(useTmplState.mode);
-    // Lista de contactos (con búsqueda)
-    document.getElementById('useTmplSearch').value='';
-    renderUseTmplContacts();
-    renderUseTmplSelected();
-    updateUseTmplPreview();
-    openModal('modalUseTemplate');
-  }catch(e){toast('Error abriendo plantilla','error');}
-}
-
-function renderUseTmplContacts(){
-  const q=(document.getElementById('useTmplSearch').value||'').toLowerCase().trim();
-  const filtered=contacts.filter(c=>!q
-    || (c.name||'').toLowerCase().includes(q)
-    || (c.email||'').toLowerCase().includes(q)
-    || (c.company||'').toLowerCase().includes(q)
-    || (c.tags||'').toLowerCase().includes(q));
-  const el=document.getElementById('useTmplContactList');
-  if(!filtered.length){
-    el.innerHTML='<div style="font-size:10px;color:var(--text3);padding:4px">Sin resultados.</div>';
-    return;
-  }
-  el.innerHTML=filtered.map(c=>{
-    const sel=useTmplState.contacts.has(c.email);
-    const selStyle=sel?'background:rgba(126,200,80,.15);color:var(--green);border-color:var(--green)':'';
-    return `<button class="tag" data-email="${(c.email||'').replace(/"/g,'&quot;')}" style="cursor:pointer;padding:5px 10px;font-size:10px;${selStyle}" onclick="toggleUseTmplContact(this)" title="${(c.email||'').replace(/"/g,'&quot;')}">${(c.name||c.email||'').replace(/</g,'&lt;')}</button>`;
-  }).join('');
-}
-
-function toggleUseTmplContact(btn){
-  const email=btn.getAttribute('data-email');
-  if(!email)return;
-  if(useTmplState.contacts.has(email)){
-    useTmplState.contacts.delete(email);
-    btn.style.background='';btn.style.color='';btn.style.borderColor='';
-  }else{
-    useTmplState.contacts.add(email);
-    btn.style.background='rgba(126,200,80,.15)';btn.style.color='var(--green)';btn.style.borderColor='var(--green)';
-  }
-  renderUseTmplSelected();
-}
-
-function renderUseTmplSelected(){
-  const sel=[...useTmplState.contacts];
-  document.getElementById('useTmplSelectedTags').innerHTML=sel.map(e=>
-    `<span style="font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid var(--green-dim);color:var(--green)">${e.replace(/</g,'&lt;')}</span>`).join('');
-  const cnt=document.getElementById('useTmplSelCount');
-  if(cnt)cnt.textContent=sel.length?`${sel.length} seleccionado${sel.length>1?'s':''}`:'';
-}
-
-function setUseTmplMode(m){
-  useTmplState.mode=m;
-  ['daily','alternate','mon_wed_fri','tue_thu'].forEach(id=>{
-    const el=document.getElementById('utm-'+id);
-    if(el)el.classList.toggle('active',id===m);
-  });
-  updateUseTmplPreview();
-}
-
-function previewDatesCount(start,mode,count){
-  const dates=[]; if(!start||count<=0)return dates;
-  let cur=new Date(start+'T12:00:00'); const startD=new Date(start+'T12:00:00');
-  let guard=0; const maxGuard=count*14+366;
-  while(dates.length<count && guard<maxGuard){
-    const wd=cur.getDay(); let ok=false;
-    if(mode==='daily')ok=true;
-    else if(mode==='alternate')ok=(Math.round((cur-startD)/86400000)%2===0);
-    else if(mode==='mon_wed_fri')ok=[1,3,5].includes(wd);
-    else if(mode==='tue_thu')ok=[2,4].includes(wd);
-    else ok=true;
-    if(ok)dates.push(cur.toISOString().split('T')[0]);
-    cur.setDate(cur.getDate()+1); guard++;
-  }
-  return dates;
-}
-
-function updateUseTmplPreview(){
-  const start=document.getElementById('useTmplStart')?.value;
-  const el=document.getElementById('useTmplPreview'); if(!el)return;
-  if(!start){el.textContent='';return;}
-  const dates=previewDatesCount(start,useTmplState.mode,useTmplState.count);
-  if(!dates.length){el.textContent='';return;}
-  el.innerHTML=`<span style="color:var(--green);font-size:13px;font-weight:500">${dates.length}</span> <span style="color:var(--text2)">emails se agendarán</span> (${dates[0]} → ${dates[dates.length-1]})`;
-}
-
-async function scheduleFromTemplate(){
-  const start=document.getElementById('useTmplStart').value;
-  const time=document.getElementById('useTmplTime').value||'09:00';
-  const extra=document.getElementById('useTmplExtraEmails').value;
-  if(!start)return toast('Selecciona una fecha de inicio','error');
-  const all=[...useTmplState.contacts];
-  extra.split(/[\n,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>all.push(e));
-  if(!all.length)return toast('Agrega al menos un contacto','error');
-
-  const btn=document.getElementById('btnUseTmplSchedule');
-  btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Programando...';
-  try{
-    const r=await apiFetch('/campaigns/templates/'+useTmplState.id+'/use',{method:'POST',body:JSON.stringify({
-      contacts:all, start_date:start, send_time:time, send_mode:useTmplState.mode
-    })});
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.detail||'Error');
-    closeModal('modalUseTemplate');
-    toast(`Campaña programada — ${d.total_emails} emails en la Agenda de Envío`,'success');
-    switchCampTab('schedule');
-  }catch(e){toast('Error: '+e.message,'error');}
-  finally{btn.disabled=false;btn.innerHTML='Programar envío';}
-}
-
 async function showApprovalView(campId){
   currentCampaignId=campId;
   document.getElementById('campaignListView').style.display='none';
   document.getElementById('campaignFormView').style.display='none';
   document.getElementById('campaignApprovalView').style.display='block';
   document.getElementById('campaignScheduleView').style.display='none';
-  document.getElementById('campaignTemplatesView').style.display='none';
 
   const loadingEl=document.getElementById('approvalEmailList');
   loadingEl.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Cargando emails...</div>';
@@ -3094,8 +3040,6 @@ async function showApprovalView(campId){
     const allApproved=(approved===total&&total>0);
     const btnFinal=document.getElementById('btnFinalizeCamp');
     btnFinal.style.display=allApproved?'inline-flex':'none';
-    const btnTmpl=document.getElementById('btnSaveTemplate');
-    if(btnTmpl)btnTmpl.style.display=allApproved?'inline-flex':'none';
 
     // Attachments section
     const campaignAtts=camp.attachments||[];
@@ -3241,23 +3185,6 @@ async function finalizeCampaign(){
     switchCampTab('schedule');
   }catch(e){toast('Error: '+e.message,'error');}
   finally{btn.disabled=false;btn.innerHTML='Confirmar campana ✓';}
-}
-
-async function saveAsTemplate(){
-  if(!currentCampaignId)return;
-  const defName=(document.getElementById('approvalCampName').textContent||'').trim();
-  const name=await uiPrompt({title:'Guardar como plantilla',message:'Nombre de la plantilla pre-aprobada:',value:defName,okText:'Guardar',placeholder:'Ej: Contacto inicial'});
-  if(name===null)return; // cancelado
-  if(!name.trim())return toast('Ingresá un nombre para la plantilla','error');
-  const btn=document.getElementById('btnSaveTemplate');
-  btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Guardando...';
-  try{
-    const r=await apiFetch('/campaigns/'+currentCampaignId+'/save-as-template',{method:'POST',body:JSON.stringify({name:name.trim()})});
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.detail||'Error');
-    toast('Plantilla guardada en Preaprobadas','success');
-  }catch(e){toast('Error: '+e.message,'error');}
-  finally{btn.disabled=false;btn.innerHTML='Guardar como plantilla';}
 }
 
 async function deleteCampaign(campId){

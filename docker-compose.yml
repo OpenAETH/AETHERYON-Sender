@@ -1,8 +1,8 @@
 services:
-  asistente-ejecutivo:
+  aetheryon-outreach-sender:
     build: .
-    image: asistente-ejecutivo:local
-    container_name: asistente-ejecutivo
+    image: aetheryon-outreach-sender:local
+    container_name: aetheryon-outreach-sender
     # Encendido 24/7: se reinicia ante crash o reinicio del host (no si lo paras a mano)
     restart: unless-stopped
     ports:
@@ -20,4 +20,4 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
-    # El scheduler evalua la agenda en UTC (datetime.utcnow). Programa los envios en UTC.
+    # El Cron Sender evalúa la cola en UTC (datetime.utcnow). Programá los envíos en UTC.

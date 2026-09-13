@@ -1,42 +1,21 @@
 services:
   - type: web
-    name: asistente-ejecutivo
+    name: aetheryon-outreach-sender
     env: python
     buildCommand: |
       pip install -r requirements.txt
       mkdir -p static
-      # Copiar index.html si existe en la raíz
       if [ -f index.html ]; then
         cp index.html static/
         echo "index.html copiado a static/"
       else
         echo "ADVERTENCIA: index.html no encontrado en la raíz"
       fi
-      # Listar archivos para debug
       ls -la
       ls -la static/ || true
-    startCommand: python api.py
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: SMTP_METHOD
-        value: smtp_ssl
-      - key: SMTP_HOST
-        sync: false
-      - key: SMTP_PORT
-        value: "465"
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASS
-        sync: false
-      - key: SENDER_NAME
-        sync: false
-      - key: IMAP_HOST
-        sync: false
-      - key: IMAP_PORT
-        value: "993"
-      - key: IMAP_USER
-        sync: false
-      - key: IMAP_PASS
-        sync: false
+      # ── Auth ──
       - key: APP_USER
         sync: false
       - key: APP_PASSWORD
@@ -45,3 +24,41 @@ services:
         generateValue: true
       - key: TOKEN_TTL_HOURS
         value: "8"
+      # ── Base de datos (Supabase/Postgres — persistencia exclusiva) ──
+      - key: DATABASE_URL
+        sync: false
+      # ── Resend (envío) ──
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SENDER_EMAIL
+        sync: false
+      - key: SENDER_NAME
+        sync: false
+      # ── Supabase Storage (adjuntos) ──
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: STORAGE_BUCKET
+        value: email_attachments
+      # ── IMAP (bandeja, opcional) ──
+      - key: IMAP_HOST
+        sync: false
+      - key: IMAP_PORT
+        value: "993"
+      - key: IMAP_USER
+        sync: false
+      - key: IMAP_PASS
+        sync: false
+      # ── Groq (asistencia de redacción, opcional) ──
+      - key: GROQ_API_KEY
+        sync: false
+      # ── Cron Sender (límites, ajustables) ──
+      - key: SENDER_RATE_LIMIT_PER_RUN
+        value: "50"
+      - key: SENDER_MAX_ATTEMPTS
+        value: "3"
+      - key: SENDER_RETRY_BACKOFF_MINUTES
+        value: "30"
+      - key: SCHEDULER_INTERVAL_SECONDS
+        value: "60"
