@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Sirve para confirmar que el navegador esta corriendo el codigo que
 # efectivamente se desplego, y no una version anterior cacheada por Docker
 # o por un deploy viejo en Render. Actualizar con cada entrega.
-APP_BUILD = "2026-09-13.5"
+APP_BUILD = "2026-09-19.2"
 
 # Raíz del repo (padre del paquete backend/), para resolver index.html y static/.
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -66,3 +66,12 @@ DEFAULT_RATE_LIMIT_PER_RUN = int(os.getenv("SENDER_RATE_LIMIT_PER_RUN", "50"))
 DEFAULT_MAX_ATTEMPTS = int(os.getenv("SENDER_MAX_ATTEMPTS", "3"))
 DEFAULT_RETRY_BACKOFF_MINUTES = int(os.getenv("SENDER_RETRY_BACKOFF_MINUTES", "30"))
 SCHEDULER_INTERVAL_SECONDS = int(os.getenv("SCHEDULER_INTERVAL_SECONDS", "60"))
+
+# ── Base de datos ────────────────────────────────────────────
+# Se lee acá (no en db/connection.py) para garantizar que load_dotenv() ya
+# corrió antes de resolver la variable — leerla directo en connection.py
+# dependía por accidente del orden de imports de otros módulos.
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:[YOUR-PASSWORD]@db.your-project.supabase.co:5432/postgres",
+)

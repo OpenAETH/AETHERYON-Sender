@@ -7,6 +7,7 @@ destinatarios (`campaign_contacts`) y la cola real de envío por destinatario
 (`send_queue`), con pausa, reanudación, cancelación, reintentos con backoff
 y límites por corrida.
 """
+import json
 import logging
 import re
 from datetime import datetime, timedelta
@@ -309,6 +310,7 @@ def create_from_template(tid: int, data: dict) -> dict:
 
     tmpl = template_service.get_template(tid)
     contacts_list = [c.strip() for c in (data.get("contacts") or []) if c and c.strip()]
+    recipient_variables = data.get("recipient_variables") or {}
     scheduled_at = (data.get("scheduled_at") or "").strip()
     if not contacts_list:
         raise ValueError("Se requiere al menos un contacto")
@@ -337,7 +339,9 @@ def create_from_template(tid: int, data: dict) -> dict:
         """), {"cid": cid, "subject": tmpl["subject"], "body": tmpl["body"], "content_type": tmpl.get("content_type", "markdown"), "sched": scheduled_at})
 
         for email_addr in contacts_list:
-            db.execute(text("INSERT INTO campaign_contacts (campaign_id, email) VALUES (:cid, :email)"), {"cid": cid, "email": email_addr})
+            variables = recipient_variables.get(email_addr) or {}
+            db.execute(text("INSERT INTO campaign_contacts (campaign_id, email, variables) VALUES (:cid, :email, :vars)"),
+                       {"cid": cid, "email": email_addr, "vars": json.dumps(variables)})
         db.commit()
     except Exception:
         db.rollback()
@@ -759,10 +763,12 @@ def process_due(campaign_id: int = None) -> dict:
             params["cid"] = campaign_id
 
         due = rows_to_list(db.execute(text(f"""
-            SELECT sq.*, ce.subject, ce.body, ce.content_type, c.cta_url, c.rate_limit_per_run, c.name as camp_name
+            SELECT sq.*, ce.subject, ce.body, ce.content_type, c.cta_url, c.rate_limit_per_run, c.name as camp_name,
+                   cc.variables as recipient_variables
             FROM send_queue sq
             JOIN campaign_emails ce ON ce.id = sq.campaign_email_id
             JOIN campaigns c ON c.id = sq.campaign_id
+            LEFT JOIN campaign_contacts cc ON cc.campaign_id = sq.campaign_id AND cc.email = sq.recipient_email
             WHERE sq.status = 'pending' AND sq.next_attempt_at <= :now
               AND c.status = 'scheduled'
               {camp_filter}
@@ -793,8 +799,9 @@ def process_due(campaign_id: int = None) -> dict:
 
             to = row["recipient_email"]
             try:
-                contact = dict_from_row(db.execute(text("SELECT * FROM contacts WHERE email=:e"), {"e": to}).fetchone())
-                context = build_context(contact, sender_name=style.get("sender_name"), cta_url=row.get("cta_url") or "")
+                contact = dict_from_row(db.execute(text("SELECT * FROM contacts WHERE email=:e"), {"e": to}).fetchone()) or {"email": to}
+                custom_vars = row.get("recipient_variables") or {}
+                context = build_context(contact, sender_name=style.get("sender_name"), cta_url=row.get("cta_url") or "", extra=custom_vars)
                 subject, _ = render(row["subject"] or "", context)
                 body, _ = render(row["body"] or "", context)
                 content_type = row.get("content_type") or "markdown"

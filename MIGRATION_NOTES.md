@@ -81,3 +81,58 @@
   `id="btnSaveTemplate"`) que la nueva pantalla de Templates. Se eliminó
   por completo esa ruta legacy — de haber quedado, pisaba silenciosamente
   la funcionalidad nueva.
+- `db/connection.py` leía `DATABASE_URL` directo de `os.environ`, sin
+  garantizar que `.env` ya estuviera cargado — funcionaba en producción
+  solo por el orden accidental de imports de `backend/main.py`. Ahora
+  `DATABASE_URL` se centraliza en `config.py` (que sí llama
+  `load_dotenv()`), como ya se documentaba que debía ser.
+- El fallback "usar el prefijo del email como nombre" para destinatarios
+  sin ficha en la Agenda nunca se activaba: `process_due` y
+  `render_for_recipient` pasaban `contact=None`/`{}` en vez de
+  `{"email": to}`, así que `build_context` no tenía de dónde derivarlo.
+- La regex de detección de variables (`{{clave}}`) solo aceptaba
+  `[a-zA-Z0-9_]`, así que una variable como `{{señal}}` (con ñ) no se
+  reconocía como variable en absoluto y quedaba literal, sin renderizar,
+  en el email final. Ahora usa `\w+` con Unicode.
+
+## Variables personalizadas por destinatario (Templates → Cron Sender)
+
+Cada plantilla declara sus variables (`{{clave}}`) y cada una se clasifica
+en `domain/templates.classify_variables()`:
+- **Auto-mapeadas**: `{{nombre}}`/`{{first_name}}`/`{{name}}`,
+  `{{empresa}}`/`{{company}}`/`{{nombre_empresa}}`,
+  `{{cargo}}`/`{{role}}`/`{{puesto}}`, `{{remitente}}`/`{{sender_name}}`,
+  `{{link}}`/`{{cta_url}}` — se resuelven solas desde la Agenda o la
+  configuración, sea cual sea el alias que use la plantilla.
+- **Personalizadas**: cualquier otra clave (ej. `{{hipotesis}}`,
+  `{{señal}}`) — no hay forma de derivarlas de un contacto genérico, así
+  que se cargan a mano por destinatario al programar el envío ("Usar
+  plantilla" en el Cron Sender), y se guardan en
+  `campaign_contacts.variables` (JSONB), específicas de esa comunicación.
+
+El asistente de "Usar plantilla" detecta qué emails pegados no están en la
+Agenda y pide sus datos (nombre/empresa) para registrarlos de una, además
+de la tabla de variables personalizadas por fila con vista previa
+individual por destinatario antes de programar.
+
+## Verificación de Agenda y Templates (botones y flujos reales)
+
+Instalé Postgres real en el entorno de trabajo y probé cada botón de
+ambas vistas contra la API real (login, CRUD completo, casos de error),
+no solo lectura de código. Bugs reales encontrados y corregidos:
+
+- **Editar contacto no guardaba el email.** `update_contact()` nunca
+  incluía `email` en el `UPDATE` — el formulario lo mostraba editable, el
+  toast decía "Actualizado", pero el valor viejo quedaba intacto en la
+  base. Se agregó al `SET`, con manejo de conflicto (409 limpio) si el
+  nuevo email ya pertenece a otro contacto.
+- **"Archivar" no tenía vuelta atrás.** Era una acción de un solo sentido:
+  no existía botón "Activar", ni indicación visual de qué contacto estaba
+  archivado, ni filtro para volver a encontrarlo. Ahora es un toggle
+  (Archivar ⇄ Activar) y los archivados se muestran atenuados con badge.
+- **"Duplicar" plantilla tiraba error 500.** `duplicate_template()` leía
+  la columna `variables` (jsonb) ya parseada por psycopg2 a una lista de
+  Python, y la reinsertaba tal cual sin volver a serializarla con
+  `json.dumps()` — Postgres la interpretaba como `text[]` en vez de
+  `jsonb` y rechazaba el INSERT. Confirmado con el error real de Postgres,
+  no solo por lectura de código.

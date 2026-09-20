@@ -69,7 +69,7 @@ def render_for_recipient(subject: str, body: str, to_email: str, db, cta_url: st
     - 'html': `body` es un template ya diseñado y completo (pegado por el
       usuario) — se respeta tal cual, sin envolver."""
     style = build_style()
-    contact = _find_contact_by_email(db, to_email)
+    contact = _find_contact_by_email(db, to_email) or {"email": to_email}
     context = build_context(contact, sender_name=style.get("sender_name") or cfg()["sender_name"], cta_url=cta_url)
     rendered_subject, _ = render(subject or "", context)
     rendered_body, _ = render(body or "", context)

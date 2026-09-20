@@ -44,7 +44,10 @@ async def create_contact(request: Request):
 @router.put("/contacts/{cid}")
 async def update_contact(cid: int, request: Request):
     data = await request.json()
-    agenda_service.update_contact(cid, data)
+    try:
+        agenda_service.update_contact(cid, data)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     return {"success": True}
 
 

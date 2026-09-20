@@ -66,7 +66,7 @@ def update_contact(cid: int, data: dict):
     try:
         db.execute(
             text("""UPDATE contacts SET
-                    name=:name,company=:company,role=:role,phone=:phone,
+                    name=:name,email=:email,company=:company,role=:role,phone=:phone,
                     context=:context,tags=:tags,
                     status=COALESCE(:status,status),
                     tipo=COALESCE(:tipo,tipo),
@@ -76,7 +76,7 @@ def update_contact(cid: int, data: dict):
                     notes=COALESCE(:notes,notes),
                     updated_at=NOW() WHERE id=:cid"""),
             {
-                "name": data.get("name"), "company": data.get("company", ""), "role": data.get("role", ""),
+                "name": data.get("name"), "email": data.get("email"), "company": data.get("company", ""), "role": data.get("role", ""),
                 "phone": data.get("phone", ""), "context": data.get("context", ""), "tags": data.get("tags", ""),
                 "status": data.get("status"), "tipo": data.get("tipo"), "medio": data.get("medio"),
                 "last_contact": data.get("last_contact"), "next_followup": data.get("next_followup"),
@@ -84,6 +84,11 @@ def update_contact(cid: int, data: dict):
             },
         )
         db.commit()
+    except Exception as e:
+        db.rollback()
+        if "duplicate key" in str(e).lower():
+            raise ValueError("Ya existe otro contacto con ese email")
+        raise
     finally:
         db.close()
 

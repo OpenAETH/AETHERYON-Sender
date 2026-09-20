@@ -1,4 +1,5 @@
 fastapi==0.115.12
+pydantic==2.9.2
 uvicorn==0.34.0
 python-multipart==0.0.20
 resend==2.26.0
@@ -7,5 +8,3 @@ sqlalchemy==2.0.40
 python-dotenv==1.0.1
 httpx==0.28.1
 PyYAML==6.0.2
-pydantic==2.13.0
-pydantic-settings==2.7.0

@@ -15,7 +15,7 @@ import logging
 from sqlalchemy import text
 
 from backend.db.connection import get_db, dict_from_row, rows_to_list
-from backend.domain.templates import extract_variables, render, build_context
+from backend.domain.templates import extract_variables, render, build_context, classify_variables
 from backend.domain.email_content import assemble
 from backend.services.settings_service import build_style
 
@@ -30,6 +30,7 @@ def _with_variables(row: dict) -> dict:
             row["variables"] = json.loads(row["variables"])
         except Exception:
             row["variables"] = []
+    row["variables_info"] = classify_variables(row.get("variables") or [])
     return row
 
 
@@ -136,7 +137,7 @@ def duplicate_template(tid: int, new_name: str = None) -> int:
             RETURNING id
         """), {
             "name": name, "subject": row["subject"], "body": row["body"], "content_type": row.get("content_type", "markdown"),
-            "variables": row["variables"], "category": row.get("category", ""), "cta": row.get("default_cta_url", ""), "src": tid,
+            "variables": json.dumps(row["variables"]), "category": row.get("category", ""), "cta": row.get("default_cta_url", ""), "src": tid,
         })
         new_id = result.fetchone()[0]
         db.commit()
@@ -154,20 +155,23 @@ def delete_template(tid: int):
         db.close()
 
 
-def preview_template(tid: int, contact: dict = None, cta_url: str = None) -> dict:
+def preview_template(tid: int, contact: dict = None, cta_url: str = None, extra_variables: dict = None) -> dict:
     """Renderiza una plantilla con variables resueltas, para vista previa."""
     tmpl = get_template(tid)
-    return render_content(tmpl["subject"], tmpl["body"], contact, cta_url or tmpl.get("default_cta_url", ""), tmpl.get("content_type", "markdown"))
+    return render_content(tmpl["subject"], tmpl["body"], contact, cta_url or tmpl.get("default_cta_url", ""),
+                           tmpl.get("content_type", "markdown"), extra_variables)
 
 
-def render_content(subject: str, body: str, contact: dict = None, cta_url: str = "", content_type: str = "markdown") -> dict:
+def render_content(subject: str, body: str, contact: dict = None, cta_url: str = "", content_type: str = "markdown",
+                    extra_variables: dict = None) -> dict:
     """Renderiza asunto + cuerpo con variables resueltas para un contacto
     puntual, y devuelve también el HTML final del email (respetando el modo
-    markdown/html)."""
+    markdown/html). `extra_variables` son valores personalizados por
+    destinatario (ej. {{hipotesis}}, {{señal}}) que no se derivan de la Agenda."""
     from backend.config import cfg
     style = build_style()
     sender_name = style.get("sender_name") or cfg()["sender_name"]
-    context = build_context(contact, sender_name=sender_name, cta_url=cta_url)
+    context = build_context(contact, sender_name=sender_name, cta_url=cta_url, extra=extra_variables)
 
     rendered_subject, missing_subj = render(subject or "", context)
     rendered_body, missing_body = render(body or "", context)

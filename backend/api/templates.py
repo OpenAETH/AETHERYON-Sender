@@ -72,7 +72,8 @@ def activate_template(tid: int):
 async def preview_template(tid: int, request: Request):
     data = await request.json() if request.headers.get("content-length", "0") != "0" else {}
     try:
-        return template_service.preview_template(tid, contact=data.get("contact"), cta_url=data.get("cta_url"))
+        return template_service.preview_template(tid, contact=data.get("contact"), cta_url=data.get("cta_url"),
+                                                   extra_variables=data.get("variables"))
     except ValueError as e:
         raise HTTPException(404, str(e))
 

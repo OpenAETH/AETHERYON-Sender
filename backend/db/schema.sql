@@ -194,9 +194,11 @@ ALTER TABLE templates ADD COLUMN IF NOT EXISTS content_type TEXT NOT NULL DEFAUL
 CREATE TABLE IF NOT EXISTS campaign_contacts (
     id           SERIAL PRIMARY KEY,
     campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-    email        TEXT NOT NULL
+    email        TEXT NOT NULL,
+    variables    JSONB NOT NULL DEFAULT '{}'::jsonb  -- valores personalizados de este destinatario para ESTA comunicacion (ej. {"hipotesis":"...","señal":"..."})
 );
 CREATE INDEX IF NOT EXISTS idx_campaign_contacts_cid ON campaign_contacts(campaign_id);
+ALTER TABLE campaign_contacts ADD COLUMN IF NOT EXISTS variables JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS campaign_attachments (
     id            SERIAL PRIMARY KEY,

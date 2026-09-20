@@ -8,7 +8,6 @@ Preserva la lógica original de conexión IPv4 forzada (`_make_ipv4_connection`)
 necesaria porque el pooler de Supabase puede resolver a IPv6 en entornos cloud
 sin soporte completo, causando `connection refused` o timeouts.
 """
-import os
 import re
 import socket
 import logging
@@ -17,12 +16,9 @@ import psycopg2
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, scoped_session
 
-logger = logging.getLogger(__name__)
+from backend.config import DATABASE_URL
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql://postgres:[YOUR-PASSWORD]@db.your-project.supabase.co:5432/postgres",
-)
+logger = logging.getLogger(__name__)
 
 engine = None
 SessionLocal = None
