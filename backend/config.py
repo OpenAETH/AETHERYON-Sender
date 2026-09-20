@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Sirve para confirmar que el navegador esta corriendo el codigo que
 # efectivamente se desplego, y no una version anterior cacheada por Docker
 # o por un deploy viejo en Render. Actualizar con cada entrega.
-APP_BUILD = "2026-09-19.2"
+APP_BUILD = "2026-09-20.2"
 
 # Raíz del repo (padre del paquete backend/), para resolver index.html y static/.
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

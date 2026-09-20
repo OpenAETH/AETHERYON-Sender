@@ -74,6 +74,22 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AETHERYON Outreach Sender", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"], allow_credentials=True)
 
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc: Exception):
+    """Red de seguridad: sin esto, un error no anticipado (tabla/columna
+    faltante en la base, caida de conexion, etc.) sale de Starlette como
+    texto plano ("Internal Server Error"), y el frontend — que siempre
+    espera JSON — revienta con un 'Unexpected token... is not valid JSON'
+    que esconde el error real. Acá se loguea el traceback completo
+    (visible en los logs de Render) y se devuelve JSON siempre, con el
+    tipo de excepcion para poder diagnosticar sin exponer detalles internos."""
+    logger.exception(f"Error no manejado en {request.method} {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Error interno ({type(exc).__name__}). Revisá los logs del servidor para más detalle."},
+    )
+
 app.include_router(auth.router)
 app.include_router(settings.router)
 app.include_router(agenda.router)

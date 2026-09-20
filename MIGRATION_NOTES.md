@@ -136,3 +136,48 @@ no solo lectura de código. Bugs reales encontrados y corregidos:
   `json.dumps()` — Postgres la interpretaba como `text[]` en vez de
   `jsonb` y rechazaba el INSERT. Confirmado con el error real de Postgres,
   no solo por lectura de código.
+
+## Manejador global de excepciones (robustez de errores)
+
+Antes, cualquier excepción no anticipada (columna faltante en la base por
+no haber corrido el `schema.sql` más reciente, caída de conexión, etc.)
+salía de Starlette como **texto plano** ("Internal Server Error"), no
+JSON. El frontend siempre asume JSON en las respuestas de error
+(`const e=await r.json()`), así que en vez de mostrar el error real
+terminaba mostrando `Unexpected token 'I', "Internal S"... is not valid
+JSON` — un mensaje que no dice nada sobre la causa real.
+
+Se agregó `@app.exception_handler(Exception)` en `backend/main.py`: loguea
+el traceback completo (visible en los logs de Render) y siempre devuelve
+JSON con el tipo de excepción. Se confirmó que esto **no** interfiere con
+los `HTTPException` normales (400/404/409 siguen funcionando igual) — solo
+atrapa lo que antes rompía sin control. Si ves "Error interno (X)" en un
+toast, el detalle completo está en los logs del servidor.
+
+**Si el guardado de templates (u otro endpoint) sigue dando 500 en Render:
+lo más probable es que el schema de Supabase esté desactualizado — volvé a
+correr `backend/db/schema.sql` completo (es idempotente, no rompe datos
+existentes).**
+
+## Nuevo / Editar contacto ahora es un modal real
+
+El formulario de la Agenda era un `<div style="display:none">` que se
+mostraba/ocultaba inline dentro de la vista — el único diálogo de toda la
+app que no seguía el patrón `.modal-backdrop` usado en Enviar, Vista
+previa, Usar plantilla, etc. Se convirtió a `id="modalContact"`, abierto
+con `openModal()`/`closeModal()` igual que el resto. El envío de datos
+(`saveContact()`) no cambió — mismos campos, mismos endpoints, mismo
+comportamiento, solo cambió cómo se muestra.
+
+## Importar archivo .html en Templates
+
+Se agregó un botón "↑ Importar archivo" en el formulario de plantillas:
+lee un `.html`/`.htm` en el navegador (`FileReader`, sin pasar por
+Storage) y lo carga directo en el campo de contenido existente, pasando a
+modo HTML automáticamente. Si el archivo tiene `<title>`, se usa como
+asunto sugerido cuando el campo está vacío. No se agregó un storage de
+archivos aparte para el contenido de las plantillas: un email HTML tiene
+que pesar poco de por sí (Gmail recorta pasado ~102KB), así que la columna
+`TEXT` en Postgres ya es la opción correcta — separarlo a Storage solo
+agregaría un round-trip extra y el riesgo de archivos huérfanos, sin
+ningún beneficio real de tamaño.

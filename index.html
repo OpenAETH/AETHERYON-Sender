@@ -384,27 +384,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
   <div id="importStatus" style="font-size:10px;color:var(--text3);margin:-6px 0 12px"></div>
   <div class="card-grid" id="contactGrid"></div>
-  <div id="contactForm" style="display:none">
-    <div class="section-label" id="contactFormTitle">Nuevo contacto</div>
-    <div class="panel">
-      <div class="field"><span class="field-key">Nombre</span><input type="text" id="cf-name" placeholder="Nombre completo"/></div>
-      <div class="field"><span class="field-key">Email</span><input type="email" id="cf-email" placeholder="email@empresa.com"/></div>
-      <div class="field"><span class="field-key">Empresa</span><input type="text" id="cf-company" placeholder="Empresa u organizacion"/></div>
-      <div class="field"><span class="field-key">Rol</span><input type="text" id="cf-role" placeholder="Cargo o rol"/></div>
-      <div class="field"><span class="field-key">Telefono</span><input type="text" id="cf-phone" placeholder="+54 9 11..."/></div>
-      <div class="field"><span class="field-key">Contexto</span><textarea id="cf-context" rows="3" placeholder="Historial, intereses, notas relevantes..."></textarea></div>
-      <div class="field"><span class="field-key">Tags</span><input type="text" id="cf-tags" placeholder="cliente, inversor, proveedor..."/></div>
-      <div class="field"><span class="field-key">Segmento</span><select id="cf-status"><option value="nuevo">Nuevo</option><option value="activo">Activo</option><option value="archivado">Archivado</option></select></div>
-      <div class="field"><span class="field-key">Tipo</span><select id="cf-tipo"><option value="prensa">Prensa</option><option value="partner">Partner</option><option value="cliente">Cliente</option></select></div>
-      <div class="field"><span class="field-key">Medio</span><input type="text" id="cf-medio" placeholder="Canal o medio de contacto"/></div>
-      <div class="field"><span class="field-key">Seguimiento</span><input type="date" id="cf-next_followup"/></div>
-      <div class="field"><span class="field-key">Notas</span><textarea id="cf-notes" rows="2" placeholder="Notas sobre este destinatario..."></textarea></div>
-      <div class="panel-footer">
-        <button class="btn btn-ghost btn-sm" onclick="cancelContact()">Cancelar</button>
-        <button class="btn btn-green btn-sm" onclick="saveContact()" id="btnSaveContact">Guardar</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- COMPOSE -->
@@ -525,11 +504,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <div class="field"><span class="field-key">Asunto</span><input type="text" id="tf-subject" placeholder="Asunto (podes usar {{first_name}}, {{company}}...)"/></div>
       <div class="field"><span class="field-key">CTA URL</span><input type="text" id="tf-cta" placeholder="https://... (opcional, disponible como {{cta_url}})"/></div>
       <div class="field" style="border-bottom:none;flex-direction:column;align-items:stretch">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
           <span class="field-key" style="width:auto;padding-top:0">Contenido</span>
-          <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden">
-            <button type="button" class="btn btn-ghost btn-sm" id="btnTplModeMarkdown" style="border:none;border-radius:0;color:var(--green);background:var(--green-glow)" onclick="setTemplateContentType('markdown')">Markdown</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="btnTplModeHtml" style="border:none;border-radius:0;border-left:1px solid var(--border)" onclick="setTemplateContentType('html')">HTML pegado</button>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="file" id="tfImportFile" accept=".html,.htm" style="display:none" onchange="importTemplateFile(this.files[0])"/>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('tfImportFile').click()" title="Importar un archivo .html ya disenado">&#8593; Importar archivo</button>
+            <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+              <button type="button" class="btn btn-ghost btn-sm" id="btnTplModeMarkdown" style="border:none;border-radius:0;color:var(--green);background:var(--green-glow)" onclick="setTemplateContentType('markdown')">Markdown</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="btnTplModeHtml" style="border:none;border-radius:0;border-left:1px solid var(--border)" onclick="setTemplateContentType('html')">HTML pegado</button>
+            </div>
           </div>
         </div>
         <textarea id="tf-body" rows="12" onpaste="handleTemplatePaste(event)" placeholder="Markdown: **negrita**, ## titulos, listas con -. O pega directamente tu template HTML ya disenado — lo detectamos solos. Variables: {{first_name}} {{company}} {{role}} {{sender_name}} {{cta_url}}"
@@ -740,6 +723,29 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 </div>
 
 
+
+<!-- MODAL: NUEVO / EDITAR CONTACTO (Agenda) -->
+<div class="modal-backdrop" id="modalContact">
+  <div class="modal">
+    <h2 style="margin-bottom:14px" id="contactFormTitle">Nuevo contacto</h2>
+    <div class="field"><span class="field-key">Nombre</span><input type="text" id="cf-name" placeholder="Nombre completo"/></div>
+    <div class="field"><span class="field-key">Email</span><input type="email" id="cf-email" placeholder="email@empresa.com"/></div>
+    <div class="field"><span class="field-key">Empresa</span><input type="text" id="cf-company" placeholder="Empresa u organizacion"/></div>
+    <div class="field"><span class="field-key">Rol</span><input type="text" id="cf-role" placeholder="Cargo o rol"/></div>
+    <div class="field"><span class="field-key">Telefono</span><input type="text" id="cf-phone" placeholder="+54 9 11..."/></div>
+    <div class="field"><span class="field-key">Contexto</span><textarea id="cf-context" rows="3" placeholder="Historial, intereses, notas relevantes..."></textarea></div>
+    <div class="field"><span class="field-key">Tags</span><input type="text" id="cf-tags" placeholder="cliente, inversor, proveedor..."/></div>
+    <div class="field"><span class="field-key">Segmento</span><select id="cf-status"><option value="nuevo">Nuevo</option><option value="activo">Activo</option><option value="archivado">Archivado</option></select></div>
+    <div class="field"><span class="field-key">Tipo</span><select id="cf-tipo"><option value="prensa">Prensa</option><option value="partner">Partner</option><option value="cliente">Cliente</option></select></div>
+    <div class="field"><span class="field-key">Medio</span><input type="text" id="cf-medio" placeholder="Canal o medio de contacto"/></div>
+    <div class="field"><span class="field-key">Seguimiento</span><input type="date" id="cf-next_followup"/></div>
+    <div class="field" style="border-bottom:none"><span class="field-key">Notas</span><textarea id="cf-notes" rows="2" placeholder="Notas sobre este destinatario..."></textarea></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="cancelContact()">Cancelar</button>
+      <button class="btn btn-green" style="flex:2;justify-content:center" onclick="saveContact()" id="btnSaveContact">Guardar</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL: MULTI DESTINATARIOS -->
 <div class="modal-backdrop" id="modalMultiRecipient">
@@ -1491,9 +1497,9 @@ function filterContacts(){
   renderContacts(contacts.filter(c=>c.name.toLowerCase().includes(q)||c.email.toLowerCase().includes(q)||(c.company||'').toLowerCase().includes(q)||(c.tags||'').toLowerCase().includes(q)));
 }
 const CONTACT_FIELDS=['name','email','company','role','phone','context','tags','medio','next_followup','notes'];
-function openNewContact(){editingContactId=null;CONTACT_FIELDS.forEach(f=>document.getElementById('cf-'+f).value='');document.getElementById('cf-status').value='nuevo';document.getElementById('cf-tipo').value='prensa';document.getElementById('contactFormTitle').textContent='Nuevo contacto';document.getElementById('contactForm').style.display='block';}
-function editContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;editingContactId=id;CONTACT_FIELDS.forEach(f=>document.getElementById('cf-'+f).value=c[f]||'');document.getElementById('cf-status').value=c.status||'nuevo';document.getElementById('cf-tipo').value=c.tipo||'prensa';document.getElementById('contactFormTitle').textContent='Editar';document.getElementById('contactForm').style.display='block';}
-function cancelContact(){document.getElementById('contactForm').style.display='none';editingContactId=null;}
+function openNewContact(){editingContactId=null;CONTACT_FIELDS.forEach(f=>document.getElementById('cf-'+f).value='');document.getElementById('cf-status').value='nuevo';document.getElementById('cf-tipo').value='prensa';document.getElementById('contactFormTitle').textContent='Nuevo contacto';openModal('modalContact');}
+function editContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;editingContactId=id;CONTACT_FIELDS.forEach(f=>document.getElementById('cf-'+f).value=c[f]||'');document.getElementById('cf-status').value=c.status||'nuevo';document.getElementById('cf-tipo').value=c.tipo||'prensa';document.getElementById('contactFormTitle').textContent='Editar contacto';openModal('modalContact');}
+function cancelContact(){closeModal('modalContact');editingContactId=null;}
 async function saveContact(){
   const data={name:document.getElementById('cf-name').value.trim(),email:document.getElementById('cf-email').value.trim(),company:document.getElementById('cf-company').value.trim(),role:document.getElementById('cf-role').value.trim(),phone:document.getElementById('cf-phone').value.trim(),context:document.getElementById('cf-context').value.trim(),tags:document.getElementById('cf-tags').value.trim(),status:document.getElementById('cf-status').value,tipo:document.getElementById('cf-tipo').value,medio:document.getElementById('cf-medio').value.trim(),next_followup:document.getElementById('cf-next_followup').value,notes:document.getElementById('cf-notes').value.trim()};
   if(!data.name||!data.email)return toast('Nombre y email requeridos','error');
@@ -1595,6 +1601,26 @@ function cancelTemplateForm(){document.getElementById('templateForm').style.disp
 // Se mira unicamente text/plain — el text/html del portapapeles puede ser
 // una vista con resaltado de sintaxis (spans de color por caracter) en vez
 // del template real, si el origen fue un editor de codigo.
+// Importar un archivo .html/.htm ya disenado: lo lee en el navegador (no
+// pasa por Storage, cae directo en el campo de contenido) y pasa el
+// formulario a modo HTML automaticamente.
+function importTemplateFile(file){
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const content=e.target.result;
+    document.getElementById('tf-body').value=content;
+    setTemplateContentType('html');
+    if(!document.getElementById('tf-subject').value.trim()){
+      const m=content.match(/<title[^>]*>([^<]*)<\/title>/i);
+      if(m&&m[1].trim())document.getElementById('tf-subject').value=m[1].trim();
+    }
+    toast(`Archivo "${file.name}" importado — revisa el contenido y guarda`,'success');
+    document.getElementById('tfImportFile').value='';
+  };
+  reader.onerror=function(){toast('No se pudo leer el archivo','error');};
+  reader.readAsText(file,'UTF-8');
+}
 function handleTemplatePaste(event){
   const cd = event.clipboardData || window.clipboardData;
   if(!cd) return;
