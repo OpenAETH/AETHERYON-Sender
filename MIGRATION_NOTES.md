@@ -181,3 +181,40 @@ que pesar poco de por sí (Gmail recorta pasado ~102KB), así que la columna
 `TEXT` en Postgres ya es la opción correcta — separarlo a Storage solo
 agregaría un round-trip extra y el riesgo de archivos huérfanos, sin
 ningún beneficio real de tamaño.
+
+## Sesión: grupos de templates, YAML de ejemplo, campañas desde plantillas, fix de cancelar
+
+- **Bug real: "Cancelar" en la Agenda de Envío rechazaba piezas que
+  mostraban "Demorado"** con el mensaje "No se puede cancelar una pieza
+  ya enviada". La causa: `cancel_email()`/`reschedule_email()` chequeaban
+  la columna legacy `campaign_emails.sent_at`, que **nunca se escribe**
+  en la arquitectura de cola actual (confirmado con grep en todo el
+  backend) — es el mismo tipo de columna obsoleta que ya se había
+  corregido en el visor de detalle de una pieza, pero se pasó por alto acá.
+  Ahora ambas funciones usan `send_queue` como fuente de verdad real: solo
+  bloquean la acción cuando NO queda ningún destinatario pendiente/fallido
+  (si 1 de 3 ya recibió el envío, los otros 2 igual se pueden cancelar o
+  reprogramar). Probado en vivo forzando el escenario exacto reportado.
+
+- **Templates agrupados por categoría.** La vista Templates ahora agrupa
+  las tarjetas por el campo `category` que ya existía (ej. "Independent
+  Technology Partner - Info"), con un contador por grupo y un botón
+  "Programar grupo →" que lleva directo a Nueva comunicación con todo el
+  grupo pre-cargado como secuencia.
+
+- **Descargar ejemplo YAML.** Botón "↓ Ejemplo YAML" al lado de "↑
+  Importar YAML" — genera y descarga un `.yaml` con la estructura exacta
+  que espera `import_from_yaml()` (variables incluidas), para editar
+  afuera y volver a importar. Probado el round-trip completo contra el
+  endpoint real.
+
+- **Campañas programables seleccionando plantillas (individual o por
+  grupo).** Nuevo modo en "Nueva comunicación": tabs "Generar con IA" /
+  "Desde plantillas". El segundo modo muestra las plantillas activas
+  agrupadas, se eligen una por una (o el grupo entero de una) y quedan en
+  una lista ordenada (con reordenar/quitar) que define el día de cada
+  pieza. Nuevo endpoint `POST /campaigns/from-templates` /
+  `sender_service.create_sequence_from_templates()`: crea la secuencia
+  completa con el contenido de cada plantilla ya en estado 'approved'
+  (no hace falta aprobar de nuevo, aunque la vista de revisión sigue
+  disponible por si se quiere ajustar algo antes de programar).

@@ -108,6 +108,18 @@ async def generate_sequence(request: Request):
     return {"success": True, **result}
 
 
+@router.post("/from-templates")
+async def create_from_templates(request: Request):
+    """Crea una secuencia multi-dia seleccionando plantillas existentes
+    (una por dia, en el orden elegido), sin pasar por generacion con IA."""
+    data = await request.json()
+    try:
+        result = sender_service.create_sequence_from_templates(data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"success": True, **result}
+
+
 # ── Rutas con {cid} ─────────────────────────────────────────────
 
 @router.get("/{cid}")

@@ -494,7 +494,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     </select>
     <button class="btn btn-green" onclick="openNewTemplate()">+ Nueva plantilla</button>
   </div>
-  <div class="card-grid" id="templateGrid"></div>
+  <div id="templateGrid"></div>
 
   <div id="templateForm" style="display:none">
     <div class="section-label" id="templateFormTitle">Nueva plantilla</div>
@@ -783,6 +783,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Comunicaciones programadas</span>
       <div style="flex:1"></div>
       <input type="file" id="camp-import-file" accept=".yaml,.yml" style="display:none" onchange="importCampaignFile(this.files)">
+      <button class="btn btn-ghost btn-sm" onclick="downloadYamlExample()" title="Descarga un YAML de ejemplo con la estructura correcta, para editar afuera y volver a importar">&#8595; Ejemplo YAML</button>
       <button class="btn btn-ghost btn-sm" onclick="importCampaignPrompt()">↑ Importar YAML</button>
       <button class="btn btn-green btn-sm" onclick="showCampaignForm()">+ Nueva comunicacion</button>
     </div>
@@ -793,9 +794,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
   <!-- FORMULARIO NUEVA CAMPANA -->
   <div id="campaignFormView" style="display:none">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="showCampaignList()">&#8592; Volver</button>
-      <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Nueva campana</span>
+      <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Nueva comunicacion</span>
+      <div style="flex:1"></div>
+      <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+        <button type="button" class="btn btn-ghost btn-sm" id="btnCampModeAI" style="border:none;border-radius:0;color:var(--green);background:var(--green-glow)" onclick="setCampCreationMode('ai')">Generar con IA</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnCampModeTemplates" style="border:none;border-radius:0;border-left:1px solid var(--border)" onclick="setCampCreationMode('templates')">Desde plantillas</button>
+      </div>
     </div>
     <div class="resp-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <div>
@@ -803,7 +809,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <div class="panel">
           <div class="field"><span class="field-key">Nombre</span><input type="text" id="camp-name" placeholder="Nombre de la campana..."/></div>
           <div class="field"><span class="field-key">Inicio</span><input type="date" id="camp-start" onchange="updateDatePreview()"/></div>
-          <div class="field"><span class="field-key">Fin</span><input type="date" id="camp-end" onchange="updateDatePreview()"/></div>
+          <div class="field" id="campEndField"><span class="field-key">Fin</span><input type="date" id="camp-end" onchange="updateDatePreview()"/></div>
           <div class="field">
             <span class="field-key">Hora envio</span>
             <input type="time" id="camp-time" value="09:00" style="flex:1;background:transparent;border:none;outline:none;font-family:var(--mono);font-size:13px;color:var(--text);caret-color:var(--green)"/>
@@ -818,16 +824,30 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
               <div class="intent-btn" id="mode-tue_thu" onclick="setCampMode('tue_thu')">Mar-Jue</div>
             </div>
           </div>
-          <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
-            <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Tono</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-              <div class="intent-btn active" id="tone-informative" onclick="setCampTone('informative')">Informativo</div>
-              <div class="intent-btn" id="tone-aggressive" onclick="setCampTone('aggressive')">Persuasivo</div>
+          <div id="campModeAIFields">
+            <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+              <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Tono</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <div class="intent-btn active" id="tone-informative" onclick="setCampTone('informative')">Informativo</div>
+                <div class="intent-btn" id="tone-aggressive" onclick="setCampTone('aggressive')">Persuasivo</div>
+              </div>
+            </div>
+            <div class="field" style="border-bottom:none">
+              <span class="field-key">Intencion</span>
+              <textarea id="camp-intent" rows="3" placeholder="Ej: campana de crowdfunding para proyecto de software, comunicar beneficios de los tiers..."></textarea>
             </div>
           </div>
-          <div class="field" style="border-bottom:none">
-            <span class="field-key">Intencion</span>
-            <textarea id="camp-intent" rows="3" placeholder="Ej: campana de crowdfunding para proyecto de software, comunicar beneficios de los tiers..."></textarea>
+          <div id="campModeTemplatesFields" style="display:none">
+            <div style="padding:10px 14px">
+              <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Plantillas disponibles (agrupadas)</div>
+              <div id="campTemplatePicker" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);padding:8px"></div>
+            </div>
+            <div style="padding:0 14px 14px">
+              <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Secuencia (orden de envio)</div>
+              <div id="campTemplateSequence" style="display:flex;flex-direction:column;gap:5px">
+                <div style="font-size:10px;color:var(--text3)">Elegi plantillas de la lista de arriba — se agregan en el orden en que las toques.</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1255,6 +1275,7 @@ let senderStatusByEmail={};
 let extraRecipients = new Set();
 let multiSelectedContacts = new Set();
 let campMode='daily', campTone='informative', campSelectedContacts=new Set();
+let campCreationMode='ai', campTemplateSequence=[];
 let currentCampaignId=null;
 let SESSION_TOKEN = localStorage.getItem('session_token') || '';
 let _pendingAttachments = [];
@@ -1556,7 +1577,12 @@ function filterTemplates(){
 function renderTemplates(list){
   const el=document.getElementById('templateGrid');
   if(!list.length){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">No hay plantillas todavia. Creá la primera con "+ Nueva plantilla".</div>';return;}
-  el.innerHTML=list.map(t=>{
+
+  const groups={};
+  list.forEach(t=>{const cat=(t.category||'').trim()||'Sin categoria';(groups[cat]=groups[cat]||[]).push(t);});
+  const catNames=Object.keys(groups).sort((a,b)=>a==='Sin categoria'?1:b==='Sin categoria'?-1:a.localeCompare(b));
+
+  const cardHTML=(t)=>{
     const vars=(t.variables||[]).map(v=>`<span class="tag">{{${v}}}</span>`).join('');
     const archived=t.status==='archived';
     return `<div class="contact-card" style="${archived?'opacity:.5':''}">
@@ -1572,8 +1598,33 @@ function renderTemplates(list){
         <button class="btn btn-red btn-sm" onclick="deleteTemplate(${t.id})">x</button>
       </div>
     </div>`;
+  };
+
+  el.innerHTML=catNames.map(cat=>{
+    const items=groups[cat];
+    const activeCount=items.filter(t=>t.status!=='archived').length;
+    return `<div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">
+        <span style="font-family:var(--serif);font-size:14px;color:var(--text)">${cat}</span>
+        <span style="font-size:10px;color:var(--text3)">${items.length} plantilla${items.length===1?'':'s'}</span>
+        <div style="flex:1"></div>
+        <button class="btn btn-ghost btn-sm" onclick="programGroupSequence('${cat.replace(/'/g,"\\'")}')" ${activeCount?'':'disabled'} title="Crear una secuencia de Cron Sender con todas las plantillas activas de este grupo, en orden">Programar grupo →</button>
+      </div>
+      <div class="card-grid">${items.map(cardHTML).join('')}</div>
+    </div>`;
   }).join('');
 }
+
+// Atajo desde un grupo de Templates directo al wizard de "Nueva comunicacion
+// -> Desde plantillas", con todo el grupo ya precargado en la secuencia.
+function programGroupSequence(cat){
+  go('campaigns');
+  showCampaignForm();
+  setCampCreationMode('templates');
+  addCampTemplateGroup(cat);
+  toast(`Grupo "${cat}" cargado en la secuencia — completá destinatarios y fecha`,'success');
+}
+
 function openNewTemplate(){
   editingTemplateId=null;
   ['name','category','subject','cta','body'].forEach(f=>{const el=document.getElementById('tf-'+f);if(el)el.value='';});
@@ -2724,6 +2775,8 @@ function showCampaignForm(){
   const end=new Date();end.setDate(end.getDate()+14);
   document.getElementById('camp-end').value=end.toISOString().split('T')[0];
   setCampTone('informative');
+  campTemplateSequence=[];
+  setCampCreationMode('ai');
   initCampContacts();
   updateDatePreview();
 }
@@ -2804,11 +2857,153 @@ function setCampTone(t){
   });
 }
 
+// ── Nueva comunicacion: modo "Desde plantillas" (alternativa a Generar con IA) ──
+function setCampCreationMode(mode){
+  campCreationMode=mode;
+  const btnAI=document.getElementById('btnCampModeAI'), btnTpl=document.getElementById('btnCampModeTemplates');
+  const fieldsAI=document.getElementById('campModeAIFields'), fieldsTpl=document.getElementById('campModeTemplatesFields');
+  const endField=document.getElementById('campEndField');
+  const btn=document.getElementById('btnGenerateCamp');
+  if(mode==='templates'){
+    btnTpl.style.color='var(--green)';btnTpl.style.background='var(--green-glow)';
+    btnAI.style.color='';btnAI.style.background='';
+    fieldsAI.style.display='none';fieldsTpl.style.display='block';
+    endField.style.display='none';
+    btn.innerHTML='Crear secuencia desde plantillas';
+    if(!templates.length)loadTemplates().then(renderCampTemplatePicker);
+    else renderCampTemplatePicker();
+  }else{
+    btnAI.style.color='var(--green)';btnAI.style.background='var(--green-glow)';
+    btnTpl.style.color='';btnTpl.style.background='';
+    fieldsAI.style.display='block';fieldsTpl.style.display='none';
+    endField.style.display='flex';
+    btn.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar campana con IA';
+  }
+  updateDatePreview();
+}
+
+function renderCampTemplatePicker(){
+  const el=document.getElementById('campTemplatePicker');
+  const active=templates.filter(t=>t.status!=='archived');
+  if(!active.length){el.innerHTML='<div style="font-size:10px;color:var(--text3);padding:6px">No hay plantillas activas. Creá una primero en Templates.</div>';return;}
+  const groups={};
+  active.forEach(t=>{const cat=(t.category||'').trim()||'Sin categoria';(groups[cat]=groups[cat]||[]).push(t);});
+  const catNames=Object.keys(groups).sort((a,b)=>a==='Sin categoria'?1:b==='Sin categoria'?-1:a.localeCompare(b));
+  el.innerHTML=catNames.map(cat=>{
+    const items=groups[cat];
+    return `<div style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px">
+        <span style="font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--text3)">${cat} (${items.length})</span>
+        <button type="button" class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 7px" onclick="addCampTemplateGroup('${cat.replace(/'/g,"\\'")}')">+ Agregar grupo</button>
+      </div>
+      ${items.map(t=>{
+        const sel=campTemplateSequence.includes(t.id);
+        return `<div onclick="toggleCampTemplateInSequence(${t.id})" style="cursor:pointer;padding:6px 8px;border-radius:5px;font-size:11px;display:flex;justify-content:space-between;align-items:center;gap:8px;${sel?'background:rgba(69,209,196,.12);color:var(--green)':'color:var(--text2)'}">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sel?'&#10003; ':''}${t.name}</span>
+          <span style="font-size:9px;color:var(--text3);white-space:nowrap">${t.content_type==='html'?'HTML':'MD'}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+}
+
+function toggleCampTemplateInSequence(tid){
+  const idx=campTemplateSequence.indexOf(tid);
+  if(idx===-1)campTemplateSequence.push(tid);
+  else campTemplateSequence.splice(idx,1);
+  renderCampTemplatePicker();
+  renderCampTemplateSequenceList();
+  updateDatePreview();
+}
+function addCampTemplateGroup(cat){
+  templates.filter(t=>t.status!=='archived' && ((t.category||'').trim()||'Sin categoria')===cat)
+    .forEach(t=>{if(!campTemplateSequence.includes(t.id))campTemplateSequence.push(t.id);});
+  renderCampTemplatePicker();
+  renderCampTemplateSequenceList();
+  updateDatePreview();
+}
+function removeCampSeqItem(i){campTemplateSequence.splice(i,1);renderCampTemplatePicker();renderCampTemplateSequenceList();updateDatePreview();}
+function moveCampSeqItem(i,dir){
+  const j=i+dir;if(j<0||j>=campTemplateSequence.length)return;
+  [campTemplateSequence[i],campTemplateSequence[j]]=[campTemplateSequence[j],campTemplateSequence[i]];
+  renderCampTemplateSequenceList();
+}
+function renderCampTemplateSequenceList(){
+  const el=document.getElementById('campTemplateSequence');
+  if(!campTemplateSequence.length){el.innerHTML='<div style="font-size:10px;color:var(--text3)">Elegi plantillas de la lista de arriba — se agregan en el orden en que las toques.</div>';return;}
+  el.innerHTML=campTemplateSequence.map((tid,i)=>{
+    const t=templates.find(x=>x.id===tid);
+    return `<div style="display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:11px">
+      <span style="color:var(--green);font-weight:600;width:16px">${i+1}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t?t.name:'(eliminada)'}</span>
+      <button type="button" class="btn btn-ghost btn-sm" style="padding:1px 6px;font-size:9px" onclick="moveCampSeqItem(${i},-1)" ${i===0?'disabled':''}>&#8593;</button>
+      <button type="button" class="btn btn-ghost btn-sm" style="padding:1px 6px;font-size:9px" onclick="moveCampSeqItem(${i},1)" ${i===campTemplateSequence.length-1?'disabled':''}>&#8595;</button>
+      <button type="button" class="btn btn-red btn-sm" style="padding:1px 6px;font-size:9px" onclick="removeCampSeqItem(${i})">x</button>
+    </div>`;
+  }).join('');
+}
+function previewDatesCountJS(start,mode,count){
+  const dates=[];if(!start||count<=0)return dates;
+  let cur=new Date(start+'T12:00:00');const startD=new Date(start+'T12:00:00');
+  let guard=0;const maxGuard=count*14+366;
+  while(dates.length<count && guard<maxGuard){
+    const wd=cur.getDay();let ok=false;
+    if(mode==='daily')ok=true;
+    else if(mode==='alternate')ok=(Math.round((cur-startD)/86400000)%2===0);
+    else if(mode==='mon_wed_fri')ok=[1,3,5].includes(wd);
+    else if(mode==='tue_thu')ok=[2,4].includes(wd);
+    else ok=true;
+    if(ok)dates.push(cur.toISOString().split('T')[0]);
+    cur.setDate(cur.getDate()+1);guard++;
+  }
+  return dates;
+}
+
+async function startCampaignFromTemplates(){
+  const name=document.getElementById('camp-name').value.trim();
+  const start=document.getElementById('camp-start').value;
+  const time=document.getElementById('camp-time').value||'09:00';
+  const extraEmails=document.getElementById('camp-extra-emails').value;
+  if(!start)return toast('Selecciona la fecha de inicio','error');
+  if(!campTemplateSequence.length)return toast('Elegi al menos una plantilla para la secuencia','error');
+
+  const allContacts=[...campSelectedContacts];
+  extraEmails.split(/[\n,;]+/).map(e=>e.trim()).filter(e=>e.includes('@')).forEach(e=>allContacts.push(e));
+  if(!allContacts.length)return toast('Agrega al menos un contacto','error');
+
+  const btn=document.getElementById('btnGenerateCamp');
+  btn.disabled=true;btn.innerHTML='<span class="spinner spinner-dk"></span> Creando secuencia...';
+  try{
+    const r=await apiFetch('/campaigns/from-templates',{method:'POST',body:JSON.stringify({
+      name: name||`Secuencia ${start}`,
+      template_ids: campTemplateSequence,
+      contacts: allContacts,
+      start_date: start,
+      send_mode: campMode,
+      send_time: time,
+    })});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'Error creando la secuencia');
+    toast(`Secuencia creada — ${d.total_emails} pieza(s), revisala antes de programar`,'success');
+    campTemplateSequence=[];
+    showApprovalView(d.campaign_id);
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{btn.disabled=false;btn.innerHTML='Crear secuencia desde plantillas';}
+}
+
 function updateDatePreview(){
   const start=document.getElementById('camp-start')?.value;
-  const end=document.getElementById('camp-end')?.value;
   const el=document.getElementById('campDatePreview');
   if(!el)return;
+  if(campCreationMode==='templates'){
+    const count=campTemplateSequence.length;
+    if(!start||!count){el.textContent='';return;}
+    const dates=previewDatesCountJS(start,campMode,count);
+    if(!dates.length){el.textContent='';return;}
+    el.innerHTML=`<span style="color:var(--green);font-size:13px;font-weight:500">${dates.length}</span> <span style="color:var(--text2)">pieza(s) se programaran</span> (${dates[0]} → ${dates[dates.length-1]})`;
+    return;
+  }
+  const end=document.getElementById('camp-end')?.value;
   if(!start||!end){el.textContent='';return;}
   const dates=previewDates(start,end,campMode);
   el.innerHTML=`<span style="color:var(--green);font-size:13px;font-weight:500">${dates.length}</span> <span style="color:var(--text2)">emails se generaran</span> (${start} → ${end})`;
@@ -2833,6 +3028,7 @@ function previewDates(start,end,mode){
 }
 
 async function startCampaignGeneration(){
+  if(campCreationMode==='templates')return startCampaignFromTemplates();
   const name  = document.getElementById('camp-name').value.trim();
   const start = document.getElementById('camp-start').value;
   const end   = document.getElementById('camp-end').value;
@@ -3189,6 +3385,49 @@ async function loadCampaigns(){
 // ── Importar / Exportar campañas (YAML) ─────
 function importCampaignPrompt(){
   document.getElementById('camp-import-file').click();
+}
+
+function downloadYamlExample(){
+  const yaml = `version: 1
+campaign:
+  name: "Ejemplo de secuencia"
+  intent: "Presentar AETHERYON Systems como partner tecnologico"
+  start_date: "2026-10-01"
+  end_date: "2026-10-05"
+  send_mode: daily      # daily | alternate | mon_wed_fri | tue_thu
+  send_time: "09:00"    # hora UTC de envio
+  tone: informative     # informative | aggressive
+
+emails:
+  - day_number: 1
+    subject: "Hola {{first_name}}, una pregunta sobre {{company}}"
+    body: |
+      Hola {{first_name}},
+
+      Notamos que **{{company}}** podria beneficiarse de un partner
+      tecnico para acelerar sus proyectos de datos e IA.
+
+      {{cta_url}}
+
+      Saludos,
+      {{sender_name}}
+
+  - day_number: 2
+    subject: "Seguimiento — {{company}}"
+    body: |
+      Che {{first_name}}, retomando el contacto anterior...
+
+      ¿Tenes 15 minutos esta semana para charlarlo?
+
+      {{cta_url}}
+`;
+  const blob=new Blob([yaml],{type:'text/yaml'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='ejemplo-campana.yaml';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Ejemplo descargado — editalo y usá "Importar YAML" para cargarlo','success');
 }
 
 async function importCampaignFile(files){

@@ -114,3 +114,42 @@ def dict_from_row(row):
 def rows_to_list(rows):
     """Convierte una lista de filas de SQLAlchemy a lista de diccionarios."""
     return [dict(r._mapping) for r in rows]
+
+
+# Tablas que backend/db/schema.sql debe haber creado. Se chequea al arrancar
+# para detectar de una un schema desactualizado en Supabase, en vez de
+# esperar a que un usuario dispare el error usando la app (ej: "templates"
+# o "send_queue" no existen porque nunca se corrió el schema.sql mas
+# reciente contra esa base).
+EXPECTED_TABLES = [
+    "sessions", "settings", "contacts", "contact_interactions", "attachments",
+    "email_logs", "email_attachments", "inbox_cache", "memory", "templates",
+    "campaigns", "campaign_emails", "campaign_contacts", "campaign_attachments", "send_queue",
+]
+
+
+def check_schema():
+    """Loguea una advertencia bien visible si falta alguna tabla esperada.
+    No frena el arranque de la app (por si el chequeo mismo falla en algun
+    entorno raro) — es un diagnostico, no un gate."""
+    try:
+        db = get_db()
+        try:
+            rows = db.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='public'")).fetchall()
+            existing = {r[0] for r in rows}
+            missing = [t for t in EXPECTED_TABLES if t not in existing]
+            if missing:
+                logger.warning(
+                    "\n" + "=" * 70 +
+                    f"\n⚠️  FALTAN TABLAS EN LA BASE DE DATOS: {', '.join(missing)}\n"
+                    "    La app va a fallar (error 500) al intentar usarlas.\n"
+                    "    Corré backend/db/schema.sql COMPLETO en el SQL Editor de tu\n"
+                    "    Supabase — es idempotente, no borra datos existentes — y\n"
+                    "    reiniciá el servicio.\n" + "=" * 70
+                )
+            else:
+                logger.info("Esquema de base de datos OK — todas las tablas esperadas existen.")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"No se pudo verificar el esquema de la base de datos: {e}")

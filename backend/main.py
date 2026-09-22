@@ -25,7 +25,7 @@ from sqlalchemy import text
 
 from backend.api import agenda, ai, auth, composition, inbox, sender, settings, supervision, templates
 from backend.config import BASE
-from backend.db.connection import get_db, init_db
+from backend.db.connection import check_schema, get_db, init_db
 from backend.workers.scheduler import scheduler_loop
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -39,6 +39,7 @@ async def lifespan(app: FastAPI):
     global _scheduler_task
     try:
         init_db()
+        check_schema()
         logger.info("Aplicación iniciada correctamente")
 
         # Al arrancar: solo informar cuántos envíos están demorados, NO
@@ -83,12 +84,21 @@ async def unhandled_exception_handler(request, exc: Exception):
     espera JSON — revienta con un 'Unexpected token... is not valid JSON'
     que esconde el error real. Acá se loguea el traceback completo
     (visible en los logs de Render) y se devuelve JSON siempre, con el
-    tipo de excepcion para poder diagnosticar sin exponer detalles internos."""
+    tipo de excepcion para poder diagnosticar sin exponer detalles internos.
+    Un caso puntual se detecta y explica solo: tabla o columna faltante en
+    la base (schema.sql desactualizado en Supabase), el error real que
+    disparó esto varias veces."""
     logger.exception(f"Error no manejado en {request.method} {request.url.path}: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content={"detail": f"Error interno ({type(exc).__name__}). Revisá los logs del servidor para más detalle."},
-    )
+    exc_text = str(exc)
+    if "UndefinedTable" in exc_text or "UndefinedColumn" in exc_text or "does not exist" in exc_text:
+        detail = (
+            "Falta una tabla o columna en la base de datos — el esquema de tu Supabase "
+            "está desactualizado. Corré backend/db/schema.sql completo en el SQL Editor "
+            "de Supabase (es idempotente, no borra datos existentes) y reintentá."
+        )
+    else:
+        detail = f"Error interno ({type(exc).__name__}). Revisá los logs del servidor para más detalle."
+    return JSONResponse(status_code=500, content={"detail": detail})
 
 app.include_router(auth.router)
 app.include_router(settings.router)

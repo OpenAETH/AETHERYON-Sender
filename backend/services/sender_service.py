@@ -353,6 +353,74 @@ def create_from_template(tid: int, data: dict) -> dict:
     return {"campaign_id": cid}
 
 
+def create_sequence_from_templates(data: dict) -> dict:
+    """Crea una secuencia multi-dia seleccionando plantillas EXISTENTES (una
+    por dia, en el orden elegido) en vez de generarla con IA o importarla
+    de YAML. El contenido ya está aprobado (viene de una plantilla guardada),
+    así que cada pieza se crea directamente en estado 'approved' — igual
+    queda disponible en la vista de aprobación por si se quiere ajustar
+    algo antes de programar."""
+    from backend.services import template_service
+
+    template_ids = data.get("template_ids") or []
+    if not template_ids:
+        raise ValueError("Se requiere al menos una plantilla")
+    contacts_list = [c.strip() for c in (data.get("contacts") or []) if c and c.strip()]
+    if not contacts_list:
+        raise ValueError("Se requiere al menos un contacto")
+    start_date = (data.get("start_date") or "").strip()
+    if not start_date:
+        raise ValueError("Se requiere fecha de inicio")
+    send_mode = data.get("send_mode", "daily")
+    send_time = data.get("send_time", "09:00")
+    name = (data.get("name") or "").strip() or f"Secuencia desde plantillas {start_date}"
+    recipient_variables = data.get("recipient_variables") or {}
+
+    templates_data = []
+    for tid in template_ids:
+        try:
+            templates_data.append(template_service.get_template(tid))
+        except ValueError:
+            raise ValueError(f"Plantilla {tid} no encontrada")
+
+    n = len(templates_data)
+    dates = scheduling.get_dates_count(start_date, send_mode, n)
+    if not dates or len(dates) < n:
+        raise ValueError(f"No se pudieron calcular {n} fechas con modo '{send_mode}'")
+    end_date = dates[-1]
+
+    db = get_db()
+    try:
+        cid = db.execute(text("""
+            INSERT INTO campaigns (name, intent, start_date, end_date, send_mode, tone, send_time, status)
+            VALUES (:name, :intent, :start_date, :end_date, :send_mode, 'informative', :send_time, 'draft')
+            RETURNING id
+        """), {
+            "name": name, "intent": f"Secuencia desde {n} plantilla(s): " + ", ".join(t["name"] for t in templates_data),
+            "start_date": start_date, "end_date": end_date, "send_mode": send_mode, "send_time": send_time,
+        }).fetchone()[0]
+
+        for i, tmpl in enumerate(templates_data):
+            db.execute(text("""
+                INSERT INTO campaign_emails (campaign_id, day_number, subject, body, content_type, status, scheduled_at, version, regenerated_count)
+                VALUES (:cid, :day, :subject, :body, :content_type, 'approved', :sched, 1, 0)
+            """), {
+                "cid": cid, "day": i + 1, "subject": tmpl["subject"], "body": tmpl["body"],
+                "content_type": tmpl.get("content_type", "markdown"), "sched": f"{dates[i]} {send_time}",
+            })
+        for email_addr in contacts_list:
+            variables = recipient_variables.get(email_addr) or {}
+            db.execute(text("INSERT INTO campaign_contacts (campaign_id, email, variables) VALUES (:cid, :email, :vars)"),
+                       {"cid": cid, "email": email_addr, "vars": json.dumps(variables)})
+        db.commit()
+        return {"campaign_id": cid, "total_emails": n, "dates": dates}
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 # ────────────────────────────────────────────────────────────
 # Import / export YAML (portabilidad de secuencias)
 # ────────────────────────────────────────────────────────────
@@ -598,19 +666,34 @@ def get_email_detail(email_id: int) -> dict:
         db.close()
 
 
+def _piece_fully_sent(db, email_id: int) -> bool:
+    """Fuente de verdad real de 'ya se envió': send_queue por destinatario,
+    no la columna legacy campaign_emails.sent_at (que nunca se escribe en la
+    arquitectura de cola actual). Solo bloquea cancelar/reprogramar cuando
+    NO queda nada pendiente/fallido — si hay 3 destinatarios y 1 ya recibió
+    el envío, los otros 2 igual se pueden cancelar o reprogramar."""
+    row = dict_from_row(db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE status IN ('pending','failed')) AS remaining,
+            COUNT(*) FILTER (WHERE status='sent') AS sent
+        FROM send_queue WHERE campaign_email_id=:id
+    """), {"id": email_id}).fetchone())
+    return bool(row) and row["remaining"] == 0 and row["sent"] > 0
+
+
 def reschedule_email(email_id: int, new_date: str):
     if not new_date:
         raise ValueError("scheduled_at es requerido (formato: YYYY-MM-DD HH:MM)")
     db = get_db()
     try:
-        em = dict_from_row(db.execute(text("SELECT id, sent_at FROM campaign_emails WHERE id=:id"), {"id": email_id}).fetchone())
+        em = dict_from_row(db.execute(text("SELECT id FROM campaign_emails WHERE id=:id"), {"id": email_id}).fetchone())
         if not em:
             raise ValueError("Pieza no encontrada")
-        if em.get("sent_at"):
-            raise ValueError("No se puede reprogramar una pieza ya enviada")
-        db.execute(text("UPDATE campaign_emails SET scheduled_at=:sched, send_status='pending', sent_at=NULL WHERE id=:id"), {"sched": new_date, "id": email_id})
+        if _piece_fully_sent(db, email_id):
+            raise ValueError("No se puede reprogramar: ya se envió a todos los destinatarios")
+        db.execute(text("UPDATE campaign_emails SET scheduled_at=:sched, send_status='pending' WHERE id=:id"), {"sched": new_date, "id": email_id})
         next_at = _parse_scheduled_at(new_date)
-        db.execute(text("UPDATE send_queue SET next_attempt_at=:next_at, updated_at=NOW() WHERE campaign_email_id=:id AND status='pending'"), {"next_at": next_at, "id": email_id})
+        db.execute(text("UPDATE send_queue SET next_attempt_at=:next_at, updated_at=NOW() WHERE campaign_email_id=:id AND status IN ('pending','failed')"), {"next_at": next_at, "id": email_id})
         db.commit()
     finally:
         db.close()
@@ -619,11 +702,11 @@ def reschedule_email(email_id: int, new_date: str):
 def cancel_email(email_id: int):
     db = get_db()
     try:
-        em = dict_from_row(db.execute(text("SELECT id, sent_at FROM campaign_emails WHERE id=:id"), {"id": email_id}).fetchone())
+        em = dict_from_row(db.execute(text("SELECT id FROM campaign_emails WHERE id=:id"), {"id": email_id}).fetchone())
         if not em:
             raise ValueError("Pieza no encontrada")
-        if em.get("sent_at"):
-            raise ValueError("No se puede cancelar una pieza ya enviada")
+        if _piece_fully_sent(db, email_id):
+            raise ValueError("No se puede cancelar: ya se envió a todos los destinatarios")
         db.execute(text("UPDATE campaign_emails SET status='rejected', send_status='cancelled' WHERE id=:id"), {"id": email_id})
         db.execute(text("UPDATE send_queue SET status='cancelled', updated_at=NOW() WHERE campaign_email_id=:id AND status IN ('pending','failed')"), {"id": email_id})
         db.commit()
