@@ -11,11 +11,13 @@
 :root{
   --bg:#090c11;--bg2:#0f131a;--bg3:#161c25;--bg4:#1d2530;
   --border:rgba(120,175,205,0.10);--border2:rgba(120,175,205,0.22);--border3:rgba(120,175,205,0.38);
-  --green:#45d1c4;--green-dim:#1d5f58;--green-glow:rgba(69,209,196,0.10);
-  --text:#dbe7ec;--text2:#7891a0;--text3:#3f5464;
+  --green:#45d1c4;--green-dim:#1d5f58;--green-glow:rgba(69,209,196,0.08);
+  --green-tint:rgba(69,209,196,0.14);
+  --text:#dbe7ec;--text2:#8ba3b2;--text3:#5b7185;
   --amber:#c8943a;--red:#c05a5a;--blue:#5a8fd6;
   --mono:'JetBrains Mono','DM Mono',ui-monospace,Consolas,monospace;--serif:'JetBrains Mono','DM Mono',ui-monospace,monospace;
   --r:9px;--r2:14px;
+  color-scheme:dark;
 }
 html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;line-height:1.5}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
@@ -162,11 +164,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .modal-btns{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
 .email-preview-html{width:100%;border:1px solid var(--border);border-radius:var(--r);background:#fff;min-height:300px;padding:0;overflow:hidden}
 
-.toast{position:fixed;bottom:24px;right:24px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;font-size:12px;color:var(--text);z-index:200;transform:translateY(60px);opacity:0;transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .3s;pointer-events:none;max-width:320px}
-.toast.show{transform:translateY(0);opacity:1}
-.toast.success{border-color:var(--green-dim);color:var(--green)}
-.toast.error{border-color:rgba(192,80,80,.3);color:var(--red)}
-
 .spinner{display:inline-block;width:11px;height:11px;border:1.5px solid rgba(255,255,255,.2);border-top-color:currentColor;border-radius:50%;animation:spin .6s linear infinite}
 .spinner-dk{border-color:rgba(12,15,10,.2);border-top-color:#0c0f0a}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -180,22 +177,103 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .sched-state-delayed{color:var(--amber)}
 .sched-delayed-banner{background:rgba(200,148,58,.08);border:1px solid rgba(200,148,58,.25);border-radius:var(--r2);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 
+/* ── Tabs (Markdown/HTML, IA/plantillas) ── */
+.tab-toggle{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.tab-toggle .btn{
+  border:none;border-radius:0;background:transparent;
+  color:var(--text3);transition:background .15s,color .15s;
+}
+.tab-toggle .btn + .btn{border-left:1px solid var(--border)}
+.tab-toggle .btn:hover{color:var(--text2);background:var(--bg3)}
+.tab-toggle .btn.is-active{
+  background:var(--bg4);
+  color:var(--green);
+  box-shadow:inset 0 0 0 1px var(--green-dim);
+}
+
+/* ── Placeholder real para contenteditable ── */
+.generated-body:empty::before{
+  content:'El email generado aparecerá aquí en Markdown. Podés editarlo, o pegar un template HTML y lo detectamos solos.';
+  color:var(--text3);
+  font-family:var(--mono);
+  font-size:11px;
+  font-style:normal;
+  pointer-events:none;
+  display:block;
+  line-height:1.6;
+}
+
+/* ── Barra de modo (Markdown vs HTML) ──── */
+.mode-bar{
+  padding:6px 14px;
+  font-size:10px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;
+}
+.mode-bar.mode-md{background:rgba(69,209,196,.06);color:var(--green)}
+.mode-bar.mode-html{background:rgba(90,143,214,.08);color:var(--blue)}
+.mode-bar::before{
+  content:'';width:6px;height:6px;border-radius:50%;background:currentColor;
+}
+
+/* ── Loading state reutilizable ────────── */
+.is-loading{opacity:.45;pointer-events:none;transition:opacity .15s}
+
+/* ── Focus visible accesible ───────────── */
+:focus{outline:none}
+:focus-visible{
+  outline:2px solid var(--green);
+  outline-offset:2px;
+  border-radius:4px;
+}
+.field input:focus-visible,
+.field textarea:focus-visible,
+.cfg-field input:focus-visible,
+.cfg-field textarea:focus-visible,
+.cfg-field select:focus-visible{
+  outline:none;
+  box-shadow:inset 0 -1px 0 var(--green);
+}
+.nav-item:focus-visible{outline-offset:-2px}
+
+/* ── Toast con barra de duración ───────── */
+.toast{
+  position:fixed;bottom:24px;right:24px;
+  background:var(--bg3);border:1px solid var(--border2);border-radius:8px;
+  padding:10px 16px;font-size:12px;color:var(--text);z-index:200;
+  transform:translateY(60px);opacity:0;
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .3s;
+  pointer-events:none;max-width:320px;overflow:hidden;
+}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.success{border-color:var(--green-dim);color:var(--green)}
+.toast.error{border-color:rgba(192,80,80,.4);color:var(--red)}
+.toast.error::after{
+  content:'';position:absolute;left:0;bottom:0;height:2px;background:var(--red);
+  animation:toastBar 7s linear forwards;
+}
+.toast.success::after{
+  content:'';position:absolute;left:0;bottom:0;height:2px;background:var(--green);
+  animation:toastBar 4.5s linear forwards;
+}
+@keyframes toastBar{from{width:100%}to{width:0}}
+
 /* ── Responsive — mobile-first (<=768px) ─────────────────── */
 @media (max-width:768px){
-  /* Sidebar como drawer deslizante */
   .menu-toggle{display:flex}
   .sidebar{position:fixed;left:0;top:0;bottom:0;width:240px;z-index:60;transform:translateX(-100%);transition:transform .25s ease;overflow-y:auto}
-  body.nav-open .sidebar{transform:translateX(0);box-shadow:4px 0 24px rgba(0,0,0,.5)}
+  .sidebar[aria-hidden="true"]{visibility:hidden}
+  body.nav-open .sidebar{transform:translateX(0);box-shadow:4px 0 24px rgba(0,0,0,.5);visibility:visible}
   .sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(5,8,4,.6);z-index:55;opacity:0;pointer-events:none;transition:opacity .25s}
   body.nav-open .sidebar-overlay{opacity:1;pointer-events:auto}
 
-  /* Topbar y contenido */
   .topbar{padding:.6rem .9rem}
   .page-title{font-size:15px}
   .content{padding:1rem}
   .topbar-right{gap:6px}
 
-  /* Grids a una columna */
   .resp-grid{grid-template-columns:1fr!important}
   .stats-grid{grid-template-columns:repeat(2,1fr)}
   .compose-wrap{grid-template-columns:1fr}
@@ -204,18 +282,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   .grid2 .cfg-field:last-child{border-bottom:none}
   .stat-card .val{font-size:20px}
 
-  /* Formularios: apilar etiqueta sobre el campo */
   .field{flex-direction:column;align-items:stretch;gap:5px}
   .field-key{width:auto;padding-top:0}
 
-  /* Tablas a tarjetas */
   .sup-header,.sched-header{display:none}
   .sup-row,.sched-row{display:flex;flex-direction:column;gap:5px;padding:12px 14px}
   .sup-row>span,.sup-row>div,.sched-row>span,.sched-row>div{white-space:normal!important;overflow:visible!important;text-align:left!important;justify-content:flex-start!important}
   .sup-row [data-label]::before,.sched-row [data-label]::before{
     content:attr(data-label);display:block;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:2px}
 
-  /* Modales */
   .modal{padding:18px;width:calc(100% - 1.5rem);margin:.75rem}
   .toast{bottom:16px;right:16px;left:16px;max-width:none}
 }
@@ -260,7 +335,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
 
 <!-- SIDEBAR -->
-<nav class="sidebar">
+<nav class="sidebar" id="mainSidebar" aria-hidden="true">
   <div class="brand" style="display:flex;align-items:flex-start;justify-content:space-between">
     <div>
       <h1>AETHERYON<br>Outreach Sender</h1>
@@ -271,50 +346,50 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">&#x2715;</button>
   </div>
   <span class="nav-section">Principal</span>
-  <div class="nav-item active" onclick="go('dashboard')">
+  <div class="nav-item active" data-view="dashboard" onclick="go('dashboard')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
     Dashboard
   </div>
-  <div class="nav-item" onclick="go('agenda')">
+  <div class="nav-item" data-view="agenda" onclick="go('agenda')">
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="3" stroke="currentColor" stroke-width="1.2"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     Agenda
   </div>
-  <div class="nav-item" onclick="go('compose')">
+  <div class="nav-item" data-view="compose" onclick="go('compose')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M2 12L4 10l7-7 2 2-7 7-2 2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M9 3l2 2" stroke="currentColor" stroke-width="1.2"/></svg>
     Redaccion
   </div>
-  <div class="nav-item" onclick="go('templates')">
+  <div class="nav-item" data-view="templates" onclick="go('templates')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="8" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="6" y="5" width="8" height="10" rx="1" fill="var(--bg)" stroke="currentColor" stroke-width="1.2"/><path d="M8 8h4M8 10.5h4M8 13h2.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
     Templates
   </div>
   <span class="nav-section">Cron Sender</span>
-  <div class="nav-item" onclick="go('campaigns')">
+  <div class="nav-item" data-view="campaigns" onclick="go('campaigns')">
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M8 4.5v3.7l2.6 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     Programacion
   </div>
-  <div class="nav-item" onclick="go('supervision')">
+  <div class="nav-item" data-view="supervision" onclick="go('supervision')">
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     Supervision
   </div>
-  <div class="nav-item" onclick="go('inbox')">
+  <div class="nav-item" data-view="inbox" onclick="go('inbox')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M2 6l6 4 6-4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     Bandeja
   </div>
-  <div class="nav-item" onclick="go('memory')">
+  <div class="nav-item" data-view="memory" onclick="go('memory')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h8M2 12h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     Memoria
   </div>
   <span class="nav-section">Config</span>
-  <div class="nav-item" onclick="go('context')">
+  <div class="nav-item" data-view="context" onclick="go('context')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2z" stroke="currentColor" stroke-width="1.2"/><path d="M8 7v5M8 5v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Contexto
   </div>
-  <div class="nav-item" onclick="go('estilo')">
+  <div class="nav-item" data-view="estilo" onclick="go('estilo')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M3 13l4-10 4 10M5 9h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     Estilo y Firma
   </div>
 
-  <div class="nav-item" onclick="go('settings')">
+  <div class="nav-item" data-view="settings" onclick="go('settings')">
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
     SMTP / IMAP
   </div>
@@ -459,17 +534,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <div class="panel-header">
           <span class="panel-title" id="composePanelTitle">Borrador — Markdown</span>
           <div style="display:flex;gap:10px;align-items:center">
-            <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden">
-              <button type="button" class="btn btn-ghost btn-sm" id="btnModeMarkdown" style="border:none;border-radius:0;color:var(--green);background:var(--green-glow)" onclick="setComposeContentType('markdown')">Markdown</button>
-              <button type="button" class="btn btn-ghost btn-sm" id="btnModeHtml" style="border:none;border-radius:0;border-left:1px solid var(--border)" onclick="setComposeContentType('html')">HTML pegado</button>
+            <div class="tab-toggle">
+              <button type="button" class="btn btn-sm is-active" id="btnModeMarkdown" onclick="setComposeContentType('markdown')">Markdown</button>
+              <button type="button" class="btn btn-sm" id="btnModeHtml" onclick="setComposeContentType('html')">HTML pegado</button>
             </div>
             <button class="btn btn-ghost btn-sm" onclick="previewEmail()">Vista HTML</button>
             <button class="btn btn-ghost btn-sm" id="btnRegenerate" onclick="composeEmail()">Regenerar</button>
           </div>
         </div>
-        <div class="generated-body" id="composedBody" contenteditable="true" spellcheck="true" onpaste="handleComposePaste(event)">
-          <span style="color:var(--text3);font-style:normal;font-family:var(--mono);font-size:11px">El email generado aparecera aqui en Markdown. Puedes editarlo libremente, o directamente pegar un template HTML y lo detectamos solos.</span>
-        </div>
+        <div class="mode-bar mode-md" id="composeModeBar">Modo Markdown — se envuelve con la plantilla AETHERYON</div>
+        <div class="generated-body" id="composedBody" contenteditable="true" spellcheck="true" onpaste="handleComposePaste(event)"></div>
         <textarea id="composedBodyHtml" spellcheck="false" placeholder="Pega aca el HTML completo de tu template ya disenado. Se enviara tal cual, sin reprocesar — podes usar variables como {{first_name}}, {{company}}, {{role}}, {{sender_name}} y {{cta_url}}."
           style="display:none;width:100%;min-height:320px;background:var(--bg);border:none;border-top:1px solid var(--border);outline:none;resize:vertical;font-family:var(--mono);font-size:11px;color:var(--text);padding:14px;line-height:1.6"></textarea>
         <div class="panel-footer">
@@ -509,9 +583,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
           <div style="display:flex;gap:8px;align-items:center">
             <input type="file" id="tfImportFile" accept=".html,.htm" style="display:none" onchange="importTemplateFile(this.files[0])"/>
             <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('tfImportFile').click()" title="Importar un archivo .html ya disenado">&#8593; Importar archivo</button>
-            <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden">
-              <button type="button" class="btn btn-ghost btn-sm" id="btnTplModeMarkdown" style="border:none;border-radius:0;color:var(--green);background:var(--green-glow)" onclick="setTemplateContentType('markdown')">Markdown</button>
-              <button type="button" class="btn btn-ghost btn-sm" id="btnTplModeHtml" style="border:none;border-radius:0;border-left:1px solid var(--border)" onclick="setTemplateContentType('html')">HTML pegado</button>
+            <div class="tab-toggle">
+              <button type="button" class="btn btn-sm is-active" id="btnTplModeMarkdown" onclick="setTemplateContentType('markdown')">Markdown</button>
+              <button type="button" class="btn btn-sm" id="btnTplModeHtml" onclick="setTemplateContentType('html')">HTML pegado</button>
             </div>
           </div>
         </div>
@@ -798,9 +872,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <button class="btn btn-ghost btn-sm" onclick="showCampaignList()">&#8592; Volver</button>
       <span style="font-family:var(--serif);font-size:15px;color:var(--text)">Nueva comunicacion</span>
       <div style="flex:1"></div>
-      <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden">
-        <button type="button" class="btn btn-ghost btn-sm" id="btnCampModeAI" style="border:none;border-radius:0;color:var(--green);background:var(--green-glow)" onclick="setCampCreationMode('ai')">Generar con IA</button>
-        <button type="button" class="btn btn-ghost btn-sm" id="btnCampModeTemplates" style="border:none;border-radius:0;border-left:1px solid var(--border)" onclick="setCampCreationMode('templates')">Desde plantillas</button>
+      <div class="tab-toggle">
+        <button type="button" class="btn btn-sm is-active" id="btnCampModeAI" onclick="setCampCreationMode('ai')">Generar con IA</button>
+        <button type="button" class="btn btn-sm" id="btnCampModeTemplates" onclick="setCampCreationMode('templates')">Desde plantillas</button>
       </div>
     </div>
     <div class="resp-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
@@ -1317,7 +1391,6 @@ async function showApp(){
   document.getElementById('appShell').style.display='flex';
   loadDashboard(); loadContacts(); checkStatus();
   setInterval(checkStatus,30000); setInterval(loadStats,60000);
-  // Verificar emails demorados al abrir la app
   try {
     const sr = await apiFetch('/campaigns/schedule');
     if(sr.ok){
@@ -1353,8 +1426,13 @@ async function apiFetch(path,opts={}){
 let toastTimer;
 function toast(msg,type=''){
   const t=document.getElementById('toast');
-  t.textContent=msg;t.className='toast '+type+' show';
-  clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='toast',4500);
+  t.classList.remove('show');
+  void t.offsetWidth;
+  t.textContent = msg;
+  t.className = 'toast ' + type + ' show';
+  const duration = type === 'error' ? 7000 : 4500;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ t.className = 'toast ' + type; }, duration);
 }
 function closeModal(id){document.getElementById(id)?.classList.remove('visible');}
 function openModal(id){document.getElementById(id)?.classList.add('visible');}
@@ -1362,7 +1440,7 @@ function openModal(id){document.getElementById(id)?.classList.add('visible');}
 // ── Modales genéricos basados en promesas (reemplazan confirm()/prompt() nativos) ──
 let _confirmResolver=null, _promptResolver=null;
 
-function uiConfirm({title='Confirmar', message='', okText='Eliminar', danger=true}={}){
+function uiConfirm({title='Confirmar', message='', okText='Confirmar', danger=true}={}){
   document.getElementById('confirmTitle').textContent=title;
   document.getElementById('confirmMessage').textContent=message;
   const ok=document.getElementById('confirmOkBtn');
@@ -1398,29 +1476,43 @@ const pageMap={dashboard:'Dashboard',agenda:'Agenda',compose:'Redaccion',templat
   supervision:'Supervision',memory:'Memoria',context:'Contexto',estilo:'Estilo',
   settings:'SMTP / IMAP',campaigns:'Cron Sender'};
 
-function toggleSidebar(){document.body.classList.toggle('nav-open');}
+function toggleSidebar(){
+  const open = document.body.classList.toggle('nav-open');
+  const sb = document.getElementById('mainSidebar');
+  if(sb) sb.setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+// Escape cierra el drawer
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape' && document.body.classList.contains('nav-open')){
+    toggleSidebar();
+  }
+});
+// Estado inicial del aria-hidden del sidebar según viewport
+document.addEventListener('DOMContentLoaded', ()=>{
+  const sb = document.getElementById('mainSidebar');
+  if(sb) sb.setAttribute('aria-hidden', window.innerWidth > 768 ? 'false' : 'true');
+});
 
 function go(view){
   document.body.classList.remove('nav-open');
+  const sb=document.getElementById('mainSidebar');
+  if(sb && window.innerWidth <= 768) sb.setAttribute('aria-hidden','true');
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  document.getElementById('view-'+view)?.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>{
-    const txt=n.textContent.trim();
-    const label=pageMap[view]||view;
-    if(txt.startsWith(label.substring(0,5)))n.classList.add('active');
+    n.classList.toggle('active', n.dataset.view === view);
   });
-  document.getElementById('pageTitle').textContent=pageMap[view]||view;
-  if(view==='agenda')     loadContacts();
-  if(view==='templates')  loadTemplates();
-  if(view==='inbox')      loadInbox();
-  if(view==='supervision')loadSupervision();
-  if(view==='memory')     loadMemory();
-  if(view==='settings')   loadSettings();
-  if(view==='context')    loadContext();
-  if(view==='estilo')     loadStyle();
-  if(view==='dashboard')  loadDashboard();
-  if(view==='campaigns')  showCampaignList();
+  document.getElementById('view-'+view)?.classList.add('active');
+  document.getElementById('pageTitle').textContent = pageMap[view] || view;
+  if(view==='agenda')      loadContacts();
+  if(view==='templates')   loadTemplates();
+  if(view==='inbox')       loadInbox();
+  if(view==='supervision') loadSupervision();
+  if(view==='memory')      loadMemory();
+  if(view==='settings')    loadSettings();
+  if(view==='context')     loadContext();
+  if(view==='estilo')      loadStyle();
+  if(view==='dashboard')   loadDashboard();
+  if(view==='campaigns')   showCampaignList();
 }
 
 async function checkStatus(){
@@ -1466,12 +1558,20 @@ async function loadDashboard(){
 }
 
 async function loadContacts(){
-  try{contacts=await(await apiFetch('/contacts')).json();}
-  catch(e){toast('Error cargando contactos','error');}
-  try{senderStatusByEmail=await(await apiFetch('/contacts/sender-status')).json();}catch(e){senderStatusByEmail={};}
+  const grid = document.getElementById('contactGrid');
+  grid.classList.add('is-loading');
+  try{
+    contacts = await(await apiFetch('/contacts')).json();
+  }catch(e){
+    toast('Error cargando contactos','error');
+  }finally{
+    grid.classList.remove('is-loading');
+  }
+  try{senderStatusByEmail = await(await apiFetch('/contacts/sender-status')).json();}
+  catch(e){ senderStatusByEmail = {}; }
   renderContacts(contacts);
-  const el=document.getElementById('importStatus');
-  if(el)el.textContent=`${contacts.length} contacto(s) en la Agenda`;
+  const el = document.getElementById('importStatus');
+  if(el) el.textContent = `${contacts.length} contacto(s) en la Agenda`;
 }
 
 // Sube un CSV (LeadForge, Apollo, o cualquier lista externa) por multipart a /agenda/import.
@@ -1536,7 +1636,6 @@ async function saveContact(){
 async function deleteContact(id){if(!await uiConfirm({title:'Eliminar contacto',message:'El contacto y su historial de interacciones se eliminarán permanentemente.',okText:'Eliminar'}))return;await apiFetch('/contacts/'+id,{method:'DELETE'});toast('Eliminado');loadContacts();loadStats();}
 function composeToContact(id){const c=contacts.find(x=>x.id===id);if(!c)return;document.getElementById('c-to').value=c.email;matchContact();updateToTag();go('compose');}
 
-// ── Agenda: estado de envio del Cron Sender por contacto (no es un pipeline) ──
 const SENDER_STATE_LABEL={sent:'Enviado',scheduled:'Programado',delayed:'Demorado',cancelled:'Cancelado'};
 function senderBadgesHTML(c){
   const items=senderStatusByEmail[c.email];
@@ -1564,11 +1663,17 @@ let templates=[], editingTemplateId=null, templateContentType='markdown';
 let usingTemplateId=null, utRecipients=[], utCustomVarNames=[];
 
 async function loadTemplates(){
+  const el = document.getElementById('templateGrid');
+  el.classList.add('is-loading');
   try{
-    const status=document.getElementById('templateStatusFilter').value;
-    templates=await(await apiFetch('/templates'+(status?('?status='+status):''))).json();
+    const status = document.getElementById('templateStatusFilter').value;
+    templates = await(await apiFetch('/templates'+(status?('?status='+status):''))).json();
     renderTemplates(templates);
-  }catch(e){toast('Error cargando plantillas','error');}
+  }catch(e){
+    toast('Error cargando plantillas','error');
+  }finally{
+    el.classList.remove('is-loading');
+  }
 }
 function filterTemplates(){
   const q=document.getElementById('searchTemplate').value.toLowerCase();
@@ -1615,8 +1720,6 @@ function renderTemplates(list){
   }).join('');
 }
 
-// Atajo desde un grupo de Templates directo al wizard de "Nueva comunicacion
-// -> Desde plantillas", con todo el grupo ya precargado en la secuencia.
 function programGroupSequence(cat){
   go('campaigns');
   showCampaignForm();
@@ -1647,14 +1750,6 @@ function editTemplate(id){
   document.getElementById('templateForm').scrollIntoView({behavior:'smooth'});
 }
 function cancelTemplateForm(){document.getElementById('templateForm').style.display='none';editingTemplateId=null;}
-// Igual que en Redacción: el textarea ya preserva el texto plano pegado tal
-// cual, solo hace falta detectar si es HTML fuente y pasar el modo a 'html'.
-// Se mira unicamente text/plain — el text/html del portapapeles puede ser
-// una vista con resaltado de sintaxis (spans de color por caracter) en vez
-// del template real, si el origen fue un editor de codigo.
-// Importar un archivo .html/.htm ya disenado: lo lee en el navegador (no
-// pasa por Storage, cae directo en el campo de contenido) y pasa el
-// formulario a modo HTML automaticamente.
 function importTemplateFile(file){
   if(!file)return;
   const reader=new FileReader();
@@ -1683,9 +1778,11 @@ function handleTemplatePaste(event){
 }
 function setTemplateContentType(mode){
   templateContentType=mode;
-  const btnMd=document.getElementById('btnTplModeMarkdown'), btnHtml=document.getElementById('btnTplModeHtml');
-  if(mode==='html'){btnHtml.style.color='var(--green)';btnHtml.style.background='var(--green-glow)';btnMd.style.color='';btnMd.style.background='';}
-  else{btnMd.style.color='var(--green)';btnMd.style.background='var(--green-glow)';btnHtml.style.color='';btnHtml.style.background='';}
+  const btnMd=document.getElementById('btnTplModeMarkdown');
+  const btnHtml=document.getElementById('btnTplModeHtml');
+  const isHtml = mode === 'html';
+  btnMd.classList.toggle('is-active', !isHtml);
+  btnHtml.classList.toggle('is-active', isHtml);
 }
 async function saveTemplate(){
   const data={
@@ -1728,8 +1825,6 @@ async function deleteTemplate(id){
   try{await apiFetch('/templates/'+id,{method:'DELETE'});toast('Eliminada','success');loadTemplates();}catch(e){toast('Error','error');}
 }
 
-// Usar plantilla → instancia un envio programado en el Cron Sender.
-// Paso 1: elegir destinatarios (Agenda o pegados) + fecha.
 async function openUseTemplate(id){
   usingTemplateId=id;
   const t=templates.find(x=>x.id===id);if(!t)return;
@@ -1752,9 +1847,6 @@ function utAddContactEmail(email){
   if(!current.includes(email)){current.push(email);box.value=current.join(', ');}
 }
 
-// Paso 2: cruza los emails pegados contra la Agenda y arma la tabla de
-// variables — auto-mapeadas (nombre/empresa/etc, se completan solas) y
-// personalizadas (ej. {{hipotesis}}, {{señal}} — se cargan a mano acá).
 const EMAIL_RE=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 async function verifyUseTemplateRecipients(){
   const raw=document.getElementById('ut-emails').value;
@@ -1844,7 +1936,7 @@ async function confirmUseTemplate(){
   let emptyVars=0;
   utRecipients.forEach(r=>utCustomVarNames.forEach(v=>{if(!(''+(r.customVars[v]||'')).trim())emptyVars++;}));
   if(emptyVars>0){
-    const ok=await uiConfirm({title:'Variables sin completar',message:`Hay ${emptyVars} variable(s) personalizada(s) vacias — se enviaran en blanco. ¿Continuar igual?`,okText:'Continuar'});
+    const ok=await uiConfirm({title:'Variables sin completar',message:`Hay ${emptyVars} variable(s) personalizada(s) vacias — se enviaran en blanco. ¿Continuar igual?`,okText:'Continuar',danger:false});
     if(!ok)return;
   }
 
@@ -1855,7 +1947,7 @@ async function confirmUseTemplate(){
     for(const r of utRecipients){
       if(!r.inAgenda){
         try{await apiFetch('/contacts',{method:'POST',body:JSON.stringify({name:r.name.trim(),email:r.email,company:r.company||''})});}
-        catch(e){/* si ya existe u otro error no bloqueante, seguimos */}
+        catch(e){}
       }
     }
     const recipientVariables={};
@@ -1950,7 +2042,6 @@ async function matchContact(){
     hint.innerHTML = `Contacto: <b style="color:var(--text2)">${c.name}</b>${c.company?' · '+c.company:''}`;
     if(c.context){ ctxBox.style.display='block'; document.getElementById('contactContextContent').textContent=c.context; }
     else ctxBox.style.display = 'none';
-    // Cargar historial enviados
     try{
       const r = await apiFetch(`/contacts/${c.id}/sent-history`);
       const hist = await r.json();
@@ -2007,7 +2098,6 @@ async function composeEmail(){
   const c=contacts.find(x=>x.email.toLowerCase()===to.toLowerCase());
   let contactInfo=c?`\n\nCONTACTO:\nNombre: ${c.name}\nEmpresa: ${c.company||'N/A'}\nRol: ${c.role||'N/A'}\nContexto: ${c.context||'N/A'}`:'';
 
-  // Historial de emails enviados a este contacto
   let sentHistory='';
   if(c){
     try{
@@ -2036,7 +2126,13 @@ async function composeEmail(){
   finally{btn.disabled=false;btn.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar con Groq';}
 }
 
-function clearCompose(){document.getElementById('composedBody').innerHTML='<span style="color:var(--text3);font-style:normal;font-family:var(--mono);font-size:11px">El email generado aparecera aqui.</span>';document.getElementById('composedBodyHtml').value='';setComposeContentType('markdown');_pendingAttachments=[];renderComposeAttachments();}
+function clearCompose(){
+  document.getElementById('composedBody').innerHTML = '';
+  document.getElementById('composedBodyHtml').value = '';
+  setComposeContentType('markdown');
+  _pendingAttachments = [];
+  renderComposeAttachments();
+}
 
 async function openLoadEmailModal(){
   openModal('modalLoadEmail');
@@ -2057,7 +2153,6 @@ async function openLoadEmailModal(){
         </div>
         <div style="font-size:10px;color:var(--text3)">Para: ${l.contact_email||''} · ${l.intent||''}</div>
       </div>`).join('');
-    // Guardar logs para acceso por índice
     window._loadEmailLogs=logs;
   }catch(e){list.innerHTML='<div style="padding:12px;font-size:11px;color:var(--red)">Error cargando.</div>';}
 }
@@ -2066,7 +2161,6 @@ function selectLoadEmail(idx){
   const log=(window._loadEmailLogs||[])[idx];
   if(!log)return;
   document.getElementById('loadEmailText').value=log.body||'';
-  // Pre-llenar asunto y destinatario si están vacíos
   if(!document.getElementById('c-subject').value.trim() && log.subject)
     document.getElementById('c-subject').value=log.subject;
   if(!document.getElementById('c-to').value.trim() && log.contact_email){
@@ -2084,13 +2178,6 @@ function applyLoadedEmail(){
   toast('Email cargado. Podés editarlo y enviar.','success');
 }
 
-// Detecta código HTML fuente a partir del texto plano del portapapeles.
-// A propósito NO se usa el `text/html` del portapapeles: cuando el origen
-// es un editor de código o un visor con resaltado de sintaxis, ese
-// `text/html` es una "foto" decorativa del código (cada caracter envuelto
-// en <span style="color:..."> con fondo tipo Solarized, StartFragment,
-// etc.) — no el template real. El `text/plain` siempre trae el código
-// limpio tal cual lo copiaste.
 function looksLikeHtmlSource(text){
   if(!text) return false;
   const t = text.trim();
@@ -2100,8 +2187,6 @@ function looksLikeHtmlSource(text){
   const tagMatches = t.match(/<\/?(html|head|body|table|tr|td|div|style|meta|title)[\s>\/]/ig);
   return !!(tagMatches && tagMatches.length >= 2);
 }
-// Pegar un template ya disenado en el editor Markdown lo detecta y cambia
-// solo a modo "HTML pegado" — no hace falta acordarse de tocar el toggle antes.
 function handleComposePaste(event){
   const cd = event.clipboardData || window.clipboardData;
   if(!cd) return;
@@ -2121,22 +2206,36 @@ function getComposeBody(){
     : document.getElementById('composedBody').textContent.trim();
 }
 function setComposeContentType(mode){
-  composeContentType=mode;
-  const mdBox=document.getElementById('composedBody'), htmlBox=document.getElementById('composedBodyHtml');
-  const btnMd=document.getElementById('btnModeMarkdown'), btnHtml=document.getElementById('btnModeHtml');
-  const title=document.getElementById('composePanelTitle'), regenBtn=document.getElementById('btnRegenerate');
-  if(mode==='html'){
-    mdBox.style.display='none';htmlBox.style.display='block';
-    btnHtml.style.color='var(--green)';btnHtml.style.background='var(--green-glow)';
-    btnMd.style.color='';btnMd.style.background='';
-    title.textContent='Template HTML pegado';
-    regenBtn.style.display='none';
-  }else{
-    mdBox.style.display='block';htmlBox.style.display='none';
-    btnMd.style.color='var(--green)';btnMd.style.background='var(--green-glow)';
-    btnHtml.style.color='';btnHtml.style.background='';
-    title.textContent='Borrador — Markdown';
-    regenBtn.style.display='';
+  composeContentType = mode;
+  const mdBox = document.getElementById('composedBody');
+  const htmlBox = document.getElementById('composedBodyHtml');
+  const btnMd = document.getElementById('btnModeMarkdown');
+  const btnHtml = document.getElementById('btnModeHtml');
+  const title = document.getElementById('composePanelTitle');
+  const regenBtn = document.getElementById('btnRegenerate');
+  const modeBar = document.getElementById('composeModeBar');
+
+  const isHtml = mode === 'html';
+  btnMd.classList.toggle('is-active', !isHtml);
+  btnHtml.classList.toggle('is-active', isHtml);
+
+  mdBox.style.display = isHtml ? 'none' : 'block';
+  htmlBox.style.display = isHtml ? 'block' : 'none';
+
+  if(isHtml){
+    title.textContent = 'Template HTML pegado';
+    regenBtn.style.display = 'none';
+    if(modeBar){
+      modeBar.className = 'mode-bar mode-html';
+      modeBar.textContent = 'Modo HTML — se envía tal cual, sin reprocesar';
+    }
+  } else {
+    title.textContent = 'Borrador — Markdown';
+    regenBtn.style.display = '';
+    if(modeBar){
+      modeBar.className = 'mode-bar mode-md';
+      modeBar.textContent = 'Modo Markdown — se envuelve con la plantilla AETHERYON';
+    }
   }
 }
 async function previewEmail(){
@@ -2147,7 +2246,7 @@ async function previewEmail(){
 
 async function openSendConfirm(){
   const bodyText=getComposeBody();
-  if(!bodyText||bodyText.includes('aparecera aqui'))return toast('Escribi o pega un email primero','error');
+  if(!bodyText)return toast('Escribi o pega un email primero','error');
   const to=document.getElementById('c-to').value.trim(),subject=document.getElementById('c-subject').value.trim();
   if(!to||!subject)return toast('Completa destinatario y asunto','error');
   try{const d=await(await apiFetch('/config')).json();document.getElementById('m-via').textContent=(d.sender_name||d.sender_email||'');document.getElementById('m-test-email').value=d.sender_email||'';}catch(e){}
@@ -2286,14 +2385,12 @@ function renderInbox(){
   const list = document.getElementById('inboxList');
   const q = (document.getElementById('inboxSearch')?.value||'').toLowerCase().trim();
 
-  // Ordenar fecha descendente
   const sorted = [...inboxItems].sort((a,b)=>{
     const da = a.date ? new Date(a.date) : new Date(0);
     const db2 = b.date ? new Date(b.date) : new Date(0);
     return db2 - da;
   });
 
-  // Filtrar: ocultos + búsqueda
   const visible = sorted.filter(m => {
     if(hiddenInboxIds.has(m.message_id)) return false;
     if(!q) return true;
@@ -2330,7 +2427,6 @@ async function hideInboxMessage(mid){
   hiddenInboxIds.add(mid);
   saveHiddenInbox();
   renderInbox();
-  // También eliminar del backend
   try{ await apiFetch('/inbox/'+encodeURIComponent(mid), {method:'DELETE'}); }catch(e){}
 }
 function escId(s){return(s||'').replace(/'/g,"\\'").replace(/"/g,'\\"');}
@@ -2420,17 +2516,14 @@ let campGenState = {
   generating: false,
 };
 
-// ── Tab switcher ───────────────────────────
 function switchCampTab(tab){
-  const tabs = ['list','schedule'];
-  tabs.forEach(t=>{
+  ['list','schedule'].forEach(t=>{
     const btn = document.getElementById('campTab-'+t);
-    if(btn){
-      btn.style.borderBottomColor = t===tab ? 'var(--green)' : 'transparent';
-      btn.style.color = t===tab ? 'var(--green)' : 'var(--text3)';
-    }
+    if(!btn) return;
+    const active = t === tab;
+    btn.style.borderBottomColor = active ? 'var(--green)' : 'transparent';
+    btn.style.color = active ? 'var(--green)' : 'var(--text3)';
   });
-  // Ocultar todas las sub-vistas de comunicaciones programadas
   document.getElementById('campaignListView').style.display = 'none';
   document.getElementById('campaignFormView').style.display = 'none';
   document.getElementById('campaignApprovalView').style.display = 'none';
@@ -2459,7 +2552,6 @@ async function loadSchedule(){
     scheduleData = await r.json();
     renderSchedule();
 
-    // Detectar demorados
     const delayed = scheduleData.filter(i => i.state === 'delayed');
     if(delayed.length > 0){
       document.getElementById('schedDelayedBanner').style.display = 'flex';
@@ -2498,19 +2590,16 @@ function renderSchedule(){
   const el = document.getElementById('scheduleList');
   const countEl = document.getElementById('schedCount');
   const qText = (document.getElementById('schedSearchEmail')?.value||'').toLowerCase().trim();
-  const qDate = (document.getElementById('schedSearchDate')?.value||'').trim(); // YYYY-MM-DD
+  const qDate = (document.getElementById('schedSearchDate')?.value||'').trim();
 
   let items = scheduleData.filter(i => !hiddenSchedIds.has(i.id));
 
-  // Estado
   if(scheduleFilter !== 'all') items = items.filter(i => i.state === scheduleFilter);
 
-  // Búsqueda texto
   if(qText) items = items.filter(i =>
     ((i.camp_name||'')+(i.subject||'')).toLowerCase().includes(qText)
   );
 
-  // Búsqueda fecha
   if(qDate) items = items.filter(i =>
     (i.scheduled_at||'').startsWith(qDate) || (i.sent_at||'').startsWith(qDate)
   );
@@ -2547,7 +2636,6 @@ function renderSchedule(){
       ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">env: ${formatSchedDate(item.sent_at)}</div>`
       : (item.sent ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">${item.sent}/${item.total} enviados</div>` : '');
 
-    // Botón ocultar solo para enviados/cancelados
     const hideBtn = (item.state === 'sent' || item.state === 'cancelled')
       ? `<button onclick="hideSchedItem(${item.id})" title="Ocultar de la vista"
            style="background:transparent;border:none;cursor:pointer;color:var(--text3);font-size:12px;padding:1px 4px;transition:color .15s"
@@ -2614,9 +2702,6 @@ function hideSchedItem(id){
 function formatSchedDate(d){
   if(!d || d==='None' || d==='' ) return '—';
   try{
-    // Normalizar: "2026-03-31" → "2026-03-31T09:00:00"
-    // "2026-03-31 09:00" → "2026-03-31T09:00:00"
-    // "2026-03-31T09:00:00.000000" → already ISO
     let s = String(d).trim();
     if(/^\d{4}-\d{2}-\d{2}$/.test(s)) s = s + 'T09:00:00';
     else if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(s)) s = s.replace(' ','T') + ':00';
@@ -2681,7 +2766,6 @@ async function cancelScheduledEmail(emailId){
 
 function openRescheduleModal(emailId, currentSched){
   document.getElementById('reschedEmailId').value = emailId;
-  // Pre-llenar con fecha/hora actual del email
   let dateVal = '', timeVal = '09:00';
   if(currentSched && currentSched !== 'None'){
     const parts = currentSched.trim().split(/[ T]/);
@@ -2740,7 +2824,6 @@ async function openSchedEmailModal(emailId){
 
     body.textContent = em.body || '';
 
-    // Preview HTML
     try{
       const pr = await apiFetch('/preview-email',{method:'POST',body:JSON.stringify({body: em.body||'', subject: em.subject||'', content_type: em.content_type||'markdown'})});
       const pd = await pr.json();
@@ -2750,14 +2833,12 @@ async function openSchedEmailModal(emailId){
     body.innerHTML = `<div style="color:var(--red);font-size:11px">Error: ${e.message}</div>`;
   }
 }
-// ─────────────────────────────────────────
 
 function showCampaignList(){
   document.getElementById('campaignListView').style.display='block';
   document.getElementById('campaignFormView').style.display='none';
   document.getElementById('campaignApprovalView').style.display='none';
   document.getElementById('campaignScheduleView').style.display='none';
-  // Resync tab indicator
   ['list','schedule'].forEach(t=>{
     const btn=document.getElementById('campTab-'+t);
     if(btn){btn.style.borderBottomColor=t==='list'?'var(--green)':'transparent';btn.style.color=t==='list'?'var(--green)':'var(--text3)';}
@@ -2792,7 +2873,6 @@ function initCampContacts(){
   loadCampCategories();
 }
 
-// Arma el selector de tags a partir de la Agenda ya cargada (no depende de LeadForge).
 async function loadCampCategories(){
   const sel=document.getElementById('campCategorySelect');
   if(!sel)return;
@@ -2806,7 +2886,6 @@ async function loadCampCategories(){
     tags.map(t=>`<option value="${t.replace(/"/g,'&quot;')}">${t} (${tagSet[t]})</option>`).join('');
 }
 
-// Agrega en bloque los contactos de la Agenda que tengan el tag elegido.
 async function selectCampCategory(){
   const sel=document.getElementById('campCategorySelect');
   const tag=sel.value;
@@ -2857,27 +2936,29 @@ function setCampTone(t){
   });
 }
 
-// ── Nueva comunicacion: modo "Desde plantillas" (alternativa a Generar con IA) ──
 function setCampCreationMode(mode){
-  campCreationMode=mode;
-  const btnAI=document.getElementById('btnCampModeAI'), btnTpl=document.getElementById('btnCampModeTemplates');
-  const fieldsAI=document.getElementById('campModeAIFields'), fieldsTpl=document.getElementById('campModeTemplatesFields');
-  const endField=document.getElementById('campEndField');
-  const btn=document.getElementById('btnGenerateCamp');
-  if(mode==='templates'){
-    btnTpl.style.color='var(--green)';btnTpl.style.background='var(--green-glow)';
-    btnAI.style.color='';btnAI.style.background='';
-    fieldsAI.style.display='none';fieldsTpl.style.display='block';
-    endField.style.display='none';
-    btn.innerHTML='Crear secuencia desde plantillas';
-    if(!templates.length)loadTemplates().then(renderCampTemplatePicker);
+  campCreationMode = mode;
+  const btnAI = document.getElementById('btnCampModeAI');
+  const btnTpl = document.getElementById('btnCampModeTemplates');
+  const fieldsAI = document.getElementById('campModeAIFields');
+  const fieldsTpl = document.getElementById('campModeTemplatesFields');
+  const endField = document.getElementById('campEndField');
+  const btn = document.getElementById('btnGenerateCamp');
+  const isTpl = mode === 'templates';
+
+  btnAI.classList.toggle('is-active', !isTpl);
+  btnTpl.classList.toggle('is-active', isTpl);
+
+  fieldsAI.style.display = isTpl ? 'none' : 'block';
+  fieldsTpl.style.display = isTpl ? 'block' : 'none';
+  endField.style.display = isTpl ? 'none' : 'flex';
+
+  if(isTpl){
+    btn.innerHTML = 'Crear secuencia desde plantillas';
+    if(!templates.length) loadTemplates().then(renderCampTemplatePicker);
     else renderCampTemplatePicker();
-  }else{
-    btnAI.style.color='var(--green)';btnAI.style.background='var(--green-glow)';
-    btnTpl.style.color='';btnTpl.style.background='';
-    fieldsAI.style.display='block';fieldsTpl.style.display='none';
-    endField.style.display='flex';
-    btn.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar campana con IA';
+  } else {
+    btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#0c0f0a" stroke-width="1.2"/><path d="M5.5 3v5M3 5.5h5" stroke="#0c0f0a" stroke-width="1.2" stroke-linecap="round"/></svg> Generar campana con IA';
   }
   updateDatePreview();
 }
@@ -3355,6 +3436,7 @@ async function jumpToEmail(day){
 
 async function loadCampaigns(){
   const el=document.getElementById('campaignCards');
+  el.classList.add('is-loading');
   el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Cargando...</div>';
   try{
     const camps=await(await apiFetch('/campaigns')).json();
@@ -3379,10 +3461,13 @@ async function loadCampaigns(){
           </div>
         </div>
       </div>`).join('');
-  }catch(e){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Error cargando campanas.</div>';}
+  }catch(e){
+    el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:1rem">Error cargando campanas.</div>';
+  }finally{
+    el.classList.remove('is-loading');
+  }
 }
 
-// ── Importar / Exportar campañas (YAML) ─────
 function importCampaignPrompt(){
   document.getElementById('camp-import-file').click();
 }
@@ -3450,7 +3535,6 @@ async function exportCampaign(campId){
     const r=await apiFetch('/campaigns/'+campId+'/export');
     if(!r.ok){let m='Error';try{m=(await r.json()).detail||m;}catch(_){}throw new Error(m);}
     const blob=await r.blob();
-    // Nombre de archivo desde el header Content-Disposition (fallback campaign_<id>.yaml)
     let fname='campaign_'+campId+'.yaml';
     const cd=r.headers.get('Content-Disposition')||'';
     const m=cd.match(/filename="?([^"]+)"?/);
@@ -3488,7 +3572,6 @@ async function showApprovalView(campId){
     const btnFinal=document.getElementById('btnFinalizeCamp');
     btnFinal.style.display=allApproved?'inline-flex':'none';
 
-    // Attachments section
     const campaignAtts=camp.attachments||[];
     let attHtml='';
     if(campaignAtts.length){
