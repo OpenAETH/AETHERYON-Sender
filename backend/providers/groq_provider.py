@@ -15,14 +15,14 @@ from backend.config import cfg
 logger = logging.getLogger(__name__)
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = "qwen/qwen3.8-27b"
 
 
 def is_configured() -> bool:
     return bool(cfg()["groq_api_key"])
 
 
-async def chat(messages: list, model: str = "groq/compound", temperature: float = 0.8, max_tokens: int = 2000) -> str:
+async def chat(messages: list, model: str = "qwen/qwen3.8-27b", temperature: float = 0.8, max_tokens: int = 2000) -> str:
     """Llamada no-streaming. Devuelve el texto de la respuesta."""
     key = cfg()["groq_api_key"]
     if not key:

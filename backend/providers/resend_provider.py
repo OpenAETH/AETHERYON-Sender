@@ -51,6 +51,9 @@ def send(
     resend.api_key = c["resend_api_key"]
     from_addr = f"{c['sender_name']} <{c['sender_email']}>" if c["sender_name"] else c["sender_email"]
 
+    # Política BCC: cada destinatario recibe su propio email individual.
+    # Nunca se usan campos To/CC con múltiples destinatarios — cada llamada
+    # a send() corresponde exactamente a un único destinatario.
     params: dict = {
         "from": from_addr,
         "to": [to],

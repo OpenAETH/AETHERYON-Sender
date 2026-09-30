@@ -43,9 +43,9 @@ def _entity_context() -> str:
 async def raw_generate(messages: list, stream: bool = False):
     """Proxy delgado usado por el asistente de Bandeja/Redacción libre."""
     if not stream:
-        content = await groq_provider.chat(messages, model="groq/compound")
+        content = await groq_provider.chat(messages, model="qwen/qwen3.8-27b")
         return {"content": content}
-    return groq_provider.chat_stream(messages, model="groq/compound")
+    return groq_provider.chat_stream(messages, model="qwen/qwen3.8-27b")
 
 
 async def stream_sequence_email(cid: int, day_number: int, feedback: str = ""):
@@ -188,7 +188,7 @@ Responde ÚNICAMENTE con JSON válido con esta estructura exacta (sin texto extr
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Genera la secuencia de {n} piezas. Responde solo con el JSON."},
         ],
-        model="llama-3.3-70b-versatile", temperature=0.8, max_tokens=8000,
+        model="qwen/qwen3.8-27b", temperature=0.8, max_tokens=8000,
     )
     emails_data = parse_ai_json(raw_content.strip())
     emails_list = emails_data.get("emails", [])
@@ -236,7 +236,7 @@ Cuerpo: {em['body']}
 Genera una nueva versión mejorada para esta posición. Responde SOLO con JSON:
 {{"subject": "Nuevo asunto", "body": "Nuevo cuerpo en Markdown"}}"""
 
-    raw = await groq_provider.chat(messages=[{"role": "user", "content": prompt}], model="llama-3.3-70b-versatile", temperature=0.9, max_tokens=2000)
+    raw = await groq_provider.chat(messages=[{"role": "user", "content": prompt}], model="qwen/qwen3.8-27b", temperature=0.9, max_tokens=2000)
     try:
         new_data = parse_ai_json(raw.strip())
     except json.JSONDecodeError:

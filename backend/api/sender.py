@@ -59,6 +59,17 @@ def get_schedule_email(email_id: int):
         raise HTTPException(404, str(e))
 
 
+@router.post("/schedule-email/{email_id}/send-now")
+def send_schedule_email_now(email_id: int):
+    """Envía inmediatamente un email de la agenda (scheduled/retrying/delayed)
+    sin esperar a que llegue su horario programado.
+    email_id es el id de campaign_emails (mismo que usa get_schedule_email)."""
+    try:
+        return sender_service.force_send_emails([email_id])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/schedule-email/{email_id}/reschedule")
 async def reschedule_email(email_id: int, request: Request):
     data = await request.json()

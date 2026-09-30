@@ -19,7 +19,7 @@ services:
       # y sin soporte, como 3.14, que puede fallar el build de dependencias
       # con wheels binarios como psycopg2-binary). Ver tambien .python-version.
       - key: PYTHON_VERSION
-        value: 3.12.7
+        value: 3.12.7.slim
       # ── Auth ──
       - key: APP_USER
         sync: false

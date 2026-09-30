@@ -26,7 +26,7 @@ async def ai_generate(request: Request):
 
     if stream:
         async def gen():
-            async for line in groq_provider.chat_stream(messages, model="groq/compound"):
+            async for line in groq_provider.chat_stream(messages, model="qwen/qwen3.8-27b"):
                 yield line + "\n\n"
         return StreamingResponse(gen(), media_type="text/event-stream")
 

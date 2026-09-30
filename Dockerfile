@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12.7-slim
 
 # Evita .pyc y fuerza logs sin buffer (necesario para ver el log del Cron Sender en tiempo real)
 ENV PYTHONDONTWRITEBYTECODE=1 \
