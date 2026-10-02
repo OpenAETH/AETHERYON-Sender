@@ -1507,6 +1507,51 @@ input[type="color"]{
   </div>
 </div>
 
+<!-- MODAL: DESTINATARIOS DE UNA COMUNICACIÓN ACTIVA (bajas / rebotes) -->
+<div class="modal-backdrop" id="modalRecipients">
+  <div class="modal" style="max-width:760px">
+    <h2 id="recTitle" style="margin-bottom:6px">Destinatarios</h2>
+    <div id="recMeta" class="info" style="margin-bottom:12px;line-height:1.8"></div>
+
+    <div id="recEditBar">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <input type="text" id="recSearch" placeholder="Buscar..." oninput="recFilter()" style="flex:1;min-width:140px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;caret-color:var(--green)"/>
+        <select id="recReason" onchange="recReasonChanged()" style="width:auto;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;caret-color:var(--green)">
+          <option value="unsubscribe">Baja</option>
+          <option value="bounce">Rebote</option>
+          <option value="manual">Otro motivo</option>
+        </select>
+        <button class="btn btn-red btn-sm" id="btnRecRemove" onclick="removeSelectedRecipients()">Quitar seleccionados</button>
+      </div>
+      <label style="font-size:11px;color:var(--text2);display:flex;gap:6px;align-items:center;margin-bottom:8px;cursor:pointer">
+        <input type="checkbox" id="recSuppress" checked/> Excluir también de todas las demás comunicaciones (lista de bajas/rebotes)
+      </label>
+    </div>
+
+    <div id="recList" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);max-height:280px;overflow-y:auto"></div>
+
+    <div id="recAddBox">
+      <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin:14px 0 8px">Agregar destinatarios</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="recAddInput" placeholder="email1@dominio.com, email2@dominio.com" style="flex:1;min-width:200px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;caret-color:var(--green)"/>
+        <button class="btn btn-green btn-sm" onclick="addRecipientsToCampaign()">Agregar</button>
+      </div>
+      <label style="font-size:11px;color:var(--text3);display:flex;gap:6px;align-items:center;margin-top:8px;cursor:pointer">
+        <input type="checkbox" id="recIncludePast"/> Incluir piezas ya vencidas (se enviarán en el próximo ciclo)
+      </label>
+    </div>
+
+    <div id="recRemovedBox" style="display:none">
+      <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin:14px 0 8px">Quitados de esta comunicación</div>
+      <div id="recRemoved" style="font-size:11px;color:var(--text3);line-height:1.8"></div>
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalRecipients')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -2897,17 +2942,21 @@ function renderSchedule(){
         <button class="btn btn-amber btn-sm" style="font-size:9px;padding:3px 9px" onclick="sendSingleDelayed(${item.id})">Enviar ahora</button>
         <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openRescheduleModal(${item.id},'${item.scheduled_at}')">Reprogramar</button>
         <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="pauseSequence(${item.campaign_id})">Pausar</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openRecipientsModal(${item.campaign_id})">Destinatarios</button>
         <button class="btn btn-red btn-sm" style="font-size:9px;padding:3px 9px" onclick="cancelScheduledEmail(${item.id})">Cancelar</button>`;
     } else if(item.state === 'scheduled' || item.state === 'retrying'){
       actions = `
         <button class="btn btn-amber btn-sm" style="font-size:9px;padding:3px 9px" onclick="sendNowScheduled(${item.id})">Enviar ahora</button>
         <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openRescheduleModal(${item.id},'${item.scheduled_at}')">Reprogramar</button>
         <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="pauseSequence(${item.campaign_id})">Pausar</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openRecipientsModal(${item.campaign_id})">Destinatarios</button>
         <button class="btn btn-red btn-sm" style="font-size:9px;padding:3px 9px" onclick="cancelScheduledEmail(${item.id})">Cancelar</button>`;
     } else if(item.state === 'paused'){
-      actions = `<button class="btn btn-green btn-sm" style="font-size:9px;padding:3px 9px" onclick="resumeSequence(${item.campaign_id})">Reanudar</button>`;
+      actions = `<button class="btn btn-green btn-sm" style="font-size:9px;padding:3px 9px" onclick="resumeSequence(${item.campaign_id})">Reanudar</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openRecipientsModal(${item.campaign_id})">Destinatarios</button>`;
     } else if(item.state === 'failed'){
-      actions = `<button class="btn btn-amber btn-sm" style="font-size:9px;padding:3px 9px" onclick="retryFailedSequence(${item.campaign_id})">Reintentar</button>`;
+      actions = `<button class="btn btn-amber btn-sm" style="font-size:9px;padding:3px 9px" onclick="retryFailedSequence(${item.campaign_id})">Reintentar</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openRecipientsModal(${item.campaign_id})">Destinatarios</button>`;
     } else if(item.state === 'sent'){
       actions = `<button class="btn btn-ghost btn-sm" style="font-size:9px;padding:3px 9px" onclick="openSchedEmailModal(${item.id})">Ver email</button>`;
     }
@@ -2953,6 +3002,116 @@ async function retryFailedSequence(campaignId){
     const d=await r.json();if(!r.ok)throw new Error(d.detail||'Error');
     toast(`${d.requeued} envio(s) reencolado(s) — se reintentaran en el proximo ciclo`,'success');
     await loadSchedule();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+/* ── Destinatarios de una comunicación activa: quitar (baja/rebote) y agregar ── */
+let recCampaignId=null;
+const recEsc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const REC_REASON={unsubscribe:'Baja',bounce:'Rebote',manual:'Otro'};
+
+async function openRecipientsModal(campaignId){
+  recCampaignId=campaignId;
+  document.getElementById('recSearch').value='';
+  document.getElementById('recAddInput').value='';
+  document.getElementById('recIncludePast').checked=false;
+  document.getElementById('recReason').value='unsubscribe';
+  document.getElementById('recSuppress').checked=true;
+  openModal('modalRecipients');
+  await loadRecipients();
+}
+
+async function loadRecipients(){
+  const list=document.getElementById('recList');
+  list.innerHTML='<div style="padding:1.5rem;text-align:center"><span class="spinner"></span></div>';
+  try{
+    const r=await apiFetch(`/campaigns/${recCampaignId}/recipients`);
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'Error');
+    renderRecipients(d);
+  }catch(e){
+    list.innerHTML=`<div style="padding:1rem;color:var(--red);font-size:11px">Error: ${recEsc(e.message)}</div>`;
+  }
+}
+
+function renderRecipients(d){
+  document.getElementById('recTitle').textContent='Destinatarios — '+(d.campaign.name||'');
+  const n=d.recipients.length, pend=d.recipients.reduce((a,x)=>a+(+x.pending||0),0);
+  document.getElementById('recMeta').innerHTML=`${n} destinatario${n!==1?'s':''} · ${pend} envío${pend!==1?'s':''} pendiente${pend!==1?'s':''} · estado: <b>${recEsc(d.campaign.status)}</b>`
+    +(d.editable?'':'<br><span style="color:var(--amber)">Comunicación finalizada: solo lectura.</span>');
+  document.getElementById('recEditBar').style.display=d.editable?'block':'none';
+  document.getElementById('recAddBox').style.display=d.editable?'block':'none';
+
+  const list=document.getElementById('recList');
+  if(!n){list.innerHTML='<div style="padding:1.2rem;text-align:center;font-size:11px;color:var(--text3)">Sin destinatarios.</div>';}
+  else list.innerHTML=d.recipients.map(x=>{
+    const chips=[];
+    chips.push(`<span style="color:var(--text3)">${+x.sent||0}/${+x.total||0} enviados</span>`);
+    if(+x.pending)chips.push(`<span style="color:var(--amber)">${x.pending} pend.</span>`);
+    if(+x.failed)chips.push(`<span style="color:var(--red)" title="${recEsc(x.last_error||'')}">${x.failed} fallido${x.failed>1?'s':''}</span>`);
+    if(x.suppressed)chips.push('<span style="color:var(--red)">en lista de bajas</span>');
+    const sub=[x.name,x.company].filter(Boolean).map(recEsc).join(' · ');
+    return `<label class="rec-row" data-search="${recEsc((x.email+' '+(x.name||'')+' '+(x.company||'')).toLowerCase())}" style="display:flex;gap:10px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);cursor:${d.editable?'pointer':'default'}">
+      ${d.editable?`<input type="checkbox" data-email="${recEsc(x.email)}"/>`:''}
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text)">${recEsc(x.email)}${sub?`<span style="color:var(--text3);font-size:10px"> — ${sub}</span>`:''}</span>
+      <span style="font-size:10px;display:flex;gap:8px;white-space:nowrap">${chips.join('')}</span>
+    </label>`;
+  }).join('');
+
+  const rb=document.getElementById('recRemovedBox');
+  if(d.removed&&d.removed.length){
+    rb.style.display='block';
+    document.getElementById('recRemoved').innerHTML=d.removed.map(x=>`${recEsc(x.email)} <span style="color:var(--text3)">(${REC_REASON[x.reason]||recEsc(x.reason)})</span>`).join('<br>');
+  }else rb.style.display='none';
+  recFilter();
+}
+
+function recFilter(){
+  const q=(document.getElementById('recSearch').value||'').trim().toLowerCase();
+  document.querySelectorAll('#recList .rec-row').forEach(r=>{r.style.display=(!q||r.dataset.search.includes(q))?'flex':'none';});
+}
+function recReasonChanged(){
+  document.getElementById('recSuppress').checked=document.getElementById('recReason').value!=='manual';
+}
+function recSelected(){
+  return [...document.querySelectorAll('#recList input[data-email]:checked')].map(i=>i.dataset.email);
+}
+
+async function removeSelectedRecipients(){
+  const emails=recSelected();
+  if(!emails.length){toast('Seleccioná al menos un destinatario','error');return;}
+  const reason=document.getElementById('recReason').value;
+  const suppress=document.getElementById('recSuppress').checked;
+  const ok=await uiConfirm({
+    title:'Quitar destinatarios',
+    message:`Se quitará${emails.length>1?'n':''} ${emails.length} destinatario${emails.length>1?'s':''} (${REC_REASON[reason]}). Se cancelan sus envíos pendientes; lo ya enviado se conserva.`
+      +(suppress?' También quedarán excluidos de todas las demás comunicaciones.':''),
+    okText:'Quitar',danger:true});
+  if(!ok)return;
+  const btn=document.getElementById('btnRecRemove');btn.disabled=true;
+  try{
+    const r=await apiFetch(`/campaigns/${recCampaignId}/recipients/remove`,{method:'POST',body:JSON.stringify({emails,reason,suppress})});
+    const d=await r.json();if(!r.ok)throw new Error(d.detail||'Error');
+    toast(`${d.removed.length} quitado(s) · ${d.queue_cancelled} envío(s) cancelado(s)`,'success');
+    await loadRecipients();await loadSchedule();
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{btn.disabled=false;}
+}
+
+async function addRecipientsToCampaign(){
+  const raw=document.getElementById('recAddInput').value.trim();
+  if(!raw){toast('Ingresá al menos un email','error');return;}
+  const include_past=document.getElementById('recIncludePast').checked;
+  try{
+    const r=await apiFetch(`/campaigns/${recCampaignId}/recipients/add`,{method:'POST',body:JSON.stringify({emails:raw,include_past})});
+    const d=await r.json();if(!r.ok)throw new Error(d.detail||'Error');
+    let msg=`${d.added.length} agregado(s)`;
+    if(d.skipped_suppressed.length)msg+=` · ${d.skipped_suppressed.length} omitido(s) por lista de bajas`;
+    if(d.already_in_campaign.length)msg+=` · ${d.already_in_campaign.length} ya estaba(n)`;
+    if(d.past_pieces_not_sent)msg+=` · piezas vencidas no enviadas`;
+    toast(msg,d.added.length?'success':'error');
+    document.getElementById('recAddInput').value='';
+    await loadRecipients();await loadSchedule();
   }catch(e){toast('Error: '+e.message,'error');}
 }
 

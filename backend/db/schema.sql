@@ -230,6 +230,19 @@ CREATE TABLE IF NOT EXISTS send_queue (
 CREATE INDEX IF NOT EXISTS idx_send_queue_due ON send_queue(status, next_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_send_queue_campaign ON send_queue(campaign_id);
 
+-- Lista de supresión: bajas solicitadas y rebotes. Una dirección acá NO
+-- recibe más envíos del Cron Sender (se cancela lo pendiente y se filtra al
+-- encolar). `email` siempre en minúsculas. `campaign_id` = comunicación desde
+-- la que se registró (informativo; SET NULL si se borra la comunicación).
+CREATE TABLE IF NOT EXISTS suppressions (
+    id           SERIAL PRIMARY KEY,
+    email        TEXT NOT NULL UNIQUE,
+    reason       TEXT NOT NULL DEFAULT 'manual',   -- unsubscribe | bounce | manual
+    note         TEXT DEFAULT '',
+    campaign_id  INTEGER REFERENCES campaigns(id) ON DELETE SET NULL,
+    created_at   TIMESTAMPTZ DEFAULT now()
+);
+
 -- ============================================================
 --  Migración de datos opcional (ejecutar UNA sola vez si el proyecto
 --  viene de Emailer-Agent y tenía campañas usadas como plantilla,

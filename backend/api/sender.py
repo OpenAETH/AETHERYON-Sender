@@ -22,6 +22,21 @@ def list_sequences():
     return sender_service.list_sequences()
 
 
+@router.get("/suppressions")
+def list_suppressions():
+    """Lista de bajas y rebotes (no reciben más envíos)."""
+    return sender_service.list_suppressions()
+
+
+@router.delete("/suppressions/{email}")
+def remove_suppression(email: str):
+    try:
+        sender_service.remove_suppression(email)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return {"success": True}
+
+
 @router.get("/schedule")
 def get_schedule():
     return sender_service.get_schedule()
@@ -145,6 +160,43 @@ def get_sequence(cid: int):
 def delete_sequence(cid: int):
     sender_service.delete_sequence(cid)
     return {"success": True}
+
+
+@router.get("/{cid}/recipients")
+def get_recipients(cid: int):
+    try:
+        return sender_service.list_recipients(cid)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.post("/{cid}/recipients/remove")
+async def remove_recipients(cid: int, request: Request):
+    """Quita destinatarios de una comunicación ya activada (baja, rebote u
+    otro motivo). Body: {emails:[...], reason:'unsubscribe'|'bounce'|'manual',
+    note?, suppress?}. Con suppress (default true en baja/rebote) la dirección
+    queda excluida de todas las comunicaciones."""
+    data = await request.json()
+    try:
+        result = sender_service.remove_recipients(
+            cid, data.get("emails"), reason=data.get("reason", "manual"),
+            note=data.get("note", ""), suppress=data.get("suppress"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"success": True, **result}
+
+
+@router.post("/{cid}/recipients/add")
+async def add_recipients(cid: int, request: Request):
+    """Body: {emails:[...], variables?:{email:{...}}, include_past?:bool}."""
+    data = await request.json()
+    try:
+        result = sender_service.add_recipients(
+            cid, data.get("emails"), variables=data.get("variables"),
+            include_past=bool(data.get("include_past")))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"success": True, **result}
 
 
 @router.get("/{cid}/export")

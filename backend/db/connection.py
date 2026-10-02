@@ -125,6 +125,7 @@ EXPECTED_TABLES = [
     "sessions", "settings", "contacts", "contact_interactions", "attachments",
     "email_logs", "email_attachments", "inbox_cache", "memory", "templates",
     "campaigns", "campaign_emails", "campaign_contacts", "campaign_attachments", "send_queue",
+    "suppressions",
 ]
 
 

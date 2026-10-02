@@ -18,6 +18,7 @@ from sqlalchemy import text
 from backend.config import DEFAULT_RATE_LIMIT_PER_RUN, DEFAULT_MAX_ATTEMPTS, DEFAULT_RETRY_BACKOFF_MINUTES
 from backend.db.connection import get_db, dict_from_row, rows_to_list
 from backend.domain import scheduling
+from backend.domain.contacts import is_valid_email, normalize_email
 from backend.domain.email_content import assemble, html_to_text, is_html_mode
 from backend.domain.templates import build_context, render
 from backend.providers import resend_provider
@@ -64,7 +65,9 @@ def _populate_queue(campaign_id: int):
             "SELECT id, scheduled_at FROM campaign_emails WHERE campaign_id=:cid AND status='approved'"
         ), {"cid": campaign_id}).fetchall())
         contacts = rows_to_list(db.execute(text("SELECT email FROM campaign_contacts WHERE campaign_id=:cid"), {"cid": campaign_id}).fetchall())
-        recipients = [c["email"].strip() for c in contacts if (c.get("email") or "").strip()]
+        suppressed = {r["email"] for r in rows_to_list(db.execute(text("SELECT email FROM suppressions")).fetchall())}
+        recipients = [c["email"].strip() for c in contacts
+                      if (c.get("email") or "").strip() and c["email"].strip().lower() not in suppressed]
         for em in emails:
             next_at = _parse_scheduled_at(em.get("scheduled_at"))
             for rcpt in recipients:
@@ -613,6 +616,10 @@ def get_schedule() -> list:
                 state = "paused"
             elif total > 0 and sent == total:
                 state = "sent"
+            elif total > 0 and sent > 0 and (sent + cancelled) == total:
+                state = "sent"
+            elif total > 0 and cancelled == total:
+                state = "cancelled"
             elif total > 0 and failed > 0 and (failed + cancelled) == total:
                 state = "failed"
             elif retrying > 0:
@@ -845,6 +852,15 @@ def process_due(campaign_id: int = None) -> dict:
         if campaign_id:
             params["cid"] = campaign_id
 
+        # Red de seguridad: cualquier pendiente de una dirección suprimida
+        # (baja/rebote) se cancela antes de armar el lote, sin importar por
+        # qué camino llegó a la cola.
+        db.execute(text("""
+            UPDATE send_queue SET status='cancelled', last_error='suppressed', updated_at=NOW()
+            WHERE status='pending' AND LOWER(recipient_email) IN (SELECT email FROM suppressions)
+        """))
+        db.commit()
+
         due = rows_to_list(db.execute(text(f"""
             SELECT sq.*, ce.subject, ce.body, ce.content_type, c.cta_url, c.rate_limit_per_run, c.name as camp_name,
                    cc.variables as recipient_variables
@@ -928,3 +944,210 @@ def process_due(campaign_id: int = None) -> dict:
 
     logger.info(f"[cron-sender] {results['sent']} enviados, {results['failed']} fallidos definitivos, {results['retried']} reprogramados para reintento")
     return results
+
+
+# ────────────────────────────────────────────────────────────
+# Destinatarios de comunicaciones ya activadas — bajas y rebotes
+# ────────────────────────────────────────────────────────────
+
+REMOVAL_REASONS = ("unsubscribe", "bounce", "manual")
+ACTIVE_CAMPAIGN_STATUSES = ("draft", "scheduled", "paused")
+
+
+def _clean_emails(emails) -> list:
+    if isinstance(emails, str):
+        emails = re.split(r"[,;\s]+", emails)
+    seen, out = set(), []
+    for e in emails or []:
+        e = normalize_email(e)
+        if e and e not in seen:
+            seen.add(e)
+            out.append(e)
+    return out
+
+
+def _close_if_drained(db, campaign_id: int):
+    """Mismo criterio que process_due: sin pendientes, la comunicación
+    programada pasa a 'sent'."""
+    n = dict_from_row(db.execute(text(
+        "SELECT COUNT(*) AS n FROM send_queue WHERE campaign_id=:cid AND status='pending'"), {"cid": campaign_id}).fetchone())["n"]
+    if n == 0:
+        db.execute(text("UPDATE campaigns SET status='sent' WHERE id=:id AND status='scheduled'"), {"id": campaign_id})
+
+
+def list_recipients(cid: int) -> dict:
+    """Destinatarios actuales de una comunicación con su estado de envío,
+    más los que fueron quitados (rastro en la cola) y las bajas globales."""
+    db = get_db()
+    try:
+        camp = dict_from_row(db.execute(text("SELECT id, name, status FROM campaigns WHERE id=:id"), {"id": cid}).fetchone())
+        if not camp:
+            raise ValueError("Comunicación no encontrada")
+        recipients = rows_to_list(db.execute(text("""
+            SELECT cc.id, cc.email, cc.variables, ct.name, ct.company,
+                   COUNT(sq.id) AS total,
+                   SUM(CASE WHEN sq.status='sent' THEN 1 ELSE 0 END) AS sent,
+                   SUM(CASE WHEN sq.status='pending' THEN 1 ELSE 0 END) AS pending,
+                   SUM(CASE WHEN sq.status='failed' THEN 1 ELSE 0 END) AS failed,
+                   MAX(CASE WHEN sq.status='failed' THEN sq.last_error END) AS last_error,
+                   EXISTS (SELECT 1 FROM suppressions s WHERE s.email = LOWER(cc.email)) AS suppressed
+            FROM campaign_contacts cc
+            LEFT JOIN contacts ct ON LOWER(ct.email) = LOWER(cc.email)
+            LEFT JOIN send_queue sq ON sq.campaign_id = cc.campaign_id AND LOWER(sq.recipient_email) = LOWER(cc.email)
+            WHERE cc.campaign_id = :cid
+            GROUP BY cc.id, ct.name, ct.company
+            ORDER BY cc.email
+        """), {"cid": cid}).fetchall())
+        removed = rows_to_list(db.execute(text("""
+            SELECT LOWER(recipient_email) AS email, MAX(last_error) AS reason, MAX(updated_at) AS removed_at
+            FROM send_queue
+            WHERE campaign_id=:cid AND last_error LIKE 'removed:%'
+            GROUP BY LOWER(recipient_email) ORDER BY removed_at DESC
+        """), {"cid": cid}).fetchall())
+        for r in removed:
+            r["reason"] = (r["reason"] or "").replace("removed:", "")
+        return {"campaign": camp, "recipients": recipients, "removed": removed,
+                "editable": camp["status"] in ACTIVE_CAMPAIGN_STATUSES}
+    finally:
+        db.close()
+
+
+def remove_recipients(cid: int, emails, reason: str = "manual", note: str = "", suppress=None) -> dict:
+    """Quita destinatarios de una comunicación ya activada. Cancela sus
+    envíos pendientes/fallidos (lo ya enviado se conserva intacto) y los
+    saca de la lista de la comunicación.
+
+    `suppress` (default True para baja/rebote): además los agrega a la lista
+    de supresión y los quita de TODAS las comunicaciones activas, para que no
+    vuelvan a recibir nada."""
+    emails = _clean_emails(emails)
+    if not emails:
+        raise ValueError("Indicá al menos un destinatario")
+    if reason not in REMOVAL_REASONS:
+        raise ValueError("Motivo inválido (unsubscribe | bounce | manual)")
+    if suppress is None:
+        suppress = reason in ("unsubscribe", "bounce")
+    tag = f"removed:{reason}"
+
+    db = get_db()
+    try:
+        camp = dict_from_row(db.execute(text("SELECT id FROM campaigns WHERE id=:id"), {"id": cid}).fetchone())
+        if not camp:
+            raise ValueError("Comunicación no encontrada")
+
+        scope = [cid]
+        if suppress:
+            rows = db.execute(text("SELECT id FROM campaigns WHERE status IN ('draft','scheduled','paused')")).fetchall()
+            scope = sorted({cid, *[r[0] for r in rows]})
+
+        cancelled = 0
+        for sid in scope:
+            res = db.execute(text("""
+                UPDATE send_queue SET status='cancelled', last_error=:tag, updated_at=NOW()
+                WHERE campaign_id=:sid AND LOWER(recipient_email) = ANY(:emails) AND status IN ('pending','failed')
+            """), {"tag": tag, "sid": sid, "emails": emails})
+            cancelled += res.rowcount or 0
+            db.execute(text("DELETE FROM campaign_contacts WHERE campaign_id=:sid AND LOWER(email) = ANY(:emails)"),
+                       {"sid": sid, "emails": emails})
+            _close_if_drained(db, sid)
+
+        if suppress:
+            for em in emails:
+                db.execute(text("""
+                    INSERT INTO suppressions (email, reason, note, campaign_id) VALUES (:e, :r, :n, :cid)
+                    ON CONFLICT (email) DO UPDATE SET reason=EXCLUDED.reason,
+                        note=COALESCE(NULLIF(EXCLUDED.note,''), suppressions.note)
+                """), {"e": em, "r": reason, "n": (note or "")[:500], "cid": cid})
+        db.commit()
+        logger.info(f"[recipients] comunicación {cid}: quitados {emails} ({reason}, suppress={suppress}, cancelados={cancelled})")
+        return {"removed": emails, "reason": reason, "suppressed": bool(suppress),
+                "campaigns_affected": len(scope), "queue_cancelled": cancelled}
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def add_recipients(cid: int, emails, variables: dict = None, include_past: bool = False) -> dict:
+    """Agrega destinatarios a una comunicación activa. Por defecto solo se
+    encolan las piezas con fecha futura: agregar a alguien a mitad de una
+    secuencia NO dispara de golpe las piezas ya vencidas (`include_past`
+    para forzarlo)."""
+    emails = _clean_emails(emails)
+    if not emails:
+        raise ValueError("Indicá al menos un destinatario")
+    invalid = [e for e in emails if not is_valid_email(e)]
+    if invalid:
+        raise ValueError("Email inválido: " + ", ".join(invalid))
+    variables = variables or {}
+
+    db = get_db()
+    try:
+        camp = dict_from_row(db.execute(text("SELECT id, status FROM campaigns WHERE id=:id"), {"id": cid}).fetchone())
+        if not camp:
+            raise ValueError("Comunicación no encontrada")
+        if camp["status"] not in ACTIVE_CAMPAIGN_STATUSES:
+            raise ValueError("Solo se pueden agregar destinatarios a una comunicación activa (borrador, programada o pausada)")
+
+        suppressed = {r[0] for r in db.execute(text("SELECT email FROM suppressions")).fetchall()}
+        existing = {r[0] for r in db.execute(text("SELECT LOWER(email) FROM campaign_contacts WHERE campaign_id=:cid"), {"cid": cid}).fetchall()}
+        skipped_suppressed = [e for e in emails if e in suppressed]
+        already = [e for e in emails if e in existing]
+        to_add = [e for e in emails if e not in suppressed and e not in existing]
+
+        pieces = rows_to_list(db.execute(text(
+            "SELECT id, scheduled_at FROM campaign_emails WHERE campaign_id=:cid AND status='approved'"), {"cid": cid}).fetchall())
+        now_dt = datetime.utcnow()
+        queued = 0
+        pieces_skipped_past = 0
+        for em in to_add:
+            db.execute(text("INSERT INTO campaign_contacts (campaign_id, email, variables) VALUES (:cid, :email, :vars)"),
+                       {"cid": cid, "email": em, "vars": json.dumps(variables.get(em) or {})})
+            if camp["status"] == "draft":
+                continue  # el encolado ocurre al finalizar
+            for piece in pieces:
+                next_at = _parse_scheduled_at(piece.get("scheduled_at"))
+                if next_at < now_dt and not include_past:
+                    pieces_skipped_past += 1
+                    continue
+                res = db.execute(text("""
+                    INSERT INTO send_queue (campaign_id, campaign_email_id, recipient_email, status, max_attempts, next_attempt_at)
+                    VALUES (:cid, :ceid, :email, 'pending', :max_att, :next_at)
+                    ON CONFLICT (campaign_email_id, recipient_email) DO NOTHING
+                """), {"cid": cid, "ceid": piece["id"], "email": em, "max_att": DEFAULT_MAX_ATTEMPTS, "next_at": next_at})
+                queued += res.rowcount or 0
+        db.commit()
+        return {"added": to_add, "already_in_campaign": already, "skipped_suppressed": skipped_suppressed,
+                "queue_items_created": queued, "past_pieces_not_sent": pieces_skipped_past}
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def list_suppressions() -> list:
+    db = get_db()
+    try:
+        return rows_to_list(db.execute(text("""
+            SELECT s.email, s.reason, s.note, s.created_at, s.campaign_id, c.name AS campaign_name
+            FROM suppressions s LEFT JOIN campaigns c ON c.id = s.campaign_id
+            ORDER BY s.created_at DESC
+        """)).fetchall())
+    finally:
+        db.close()
+
+
+def remove_suppression(email: str):
+    """Levanta la supresión (ej. se cargó por error). NO reincorpora la
+    dirección a ninguna comunicación: hay que agregarla de nuevo a mano."""
+    em = normalize_email(email)
+    db = get_db()
+    try:
+        res = db.execute(text("DELETE FROM suppressions WHERE email=:e"), {"e": em})
+        db.commit()
+        if not res.rowcount:
+            raise ValueError("La dirección no está en la lista de supresión")
+    finally:
+        db.close()
